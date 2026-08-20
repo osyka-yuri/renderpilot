@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAllNotifications, getActiveNotifications } from './notification-center';
-import { publishInfoNotification, publishSuccessNotification } from './notification-helpers';
+import {
+  publishErrorNotification,
+  publishInfoNotification,
+  publishSuccessNotification,
+} from './notification-helpers';
 
 describe('notification-helpers', () => {
   beforeEach(() => {
@@ -35,6 +39,21 @@ describe('notification-helpers', () => {
         severity: 'info',
         title: 'Cover downloaded',
         description: undefined,
+        important: undefined,
+      },
+    ]);
+  });
+
+  it('publishes ordinary error notifications with default urgency', () => {
+    const notificationId = publishErrorNotification('  Request failed  ', '  Try again.  ');
+
+    expect(notificationId).toBe('notification-1');
+    expect(getActiveNotifications()).toEqual([
+      {
+        id: 'notification-1',
+        severity: 'error',
+        title: 'Request failed',
+        description: 'Try again.',
         important: undefined,
       },
     ]);

@@ -52,8 +52,13 @@ function createLocaleLoadError(): NonNullable<I18nInitializationResult['error']>
 describe('bootstrap', () => {
   beforeEach(() => {
     document.body.innerHTML = `
-      <div id="app" data-startup-skeleton aria-busy="true">
-        <span data-startup-spinner aria-hidden="true"></span>
+      <div
+        id="app"
+        data-startup-skeleton
+        aria-busy="true"
+        role="progressbar"
+        aria-label="RenderPilot"
+      >
       </div>
     `;
     mocks.mount.mockReset().mockReturnValue({ mounted: true });

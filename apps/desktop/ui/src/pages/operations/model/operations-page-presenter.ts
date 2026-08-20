@@ -71,7 +71,7 @@ export function createOperationViewModel(
       operation.completed_at ?? null,
       locale,
     ),
-    ariaLabel: t('operation.itemAria', {
+    ariaLabel: t('operation.itemLabel', {
       kind: kindLabel,
       status: statusLabel,
     }),

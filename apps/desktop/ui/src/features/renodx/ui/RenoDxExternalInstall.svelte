@@ -204,7 +204,7 @@
   <div class="flex flex-wrap items-center justify-between gap-2 px-1">
     <AddonAttribution {...RENODX_ATTRIBUTION} />
 
-    <div class="ml-auto flex flex-wrap items-center gap-2">
+    <div class="ms-auto flex flex-wrap items-center gap-2">
       {#if showHostChannelControl}
         <RenoDxChannelControl
           class="max-w-72"

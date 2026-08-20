@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
+
 import type { AppUpdateHandle } from '../api/app-updater-gateway';
+import { createAppUpdaterModel } from './create-app-updater-model.svelte';
 import { createGateway, createHandle, createModel } from './app-updater-test-fixtures';
 
 describe('createAppUpdaterModel', () => {
@@ -69,6 +72,33 @@ describe('createAppUpdaterModel', () => {
       expect(notifySuccess).not.toHaveBeenCalled();
       expect(notifyError).not.toHaveBeenCalled();
       warn.mockRestore();
+    });
+
+    it('routes interactive errors through the default notification bus with polite urgency', async () => {
+      clearAllNotifications();
+      const gateway = createGateway({
+        checkForUpdate: vi.fn(() => Promise.reject(new Error('network'))),
+      });
+      const model = createAppUpdaterModel({ gateway });
+
+      try {
+        await model.checkForUpdates();
+
+        expect(getActiveNotifications()).toEqual([
+          {
+            id: 'notification-1',
+            severity: 'error',
+            title: 'Failed to check for updates',
+            description: undefined,
+            important: undefined,
+          },
+        ]);
+      } finally {
+        await model.dispose();
+        clearAllNotifications();
+      }
+
+      expect(getActiveNotifications()).toEqual([]);
     });
 
     it('does not lose the app version when a manual check waits for startup', async () => {

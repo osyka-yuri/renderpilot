@@ -15,7 +15,9 @@ import {
   FSD_ALIAS_PREFIXES,
   FSD_SLICED_LAYERS,
 } from './eslint/fsd-boundaries.js';
+import { createImportBoundariesRule } from './eslint/import-boundaries.js';
 import { createIntlBoundariesRule } from './eslint/intl-boundaries.js';
+import { noHardcodedAccessibilityTextRule } from './eslint/accessibility-text.js';
 import svelteConfig from './svelte.config.js';
 
 const PROJECT_ROOT = import.meta.dirname;
@@ -137,6 +139,10 @@ const fsdBoundariesConfig = createFsdBoundariesConfig({
   targetExtensions: [...SOURCE_SCRIPT_EXTENSIONS, ...SVELTE_MODULE_EXTENSIONS, 'css'],
   resolverExtensions: RESOLVER_EXTENSIONS,
   typescriptConfigPath: path.resolve(PROJECT_ROOT, TYPESCRIPT_CONFIG),
+});
+const importBoundariesRule = createImportBoundariesRule({
+  projectRoot: PROJECT_ROOT,
+  foundationEntryPoints: fsdBoundariesConfig.entryPointGlobs,
 });
 
 const eslintBaseConfigs = scopeConfigs(
@@ -348,7 +354,9 @@ const localArchitecturePlugin = {
       },
     },
 
+    'import-boundaries': importBoundariesRule,
     'intl-boundaries': intlBoundariesRule,
+    'no-hardcoded-accessibility-text': noHardcodedAccessibilityTextRule,
   },
 };
 
@@ -602,6 +610,8 @@ export default defineConfig([
        */
       'local-architecture/no-fsd-alias-re-export': 'error',
       'local-architecture/intl-boundaries': 'error',
+      'local-architecture/import-boundaries': 'error',
+      'local-architecture/no-hardcoded-accessibility-text': 'error',
     },
   },
 
@@ -643,11 +653,10 @@ export default defineConfig([
       'better-tailwindcss/enforce-consistent-class-order': 'off',
 
       /*
-       * Canonicalization is intentionally disabled: it is stylistic and nearly
-       * doubles cold lint time. Correctness-oriented Tailwind rules stay on,
-       * while Oxfmt remains the single owner of class ordering.
+       * ESLint owns semantic Tailwind canonicalization.
+       * Oxfmt remains responsible for class ordering and wrapping.
        */
-      'better-tailwindcss/enforce-canonical-classes': 'off',
+      'better-tailwindcss/enforce-canonical-classes': 'error',
 
       /*
        * shadcn-svelte Sonner uses a non-Tailwind root hook class upstream.

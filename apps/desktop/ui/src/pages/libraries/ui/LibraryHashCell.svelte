@@ -3,65 +3,25 @@
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { t } from '@shared/i18n';
   import { reportClientError } from '@shared/errors';
-  import { toast } from 'svelte-sonner';
+  import { publishErrorNotification, publishSuccessNotification } from '@shared/notifications';
   import type { LibraryPackageRow } from '../model/libraries-page-model';
-
-  type CopyStatus = 'idle' | 'copied' | 'failed';
 
   let { row }: { row: LibraryPackageRow } = $props();
 
   const dllSha256Hash = $derived(row.primary_sha256);
-
-  let copyStatus = $state<CopyStatus>('idle');
-  let resetTimer: ReturnType<typeof setTimeout> | undefined;
-
   const copyButtonLabel = $derived(
-    copyStatus === 'copied'
-      ? t('libraries.hash.copied')
-      : copyStatus === 'failed'
-        ? t('libraries.hash.failed')
-        : t('libraries.hash.copy'),
+    t('libraries.hash.copyVersion', { version: row.release.version }),
   );
-  const statusMessage = $derived(
-    copyStatus === 'copied'
-      ? t('libraries.hash.copied')
-      : copyStatus === 'failed'
-        ? t('libraries.hash.failed')
-        : '',
-  );
-
-  $effect(() => {
-    return () => {
-      if (resetTimer !== undefined) {
-        clearTimeout(resetTimer);
-      }
-    };
-  });
-
-  function scheduleReset(delayMs: number) {
-    if (resetTimer !== undefined) {
-      clearTimeout(resetTimer);
-    }
-
-    resetTimer = setTimeout(() => {
-      copyStatus = 'idle';
-      resetTimer = undefined;
-    }, delayMs);
-  }
 
   async function copyHashToClipboard() {
     try {
       await navigator.clipboard.writeText(dllSha256Hash);
 
-      copyStatus = 'copied';
-      toast.success(t('libraries.hash.copiedToast'));
-      scheduleReset(2000);
+      publishSuccessNotification(t('libraries.hash.copiedToast'));
     } catch (error) {
       reportClientError('copy_library_hash', error);
 
-      copyStatus = 'failed';
-      toast.error(t('libraries.hash.failed'));
-      scheduleReset(3000);
+      publishErrorNotification(t('libraries.hash.failed'));
     }
   }
 </script>
@@ -82,14 +42,10 @@
           onclick={copyHashToClipboard}
           aria-label={copyButtonLabel}
         >
-          <CopyIcon class="size-3" />
+          <CopyIcon class="size-3" aria-hidden="true" />
         </Button>
       {/snippet}
     </TooltipTrigger>
     <TooltipContent>{t('libraries.hash.copy')}</TooltipContent>
   </Tooltip>
-
-  <span class="sr-only" aria-live="polite">
-    {statusMessage}
-  </span>
 </div>

@@ -6,9 +6,4 @@
   let { class: className, ...restProps }: ComponentProps<typeof Loader2Icon> = $props();
 </script>
 
-<Loader2Icon
-  role="status"
-  aria-label="Loading"
-  class={cn('size-4 animate-spin', className)}
-  {...restProps}
-/>
+<Loader2Icon aria-hidden="true" class={cn('size-4 animate-spin', className)} {...restProps} />

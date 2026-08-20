@@ -4,6 +4,7 @@ import { DesktopCommandError } from '@shared/errors';
 import { createGameSummaryFromDetails, getLatestOperationStatus } from '../build-game-summary';
 import {
   mockState,
+  clearGameExecutableOverride,
   getOrCreateManualGameId,
   findGameSummary,
   upsertGameSummary,
@@ -140,6 +141,10 @@ export function mockAddGame(
 
     const previousDetails = mockState.detailsByGameId.get(gameId);
     const previousSummary = findGameSummary(gameId);
+
+    if (correctionTarget !== undefined && previousDetails?.game.install_path !== installPath) {
+      clearGameExecutableOverride(gameId);
+    }
 
     const details = createManualPreviewDetails(gameId, title, installPath);
     details.operations = previousDetails ? clone(previousDetails.operations) : [];

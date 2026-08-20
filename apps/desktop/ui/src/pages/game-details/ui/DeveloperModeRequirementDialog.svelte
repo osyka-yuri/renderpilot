@@ -125,14 +125,14 @@
 </script>
 
 <Dialog {open} onOpenChange={requestOpenChange}>
-  <DialogContent>
+  <DialogContent closeLabel={t('common.close')}>
     <DialogHeader>
       <DialogTitle>{t(copy.title)}</DialogTitle>
       <DialogDescription>{t(copy.description)}</DialogDescription>
     </DialogHeader>
 
     {#if unavailable}
-      <Alert variant="destructive" size="sm">
+      <Alert variant="destructive" size="sm" role="alert">
         <TriangleAlertIcon aria-hidden="true" />
         <AlertDescription>{t('gameDetails.developerMode.checkUnavailable')}</AlertDescription>
       </Alert>
@@ -155,7 +155,7 @@
       </Alert>
     {/if}
     {#if externalTargetError && copy.openFailed}
-      <Alert variant="destructive" size="sm">
+      <Alert variant="destructive" size="sm" role="alert">
         <TriangleAlertIcon aria-hidden="true" />
         <AlertDescription>{t(copy.openFailed)}</AlertDescription>
       </Alert>

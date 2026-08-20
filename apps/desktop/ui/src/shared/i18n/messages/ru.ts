@@ -16,6 +16,15 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'nav.donate': 'Поддержать',
   'shell.refresh': 'Обновить',
   'shell.updateAvailable': 'Доступно обновление',
+  'nav.skipToContent': 'Перейти к содержимому',
+  'nav.primaryLabel': 'Основная навигация',
+  'nav.breadcrumbLabel': 'Навигационная цепочка',
+  'shell.sidebar.toggle': 'Переключить боковую панель',
+  'shell.sidebar.title': 'Навигация',
+  'shell.sidebar.description': 'Основная навигация приложения.',
+  'shell.notifications.regionLabel': 'Уведомления',
+  'shell.notifications.close': 'Закрыть уведомление',
+  'shell.pageTitle': '{page} — RenderPilot',
 
   // ── Settings: appearance section ──
   'settings.appearance.title': 'Оформление',
@@ -56,7 +65,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'settings.nvidia.indicator.systemWide': 'Глобально',
   'settings.nvidia.indicator.overlayTitle': 'Экранный оверлей',
   'settings.nvidia.indicator.overlayDescription': 'Применяется ко всем играм на этом ПК.',
-  'settings.nvidia.indicator.toggleAria': 'Переключить индикатор DLSS',
+  'settings.nvidia.indicator.toggleLabel': 'Переключить индикатор DLSS',
   'settings.nvidia.global.title': 'Глобальные настройки DLSS',
   'settings.nvidia.global.description':
     'Значения по умолчанию для всех игр без индивидуальных настроек — через базовый профиль NVIDIA.',
@@ -70,7 +79,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
 
   // ── Game card ──
   'game.card.action.details': 'Подробнее',
-  'game.card.action.detailsAria': 'Открыть подробности: {title}',
+  'game.card.action.detailsLabel': 'Открыть подробности: {title}',
   'game.card.detectedLibraries': 'Найденные компоненты',
   'game.card.availableAddons': 'Доступные аддоны',
   'game.card.badge.upToDate': 'Актуально',
@@ -81,7 +90,9 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     many: 'Доступно {count} обновлений',
     other: 'Доступно {count} обновлений',
   }),
-  'game.card.menu.ariaLabel': 'Параметры для {title}',
+  'game.card.status.favorite': 'В избранном',
+  'game.card.status.hidden': 'Скрыта',
+  'game.card.menu.label': 'Параметры для {title}',
   'game.card.menu.favorite.add': 'Добавить в избранное',
   'game.card.menu.favorite.remove': 'Убрать из избранного',
   'game.card.menu.favorite.toggleHint': 'Переключить статус «избранное» для этой игры.',
@@ -248,7 +259,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   // ── Settings: catalog (cover sources) ──
   'settings.catalog.title': 'Источники обложек',
   'settings.catalog.description': 'Выберите, откуда скачивать обложки для игр.',
-  'settings.catalog.steamKey.srLabel': 'API-ключ SteamGridDB',
+  'settings.catalog.steamKey.inputLabel': 'API-ключ SteamGridDB',
   'settings.catalog.steamKey.placeholder': 'API-ключ',
   'settings.catalog.steamKey.loading': 'Загрузка…',
   'settings.catalog.steamKey.save': 'Сохранить',
@@ -313,11 +324,12 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'settings.about.updateDialog.restartRequiredDescription':
     'Обновление установлено, но приложение не удалось перезапустить автоматически. Перезапустите RenderPilot вручную, чтобы завершить обновление.',
 
-  'settings.about.updateDialog.progressAria': 'Прогресс загрузки',
+  'settings.about.updateDialog.progressLabel': 'Прогресс загрузки',
 
   // ── Common ──
   'common.unknown': 'Неизвестно',
   'common.downloadProgress': 'Прогресс скачивания',
+  'common.close': 'Закрыть',
 
   // ── Game details: empty states ──
   'gameDetails.noGameSelected.title': 'Игра не выбрана',
@@ -350,7 +362,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.streamline.mixed': 'Разные версии',
   'gameDetails.streamline.mixedRange': 'Разные версии (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': 'обновлений: {updates} · отсутствует: {missing}',
-  'gameDetails.streamline.restoreAllAria': 'Восстановить исходные версии',
+  'gameDetails.streamline.restoreAllLabel': 'Восстановить исходные версии',
   'gameDetails.streamline.restoreAllTooltip': 'Восстановить исходные',
   'gameDetails.updateAll.action': 'Обновить всё',
   'gameDetails.updateAll.actionCount': 'Обновить всё ({count})',
@@ -365,6 +377,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   }),
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Исполняемый файл игры',
+  'gameDetails.executable.groupLabel': 'Доступные исполняемые файлы игры',
   'gameDetails.developerMode.requiredTitle': 'Режим разработчика Windows выключен',
   'gameDetails.developerMode.requiredDescription':
     'Для работы Microsoft D3D12 Agility Preview требуется эта системная настройка.',
@@ -421,7 +434,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Выполните восстановление по инструкции в карточке D3D12, затем повторите сканирование.',
   'gameDetails.executable.description':
     'Исполняемый файл игры — к нему применяется профиль NVIDIA, а RenoDX устанавливается в его папку.',
-  'gameDetails.executable.triggerAria': 'Исполняемый файл игры: {fileName}',
+  'gameDetails.executable.triggerLabel': 'Исполняемый файл игры: {fileName}',
   'gameDetails.executable.detectedGroup': 'Найденные игровые файлы',
   'gameDetails.executable.otherGroup': 'Прочее (лаунчеры, установщики, утилиты)',
   'gameDetails.executable.customBadge': 'Вручную',
@@ -444,7 +457,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.nvapi.unavailable': 'недоступно',
   'gameDetails.nvapi.resetDefault': 'Сбросить',
   'gameDetails.nvapi.alreadyDefault': 'Установлено по умолчанию',
-  'gameDetails.nvapi.restoreBaselineAria': 'Восстановить исходное значение',
+  'gameDetails.nvapi.restoreBaselineLabel': 'Восстановить исходное значение',
   'gameDetails.nvapi.restoreBaseline': 'Восстановить исходное значение',
   'gameDetails.nvapi.alreadyBaseline': 'Уже установлено исходное значение',
   'gameDetails.nvapi.noBaseline': 'Исходное значение не сохранено',
@@ -483,14 +496,15 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'libraries.state.missing': 'Файлы отсутствуют',
   'libraries.state.corrupt': 'Файлы повреждены',
   'libraries.hash.copy': 'Скопировать хеш',
+  'libraries.hash.copyVersion': 'Копировать хеш версии {version}',
   'libraries.hash.copied': 'Скопировано',
   'libraries.hash.failed': 'Не удалось скопировать',
   'libraries.hash.copiedToast': 'Хеш скопирован в буфер обмена',
-  'libraries.sort.asc': 'Сортировка по возрастанию',
-  'libraries.sort.desc': 'Сортировка по убыванию',
-  'libraries.sort.none': 'Без сортировки',
+  'libraries.sort.byColumn': 'Сортировать по столбцу «{label}»',
   'libraries.actions.delete': 'Удалить',
   'libraries.actions.download': 'Скачать',
+  'libraries.actions.deleteVersion': 'Удалить версию {version}',
+  'libraries.actions.downloadVersion': 'Скачать версию {version}',
   'libraries.actions.deletedToast': 'Удалено {version}',
   'libraries.actions.downloadedToast': 'Скачано {version}',
   'libraries.actions.failedToast': 'Не удалось выполнить: {action}',
@@ -511,6 +525,9 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   }),
   'libraries.actions.downloadAllPartialToast': 'Скачано: {succeeded}, ошибок: {failed}',
   'libraries.actions.downloadAllNoneToast': 'Все последние версии уже скачаны',
+  'libraries.filters.vendorLabel': 'Поставщики библиотек',
+  'libraries.filters.typeLabel': 'Типы библиотек',
+  'libraries.table.caption': 'Версии библиотек {vendor}, {type}',
 
   // ── Common actions ──
   'common.cancel': 'Отмена',
@@ -520,7 +537,27 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'filters.title': 'Фильтры',
   'filters.launchers.title': 'Лаунчеры',
   'filters.launchers.empty': 'Лаунчеры не найдены',
-  'filters.launchers.reorder': 'Переместить {label}',
+  'filters.launchers.reorder.instructions':
+    'Чтобы изменить порядок, перейдите к кнопке перемещения, нажмите Пробел или Enter, используйте клавиши со стрелками, затем нажмите Пробел или Enter для завершения. Escape отменяет перемещение.',
+  'filters.launchers.reorder.move': 'Переместить {label}, позиция {position} из {total}',
+  'filters.launchers.reorder.zoneLabel': 'Зона сортировки лаунчеров',
+  'filters.launchers.reorder.itemLabel': 'Лаунчер {label}',
+  'filters.launchers.reorder.dragStarted':
+    '{itemLabel} захвачен в зоне {zoneLabel}, позиция {position} из {count}.',
+  'filters.launchers.reorder.movedToPosition':
+    '{itemLabel} перемещён на позицию {position} из {count}.',
+  'filters.launchers.reorder.movedToZoneStart': '{itemLabel} перемещён в начало зоны {zoneLabel}.',
+  'filters.launchers.reorder.movedToZoneEnd': '{itemLabel} перемещён в конец зоны {zoneLabel}.',
+  'filters.launchers.reorder.droppedAnnouncement':
+    '{itemLabel} размещён в зоне {zoneLabel}, позиция {position} из {count}.',
+  'filters.launchers.reorder.zoneActiveInstruction':
+    'Нажмите пробел или Enter для захвата, затем используйте стрелки для перемещения.',
+  'filters.launchers.reorder.zoneDragDisabledInstruction': 'Сортировка лаунчеров недоступна.',
+  'filters.launchers.reorder.pickedUp':
+    '{label} выбран для перемещения, позиция {position} из {total}.',
+  'filters.launchers.reorder.moved': '{label} перемещён на позицию {position} из {total}.',
+  'filters.launchers.reorder.dropped': '{label} размещён на позиции {position} из {total}.',
+  'filters.launchers.reorder.cancelled': 'Перемещение {label} отменено.',
   'filters.libraries.title': 'Компоненты',
   'filters.libraries.empty': 'Компоненты не найдены',
   'filters.addons.title': 'Аддоны',
@@ -556,7 +593,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     many: 'Восстановлено {count} файлов.',
     other: 'Восстановлено {count} файлов.',
   }),
-  'operation.itemAria': '{kind}, {status}',
+  'operation.itemLabel': '{kind}, {status}',
 
   // ── Notifications (toasts) ──
   'notify.stalePlan': 'План операции устарел. Попробуйте снова.',
@@ -643,13 +680,13 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'libraries.error.deletedRefreshFailed': 'Библиотека удалена, но обновить статус не удалось',
 
   // ── Settings: cover source rows ──
-  'settings.catalog.source.steam.aria': 'Скачивать обложки из Steam',
+  'settings.catalog.source.steam.actionLabel': 'Скачивать обложки из Steam',
   'settings.catalog.source.steam.title': 'Steam',
   'settings.catalog.source.steam.description': 'Скачивать обложки из публичного каталога Steam.',
-  'settings.catalog.source.gog.aria': 'Скачивать обложки из GOG',
+  'settings.catalog.source.gog.actionLabel': 'Скачивать обложки из GOG',
   'settings.catalog.source.gog.title': 'GOG',
   'settings.catalog.source.gog.description': 'Скачивать обложки из официального каталога GOG.',
-  'settings.catalog.source.steamgriddb.aria': 'Скачивать обложки из SteamGridDB',
+  'settings.catalog.source.steamgriddb.actionLabel': 'Скачивать обложки из SteamGridDB',
   'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
   'settings.catalog.source.steamgriddb.description':
     'Скачивать обложки от сообщества. Требуется API-ключ.',

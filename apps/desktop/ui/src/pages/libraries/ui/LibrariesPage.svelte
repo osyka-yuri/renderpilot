@@ -20,6 +20,7 @@
     ToggleGroupItem,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
+  import { useSelector } from '@tanstack/svelte-store';
 
   import {
     findPackageRow,
@@ -74,6 +75,7 @@
     getActiveType: () => model.activeType,
     getShowPackageDisplayName: () => model.showPackageDisplayName,
   });
+  const tableState = useSelector(tableModel.table.store);
 
   const rowVirtualizer = $derived(tableModel.rowVirtualizer);
   const virtualRows = $derived($rowVirtualizer.getVirtualItems());
@@ -81,6 +83,11 @@
   const bottomVirtualPadding = $derived(
     getBottomVirtualPadding(virtualRows, $rowVirtualizer.getTotalSize()),
   );
+
+  function getColumnAriaSort(columnId: string): 'ascending' | 'descending' | 'none' {
+    const sort = tableState.current.sorting.find(({ id }) => id === columnId);
+    return sort ? (sort.desc ? 'descending' : 'ascending') : 'none';
+  }
 
   $effect(() => {
     // The initial load updates model state. Tracking it here would rerun this
@@ -105,15 +112,17 @@
 <section
   class="relative flex h-full min-h-0 flex-col gap-4 overflow-hidden"
   aria-busy={model.isBusy}
+  aria-labelledby="libraries-title"
 >
+  <h1 id="libraries-title" class="sr-only">{t('nav.libraries')}</h1>
   {#if model.errorMessage}
-    <Alert variant="destructive" class="shrink-0">
+    <Alert variant="destructive" class="shrink-0" role="alert">
       <AlertTitle>{t('libraries.error')}</AlertTitle>
       <AlertDescription>{model.errorMessage}</AlertDescription>
     </Alert>
   {/if}
   {#if model.catalogStatus === 'local_fallback'}
-    <Alert class="shrink-0">
+    <Alert class="shrink-0" role="note">
       <AlertTitle>{t('libraries.catalogFallback.title')}</AlertTitle>
       <AlertDescription>{t('libraries.catalogFallback.description')}</AlertDescription>
     </Alert>
@@ -125,7 +134,7 @@
     onValueChange={model.handleVendorChange}
   >
     <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
-      <TabsList class="flex flex-wrap">
+      <TabsList class="flex flex-wrap" aria-label={t('libraries.filters.vendorLabel')}>
         {#each vendorOptions as vendor (vendor.value)}
           <TabsTrigger value={vendor.value}>{vendor.label}</TabsTrigger>
         {/each}
@@ -139,12 +148,23 @@
     {#each vendorOptions as vendor (vendor.value)}
       <TabsContent value={vendor.value} class="flex min-h-0 flex-1 flex-col gap-4">
         {#if vendor.value === model.activeVendor}
+          {@const activeTypeLabel =
+            typeOptionsByVendor[vendor.value].find((type) => type.value === model.activeType)
+              ?.label ??
+            model.activeType ??
+            ''}
+          {@const tableCaption = t('libraries.table.caption', {
+            vendor: vendor.label,
+            type: activeTypeLabel,
+          })}
+
           <ToggleGroup
             type="single"
             spacing={0}
             variant="outline"
             class="shrink-0 flex-wrap"
             bind:value={model.activeType}
+            aria-label={t('libraries.filters.typeLabel')}
           >
             {#each typeOptionsByVendor[vendor.value] as type (type.value)}
               <ToggleGroupItem value={type.value}>{type.label}</ToggleGroupItem>
@@ -155,13 +175,21 @@
             bind:viewportRef={tableModel.scrollViewportRef}
             orientation="both"
             class="min-h-0 flex-1"
+            viewportRegion={{ label: tableCaption }}
+            viewportFocusable
           >
             <Table class="table-fixed">
+              <caption class="sr-only">{tableCaption}</caption>
               <TableHeader class="sticky top-0 z-10 bg-background">
                 {#each tableModel.table.getHeaderGroups() as headerGroup (headerGroup.id)}
                   <TableRow>
                     {#each headerGroup.headers as header (header.id)}
-                      <TableHead class={getLibraryColumnClass(header.column.id)}>
+                      <TableHead
+                        class={getLibraryColumnClass(header.column.id)}
+                        aria-sort={header.column.getCanSort()
+                          ? getColumnAriaSort(header.column.id)
+                          : undefined}
+                      >
                         {#if !header.isPlaceholder}
                           <FlexRender
                             content={header.column.columnDef.header}

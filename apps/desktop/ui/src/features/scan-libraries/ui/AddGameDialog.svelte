@@ -178,7 +178,7 @@
     }
   }}
 >
-  <DialogContent showCloseButton={!busy}>
+  <DialogContent closeLabel={t('common.close')} showCloseButton={!busy}>
     <DialogHeader>
       <DialogTitle>{t('addGame.title')}</DialogTitle>
       <DialogDescription>{t('addGame.reviewDescription')}</DialogDescription>
@@ -188,6 +188,7 @@
       {#if dialogState.kind === 'review' && dialogState.errorPresentation !== null}
         <Alert
           variant={dialogState.errorPresentation.severity === 'warning' ? 'warning' : 'destructive'}
+          role="alert"
         >
           <TriangleAlertIcon aria-hidden="true" />
           <AlertTitle>{t('addGame.cannotAddTitle')}</AlertTitle>
@@ -252,7 +253,7 @@
               <Item variant="muted" size="sm">
                 <ItemContent>
                   <ItemTitle>{t('addGame.selectedFolder')}</ItemTitle>
-                  <ItemDescription class="line-clamp-none text-left text-wrap break-all">
+                  <ItemDescription class="line-clamp-none text-start text-wrap break-all">
                     {inspection.selectedRoot}
                   </ItemDescription>
                 </ItemContent>
@@ -264,7 +265,7 @@
         <Item variant="muted" size="sm">
           <ItemContent>
             <ItemTitle>{t('addGame.selectedFolder')}</ItemTitle>
-            <ItemDescription class="line-clamp-none text-left text-wrap break-all">
+            <ItemDescription class="line-clamp-none text-start text-wrap break-all">
               {inspection.selectedRoot}
             </ItemDescription>
           </ItemContent>
@@ -273,7 +274,7 @@
           <Item variant="muted" size="sm">
             <ItemContent>
               <ItemTitle>{t('addGame.existingRoot')}</ItemTitle>
-              <ItemDescription class="line-clamp-none text-left text-wrap break-all">
+              <ItemDescription class="line-clamp-none text-start text-wrap break-all">
                 {recommendedRoot}
               </ItemDescription>
             </ItemContent>
@@ -282,28 +283,28 @@
       {/if}
 
       {#each visibleWarnings as warning, index (`${warning.code}:${index}`)}
-        <Alert variant="warning" size="sm" data-add-game-warning={warning.code}>
-          <TriangleAlertIcon />
+        <Alert variant="warning" size="sm" role="note" data-add-game-warning={warning.code}>
+          <TriangleAlertIcon aria-hidden="true" />
           <AlertDescription>{formatAddGameWarning(warning)}</AlertDescription>
         </Alert>
       {/each}
 
       {#each standaloneUnavailableReasons as reason (reason)}
-        <Alert variant="destructive" size="sm" data-add-game-unavailable={reason}>
-          <TriangleAlertIcon />
+        <Alert variant="destructive" size="sm" role="note" data-add-game-unavailable={reason}>
+          <TriangleAlertIcon aria-hidden="true" />
           <AlertDescription>{formatAddGameUnavailableReason(reason)}</AlertDescription>
         </Alert>
       {/each}
 
       {#if rootCorrection?.status === 'ready'}
-        <Alert data-root-correction-status="ready">
-          <InfoIcon />
+        <Alert role="note" data-root-correction-status="ready">
+          <InfoIcon aria-hidden="true" />
           <AlertTitle>{t('addGame.replaceRootTitle')}</AlertTitle>
           <AlertDescription>{t('addGame.replaceRootDescription')}</AlertDescription>
         </Alert>
       {:else if rootCorrection?.status === 'cleanup_required'}
-        <Alert variant="warning" data-root-correction-status="cleanup_required">
-          <TriangleAlertIcon />
+        <Alert variant="warning" role="note" data-root-correction-status="cleanup_required">
+          <TriangleAlertIcon aria-hidden="true" />
           <AlertTitle>{t('addGame.rootCorrection.rollbackTitle')}</AlertTitle>
           <AlertDescription>
             {t('addGame.rootCorrection.rollbackDescription', {
@@ -315,10 +316,11 @@
         {#each rootCorrection.blockers as blocker (blocker)}
           <Alert
             variant="warning"
+            role="note"
             data-root-correction-status="blocked"
             data-root-correction-blocker={blocker}
           >
-            <TriangleAlertIcon />
+            <TriangleAlertIcon aria-hidden="true" />
             <AlertDescription>{blockerMessage(blocker)}</AlertDescription>
           </Alert>
         {/each}

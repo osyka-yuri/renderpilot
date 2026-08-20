@@ -1,21 +1,27 @@
 <script lang="ts">
   import type { HTMLAttributes } from 'svelte/elements';
   import { cn } from '@shared/classnames';
-  import type { WithElementRef } from '../types';
+  import type { HeadingLevel, WithElementRef } from '../types';
 
   let {
     ref = $bindable(null),
     class: className,
     children,
+    level,
     ...restProps
-  }: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
+  }: WithElementRef<HTMLAttributes<HTMLHeadingElement>, HTMLHeadingElement> & {
+    level: HeadingLevel;
+  } = $props();
+
+  const element = $derived(`h${level}` as const);
 </script>
 
-<div
+<svelte:element
+  this={element}
   bind:this={ref}
   data-slot="empty-title"
   class={cn('text-lg font-medium tracking-tight', className)}
   {...restProps}
 >
   {@render children?.()}
-</div>
+</svelte:element>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatBytes, formatPercent } from '@shared/format';
   import { getLocale, t } from '@shared/i18n';
-  import { Progress, Spinner } from '@shared/ui';
+  import { LiveAnnouncer, Progress, Spinner } from '@shared/ui';
 
   import { phaseStatusKey, type UpdateProgressPhase } from '../model/dialog-view';
   import type { DownloadProgressView } from '../model/types';
@@ -49,18 +49,19 @@
     return null;
   });
 
-  const progressLabel = $derived(t('settings.about.updateDialog.progressAria'));
+  const progressLabel = $derived(t('settings.about.updateDialog.progressLabel'));
 </script>
 
-<div class="flex flex-col gap-2" role="status" aria-live="polite" aria-atomic="true">
+<div class="flex flex-col gap-2">
+  <LiveAnnouncer message={statusLabel} />
   <div class="flex items-center gap-2 text-sm font-medium">
     {#if !isDeterminate}
       <Spinner class="size-4" />
     {/if}
-    <span>{statusLabel}</span>
+    <span aria-hidden="true">{statusLabel}</span>
     {#if isDeterminate}
       <span class="ms-auto text-muted-foreground tabular-nums">
-        {percentLabel}
+        <span aria-hidden="true">{percentLabel}</span>
       </span>
     {/if}
   </div>

@@ -103,6 +103,7 @@
 </script>
 
 <section class="flex h-full min-h-0 flex-col gap-4" aria-busy={effectiveBusy}>
+  <h1 class="sr-only">{t('nav.games')}</h1>
   {#if showEmptyState}
     <div class="flex flex-1 flex-col items-center justify-center">
       <GamesEmptyState busy={effectiveBusy} {addGameButtonLabel} {onAddGame} />
@@ -113,7 +114,7 @@
         <EmptyMedia>
           <Spinner class="size-10" />
         </EmptyMedia>
-        <EmptyTitle>{t('games.loading')}</EmptyTitle>
+        <EmptyTitle level={2}>{t('games.loading')}</EmptyTitle>
       </EmptyHeader>
     </Empty>
   {:else}
@@ -171,7 +172,7 @@
             </Button>
             {#if model.hiddenCount > 0}
               <span
-                class="pointer-events-none absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground ring-2 ring-background"
+                class="pointer-events-none absolute -inset-e-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground ring-2 ring-background"
                 aria-hidden="true"
               >
                 {model.hiddenCount > 9 ? '9+' : model.hiddenCount}

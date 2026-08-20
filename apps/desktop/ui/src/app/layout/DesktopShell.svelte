@@ -1,8 +1,10 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+  import { tick, type Snippet } from 'svelte';
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
   import { t } from '@shared/i18n';
-  import { SidebarProvider, SidebarInset } from '@shared/ui';
+  import { Button, SidebarProvider, SidebarInset } from '@shared/ui';
+  import { createShellNavigation } from '@app/navigation/shell-navigation';
 
   import ShellSidebar from './ShellSidebar.svelte';
   import ShellHeader from './ShellHeader.svelte';
@@ -40,17 +42,54 @@
   }: Props = $props();
 
   let sidebarOpen = $state(false);
+  let previousScreen: Screen | undefined;
 
   const resolvedGameTitle = $derived(selectedGameTitle?.trim() ?? t('nav.gameFallback'));
+  const shellNavigation = $derived(createShellNavigation(screen, resolvedGameTitle));
+
+  $effect(() => {
+    const currentScreen = screen;
+    const shouldMoveFocus = previousScreen !== undefined && previousScreen !== currentScreen;
+    previousScreen = currentScreen;
+
+    if (!shouldMoveFocus) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void tick().then(() => {
+      if (!cancelled) {
+        document.getElementById('main-content')?.focus({ preventScroll: true });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  });
 </script>
 
+<svelte:head>
+  <title>{t('shell.pageTitle', { page: shellNavigation.pageLabel })}</title>
+</svelte:head>
+
 <SidebarProvider bind:open={sidebarOpen}>
-  <ShellSidebar {screen} {onNavigate} {onPreload} />
+  <Button
+    href="#main-content"
+    variant="outline"
+    size="sm"
+    class="fixed top-0 left-1/2 z-100 -translate-x-1/2 -translate-y-full shadow-sm transition-transform duration-150 focus:translate-y-2 focus-visible:ring-2 motion-reduce:transition-none"
+  >
+    <ArrowDownIcon class="size-3.5" aria-hidden="true" />
+    {t('nav.skipToContent')}
+  </Button>
+
+  <ShellSidebar navigation={shellNavigation} {onNavigate} {onPreload} />
 
   <SidebarInset class="min-h-0 overflow-hidden">
     <ShellHeader
-      {screen}
-      {resolvedGameTitle}
+      navigation={shellNavigation}
       {busy}
       {refreshing}
       {onNavigate}
@@ -63,7 +102,13 @@
 
     {@render banner?.()}
 
-    <main class="grid min-h-0 flex-1 grid-rows-[1fr] gap-4 overflow-hidden p-4" aria-busy={busy}>
+    <main
+      id="main-content"
+      tabindex="-1"
+      class="grid min-h-0 flex-1 grid-rows-[1fr] gap-4 overflow-hidden p-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+      aria-label={shellNavigation.pageLabel}
+      aria-busy={busy}
+    >
       {@render children?.()}
     </main>
   </SidebarInset>

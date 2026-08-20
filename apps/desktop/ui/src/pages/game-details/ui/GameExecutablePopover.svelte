@@ -1,5 +1,4 @@
 <script lang="ts">
-  import CheckIcon from '@lucide/svelte/icons/check';
   import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
   import {
     Button,
@@ -7,13 +6,14 @@
     Popover,
     PopoverContent,
     PopoverTrigger,
+    RadioGroup,
+    RadioGroupItem,
     Separator,
     Tooltip,
     TooltipContent,
     TooltipTrigger,
   } from '@shared/ui';
   import { t, type MessageKeyWithoutParams } from '@shared/i18n';
-  import type { ExecutableCandidate } from '@features/nvapi-settings';
   import type { GameExecutableContext } from '../model/create-game-executable-context.svelte';
   import type { ExecutableLockReason } from '../model/game-executable-lock';
   import GameExecutableTriggerContent from './GameExecutableTriggerContent.svelte';
@@ -39,8 +39,8 @@
   const isOverride = $derived(exe.effectiveExeSource === 'override');
 
   const triggerLabel = $derived(exe.effectiveExe ?? t('gameDetails.profile.noExe'));
-  const triggerAriaLabel = $derived(
-    t('gameDetails.executable.triggerAria', { fileName: triggerLabel }),
+  const executableLabel = $derived(
+    t('gameDetails.executable.triggerLabel', { fileName: triggerLabel }),
   );
   const tooltipText = $derived(
     lockReason
@@ -71,8 +71,8 @@
     ].filter((group) => group.candidates.length > 0),
   );
 
-  function selectCandidate(candidate: ExecutableCandidate): void {
-    void exe.setOverride(gameId, candidate.absolute_path);
+  function selectCandidate(absolutePath: string): void {
+    void exe.setOverride(gameId, absolutePath);
     open = false;
   }
 
@@ -98,7 +98,7 @@
           variant="ghost"
           size="sm"
           class="cursor-not-allowed aria-disabled:pointer-events-auto"
-          aria-label={triggerAriaLabel}
+          aria-label={executableLabel}
           aria-disabled="true"
         >
           <GameExecutableTriggerContent label={triggerLabel} {isOverride} locked />
@@ -112,7 +112,7 @@
           <PopoverTrigger
             {...props}
             class={buttonVariants({ variant: 'ghost', size: 'sm' })}
-            aria-label={triggerAriaLabel}
+            aria-label={executableLabel}
           >
             <GameExecutableTriggerContent label={triggerLabel} {isOverride} locked={false} />
           </PopoverTrigger>
@@ -138,33 +138,34 @@
 
         <Separator />
 
-        <div class="max-h-72 overflow-y-auto p-1">
+        <RadioGroup
+          value={exe.effectiveAbsolutePath ?? ''}
+          aria-label={t('gameDetails.executable.groupLabel')}
+          class="max-h-72 gap-0 overflow-y-auto p-1"
+          onValueChange={selectCandidate}
+        >
           {#each candidateGroups as group (group.key)}
-            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
-              {group.label}
-            </p>
-            {#each group.candidates as candidate (candidate.absolute_path)}
-              <button
-                type="button"
-                class="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-accent"
-                onclick={() => {
-                  selectCandidate(candidate);
-                }}
-              >
-                <CheckIcon
-                  class="mt-0.5 size-4 shrink-0 {candidate.file_name === exe.effectiveExe
-                    ? 'opacity-100'
-                    : 'opacity-0'}"
-                  aria-hidden="true"
-                />
-                <span class="flex min-w-0 flex-col">
-                  <span class="truncate text-sm">{candidate.file_name}</span>
-                  <span class="truncate text-xs text-muted-foreground">
-                    {candidate.relative_path}
+            {@const groupLabelId = `${componentId}-${group.key}-label`}
+            <div role="group" aria-labelledby={groupLabelId}>
+              <p id={groupLabelId} class="px-2 py-1 text-xs font-medium text-muted-foreground">
+                {group.label}
+              </p>
+              {#each group.candidates as candidate, index (candidate.absolute_path)}
+                {@const candidateId = `${componentId}-${group.key}-${index}`}
+                <label
+                  for={candidateId}
+                  class="flex min-h-10 w-full cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-start hover:bg-accent has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring"
+                >
+                  <RadioGroupItem id={candidateId} value={candidate.absolute_path} class="mt-0.5" />
+                  <span class="flex min-w-0 flex-col">
+                    <span class="truncate text-sm">{candidate.file_name}</span>
+                    <span class="truncate text-xs text-muted-foreground">
+                      {candidate.relative_path}
+                    </span>
                   </span>
-                </span>
-              </button>
-            {/each}
+                </label>
+              {/each}
+            </div>
           {/each}
 
           {#if candidateGroups.length === 0}
@@ -172,18 +173,12 @@
               {t('gameDetails.profile.noExeDetected')}
             </p>
           {/if}
-        </div>
+        </RadioGroup>
       </PopoverContent>
     </Popover>
   {/if}
 
-  <TooltipContent
-    role="tooltip"
-    side="bottom"
-    align="end"
-    sideOffset={6}
-    class="max-w-80 whitespace-normal"
-  >
+  <TooltipContent side="bottom" align="end" sideOffset={6} class="max-w-80 whitespace-normal">
     {#if locked}
       <span class="block font-medium">{t('gameDetails.d3d12.executableLockedTitle')}</span>
       <span class="mt-1 block">{tooltipText}</span>

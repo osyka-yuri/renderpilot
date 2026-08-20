@@ -23,7 +23,18 @@ import { validateEditorialPolicy } from './i18n-contracts/validator.mjs';
 import { PLACEHOLDER_CONTRACT_CASES } from '../ui/src/shared/i18n/messages/placeholder-contract-cases.ts';
 
 const EXPECTED_CONTRACT_VERSION =
-  'i18n-v2:120ab4f606b916397bd0ac2ad7b655cc02a1994d665f6e97b04512f4ff6e8286';
+  'i18n-v2:24bc038ea872f0578d00fc80351838f2d7376092972f9622ec0a6ec6bf1b452a';
+
+function isAccessibilityDeliveryNamedKey(key) {
+  return (
+    /(?:^|\.)(?:a11y|accessibility|aria|srLabel|srOnly|screenReader|visuallyHidden)(?:\.|$)/i.test(
+      key,
+    ) ||
+    /(?:^|\.)(?:a11y|accessibility|aria|srLabel|srOnly|screenReader|visuallyHidden)(?=[A-Z])|A11y|Accessibility|Aria|SrLabel|SrOnly|ScreenReader|VisuallyHidden/.test(
+      key,
+    )
+  );
+}
 
 test('contract generation is deterministic and committed outputs are current', async () => {
   const first = await createI18nContractOutputs();
@@ -37,6 +48,44 @@ test('contract generation is deterministic and committed outputs are current', a
   }
   const versionSource = first.entries().find(([file]) => file.endsWith('contract-version.ts'))?.[1];
   assert.match(versionSource, new RegExp(EXPECTED_CONTRACT_VERSION));
+});
+
+test('message keys describe product ownership instead of accessibility delivery mechanics', async () => {
+  const source = await readFile(
+    new URL('../ui/src/shared/i18n/messages/en.ts', import.meta.url),
+    'utf8',
+  );
+  const implementationNamedKeys = Object.keys(parseEnglishContract(source)).filter(
+    isAccessibilityDeliveryNamedKey,
+  );
+
+  assert.deepEqual(
+    implementationNamedKeys,
+    [],
+    'Accessible copy must belong to its product domain; do not encode delivery mechanics such as accessibility, a11y, ARIA, screen-reader-only, or visually-hidden in message keys.',
+  );
+});
+
+test('message-key naming policy covers dotted, prefixed, and camel-case delivery terms', () => {
+  for (const key of [
+    'a11y.libraryDownload',
+    'library.accessibility.download',
+    'library.ariaLabel',
+    'library.downloadAriaLabel',
+    'library.downloadSrOnly',
+    'library.screenReaderHint',
+    'library.visuallyHiddenStatus',
+  ]) {
+    assert.equal(isAccessibilityDeliveryNamedKey(key), true, key);
+  }
+
+  for (const key of [
+    'library.downloadLabel',
+    'library.downloadDescription',
+    'settings.inputLabel',
+  ]) {
+    assert.equal(isAccessibilityDeliveryNamedKey(key), false, key);
+  }
 });
 
 test('placeholder analyzer matches the shared contract table', () => {

@@ -36,14 +36,14 @@
     'flex min-w-0 flex-wrap items-center justify-between gap-3 gap-x-4 px-1',
     'max-md:items-start',
   )}
-  aria-busy={busy ? 'true' : 'false'}
+  aria-busy={busy}
 >
   {#if hasGames}
     <GamesDashboardSummary stats={dashboardStats} />
   {/if}
 
   <div
-    class={cn('ml-auto flex flex-wrap justify-end gap-2', 'max-md:ml-0 max-md:justify-start')}
+    class={cn('ms-auto flex flex-wrap justify-end gap-2', 'max-md:ms-0 max-md:justify-start')}
     role="group"
     aria-label={t('games.libraryActions')}
   >

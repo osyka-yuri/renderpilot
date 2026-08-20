@@ -109,7 +109,7 @@
 
 <Card>
   <CardHeader class="pb-2">
-    <CardTitle>NVIDIA Streamline</CardTitle>
+    <CardTitle level={2}>NVIDIA Streamline</CardTitle>
     <CardDescription>
       {t('gameDetails.streamline.description')}
     </CardDescription>
@@ -168,7 +168,7 @@
                   size="icon-sm"
                   disabled={busy}
                   onclick={handleRestoreAll}
-                  aria-label={t('gameDetails.streamline.restoreAllAria')}
+                  aria-label={t('gameDetails.streamline.restoreAllLabel')}
                 >
                   <Undo2Icon class="size-4" aria-hidden="true" />
                 </Button>

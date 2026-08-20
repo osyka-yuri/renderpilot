@@ -79,7 +79,7 @@
 
   const titleId = $derived(createTitleId(game.id));
 
-  const detailsAriaLabel = $derived(t('game.card.action.detailsAria', { title: game.title }));
+  const detailsLabel = $derived(t('game.card.action.detailsLabel', { title: game.title }));
 
   function updateBadgeLabel(badge: UpdateBadge): string {
     if (badge.kind === 'up-to-date') {
@@ -132,13 +132,15 @@
         </Badge>
 
         <div class="grid min-w-0 gap-2">
-          <CardTitle id={titleId} role="heading" aria-level={3} class="flex items-center gap-2">
+          <CardTitle id={titleId} level={3} class="flex items-center gap-2">
             {game.title}
             {#if game.isFavorite}
-              <StarIcon class="size-4 fill-yellow-500 text-yellow-500" aria-label="Favorite" />
+              <StarIcon class="size-4 fill-yellow-500 text-yellow-500" aria-hidden="true" />
+              <span class="sr-only">{t('game.card.status.favorite')}</span>
             {/if}
             {#if game.isHidden}
-              <EyeOffIcon class="size-4 text-muted-foreground" aria-label="Hidden" />
+              <EyeOffIcon class="size-4 text-muted-foreground" aria-hidden="true" />
+              <span class="sr-only">{t('game.card.status.hidden')}</span>
             {/if}
           </CardTitle>
 
@@ -179,7 +181,7 @@
       class="w-full"
       variant="default"
       size="sm"
-      aria-label={detailsAriaLabel}
+      aria-label={detailsLabel}
       onclick={onOpenDetails}
       onpointerenter={onPreloadDetails}
       onfocus={onPreloadDetails}

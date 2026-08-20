@@ -50,7 +50,7 @@
 
 <Card>
   <CardHeader>
-    <CardTitle>{t('settings.about.title')}</CardTitle>
+    <CardTitle level={2}>{t('settings.about.title')}</CardTitle>
     <CardDescription>{t('settings.about.description')}</CardDescription>
   </CardHeader>
   <CardContent>

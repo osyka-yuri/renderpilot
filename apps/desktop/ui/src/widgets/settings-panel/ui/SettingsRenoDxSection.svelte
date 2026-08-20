@@ -145,7 +145,7 @@
 
 <Card>
   <CardHeader>
-    <CardTitle>{t('gameDetails.renodx.vulkanLayer.title')}</CardTitle>
+    <CardTitle level={2}>{t('gameDetails.renodx.vulkanLayer.title')}</CardTitle>
     <CardDescription>{t('settings.renodx.vulkan.description')}</CardDescription>
   </CardHeader>
 
@@ -260,7 +260,7 @@
           <Button
             variant="destructive"
             size="sm"
-            class="ml-auto"
+            class="ms-auto"
             disabled={removeDisabled}
             onclick={openRemoveConfirm}
             title={t('gameDetails.renodx.vulkanLayer.action.remove')}

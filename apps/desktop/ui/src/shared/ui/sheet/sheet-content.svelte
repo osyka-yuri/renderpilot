@@ -2,7 +2,7 @@
   import { tv, type VariantProps } from 'tailwind-variants';
 
   export const sheetVariants = tv({
-    base: 'fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500',
+    base: 'fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500 motion-reduce:transition-none motion-reduce:duration-0',
     variants: {
       side: {
         top: 'inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
@@ -36,11 +36,13 @@
     side = 'right',
     portalProps,
     children,
+    closeLabel,
     ...restProps
   }: WithoutChildrenOrChild<SheetPrimitive.ContentProps> & {
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SheetPortal>>;
     side?: Side;
     children: Snippet;
+    closeLabel: string;
   } = $props();
 </script>
 
@@ -54,10 +56,10 @@
   >
     {@render children()}
     <SheetPrimitive.Close
-      class="absolute inset-e-4 top-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none"
+      class="absolute inset-e-3 top-3 inline-flex size-8 items-center justify-center rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none"
     >
-      <XIcon class="size-4" />
-      <span class="sr-only">Close</span>
+      <XIcon class="size-4" aria-hidden="true" />
+      <span class="sr-only">{closeLabel}</span>
     </SheetPrimitive.Close>
   </SheetPrimitive.Content>
 </SheetPortal>

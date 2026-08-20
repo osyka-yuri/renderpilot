@@ -31,7 +31,7 @@
 {#if hasContent}
   <Card>
     <CardHeader class="pb-2">
-      <CardTitle>{t('gameDetails.profile.title')}</CardTitle>
+      <CardTitle level={2}>{t('gameDetails.profile.title')}</CardTitle>
       <CardDescription>
         {t('gameDetails.profile.description')}
       </CardDescription>

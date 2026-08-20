@@ -35,7 +35,7 @@
           <EmptyMedia variant="icon">
             <TriangleAlertIcon aria-hidden="true" />
           </EmptyMedia>
-          <EmptyTitle>{t('error.boundary.title')}</EmptyTitle>
+          <EmptyTitle level={1}>{t('error.boundary.title')}</EmptyTitle>
           <EmptyDescription>{t('error.boundary.description')}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>

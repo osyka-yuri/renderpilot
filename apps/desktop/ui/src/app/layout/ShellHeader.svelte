@@ -1,7 +1,8 @@
 <script lang="ts">
   import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-  import type { ScreenHandler, Screen } from '@app/navigation/screen';
+  import type { ScreenHandler } from '@app/navigation/screen';
+  import type { ShellNavigation } from '@app/navigation/shell-navigation';
   import { t } from '@shared/i18n';
   import {
     Breadcrumb,
@@ -17,8 +18,7 @@
   import DonateButton from './DonateButton.svelte';
 
   type Props = {
-    screen: Screen;
-    resolvedGameTitle: string;
+    navigation: ShellNavigation;
     busy: boolean;
     refreshing: boolean;
     onNavigate: ScreenHandler;
@@ -30,8 +30,7 @@
   };
 
   const {
-    screen,
-    resolvedGameTitle,
+    navigation,
     busy,
     refreshing,
     onNavigate,
@@ -41,59 +40,14 @@
     updateOpening = false,
     onOpenUpdate = () => undefined,
   }: Props = $props();
-
-  type BreadcrumbEntry =
-    | {
-        id: string;
-        kind: 'link';
-        label: string;
-        target: Screen;
-      }
-    | {
-        id: string;
-        kind: 'page';
-        label: string;
-      };
-
-  const breadcrumbs = $derived(createBreadcrumbs(screen, resolvedGameTitle));
-
-  function createBreadcrumbs(currentScreen: Screen, gameTitle: string): BreadcrumbEntry[] {
-    switch (currentScreen) {
-      case 'games':
-        return [{ id: 'games-page', kind: 'page', label: t('nav.games') }];
-
-      case 'settings':
-        return [{ id: 'settings-page', kind: 'page', label: t('nav.settings') }];
-
-      case 'libraries':
-        return [{ id: 'libraries-page', kind: 'page', label: t('nav.libraries') }];
-
-      case 'details':
-        return [
-          { id: 'games-link', kind: 'link', label: t('nav.games'), target: 'games' },
-          { id: 'game-page', kind: 'page', label: gameTitle },
-        ];
-
-      case 'operations':
-        return [
-          { id: 'games-link', kind: 'link', label: t('nav.games'), target: 'games' },
-          { id: 'game-link', kind: 'link', label: gameTitle, target: 'details' },
-          { id: 'operations-page', kind: 'page', label: t('nav.operations') },
-        ];
-
-      default: {
-        return [{ id: 'fallback-games-page', kind: 'page', label: t('nav.games') }];
-      }
-    }
-  }
 </script>
 
 <header class="flex shrink-0 items-center gap-2 border-b px-4 py-2">
-  <SidebarTrigger />
+  <SidebarTrigger label={t('shell.sidebar.toggle')} />
 
-  <Breadcrumb>
+  <Breadcrumb label={navigation.breadcrumbLabel}>
     <BreadcrumbList>
-      {#each breadcrumbs as item, index (item.id)}
+      {#each navigation.breadcrumbs as item, index (item.id)}
         {#if index > 0}
           <BreadcrumbSeparator />
         {/if}
@@ -123,7 +77,7 @@
     </BreadcrumbList>
   </Breadcrumb>
 
-  <div class="ml-auto flex items-center gap-2">
+  <div class="ms-auto flex items-center gap-2">
     {#if updateAvailable}
       <Button variant="outline" size="sm" disabled={updateOpening} onclick={onOpenUpdate}>
         {#if updateOpening}

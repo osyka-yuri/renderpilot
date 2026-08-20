@@ -3,7 +3,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
+
+import { setLanguageMode } from '@shared/i18n';
 
 import DesktopShellTestHost from './DesktopShell.test-host.svelte';
 
@@ -11,11 +13,11 @@ describe('DesktopShell navigation intent', () => {
   let target: HTMLDivElement;
   let component: object | undefined;
 
-  beforeEach(() => {
+  function mockViewport(isMobile: boolean): void {
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn((query: string) => ({
-        matches: false,
+        matches: isMobile,
         media: query,
         onchange: null,
         addListener: vi.fn(),
@@ -25,6 +27,19 @@ describe('DesktopShell navigation intent', () => {
         dispatchEvent: vi.fn(() => false),
       })),
     });
+  }
+
+  function requireElement<T extends Element>(element: T | null, label: string): T {
+    if (!element) {
+      throw new Error(`Expected ${label} to be rendered`);
+    }
+
+    return element;
+  }
+
+  beforeEach(async () => {
+    await setLanguageMode('en');
+    mockViewport(false);
     Object.defineProperty(window, 'ResizeObserver', {
       configurable: true,
       value: class ResizeObserverMock {
@@ -43,6 +58,128 @@ describe('DesktopShell navigation intent', () => {
       component = undefined;
     }
     target.remove();
+    vi.restoreAllMocks();
+  });
+
+  it('does not move focus on initial mount or on locale and title-only updates', async () => {
+    const focusOrigin = document.createElement('button');
+    document.body.append(focusOrigin);
+    focusOrigin.focus();
+
+    component = mount(DesktopShellTestHost, {
+      target,
+      props: { screen: 'details', onNavigate: vi.fn(), onPreload: vi.fn() },
+    });
+    flushSync();
+    await tick();
+
+    expect(document.activeElement).toBe(focusOrigin);
+
+    await setLanguageMode('ru');
+    flushSync();
+    await tick();
+    expect(document.activeElement).toBe(focusOrigin);
+
+    target.querySelector<HTMLButtonElement>('[data-test-action="rename-game"]')?.click();
+    flushSync();
+    await tick();
+    expect(document.activeElement).toBe(focusOrigin);
+
+    focusOrigin.remove();
+  });
+
+  it('keeps the document title aligned with the game, route, and locale', async () => {
+    component = mount(DesktopShellTestHost, {
+      target,
+      props: {
+        screen: 'details',
+        selectedGameTitle: 'Control',
+        onNavigate: vi.fn(),
+        onPreload: vi.fn(),
+      },
+    });
+    flushSync();
+    await tick();
+
+    expect(document.title).toBe('Control — RenderPilot');
+
+    target.querySelector<HTMLButtonElement>('[data-test-action="rename-game"]')?.click();
+    flushSync();
+    await tick();
+    expect(document.title).toBe('Renamed Test Game — RenderPilot');
+
+    const settings = [...target.querySelectorAll<HTMLAnchorElement>('nav a')].find(
+      (link) => link.textContent.trim() === 'Settings',
+    );
+    settings?.click();
+    flushSync();
+    await tick();
+    expect(document.title).toBe('Settings — RenderPilot');
+
+    await setLanguageMode('ru');
+    flushSync();
+    await tick();
+    expect(document.title).toBe('Настройки — RenderPilot');
+  });
+
+  it('moves focus to the main landmark after a screen transition', async () => {
+    component = mount(DesktopShellTestHost, {
+      target,
+      props: { onNavigate: vi.fn(), onPreload: vi.fn() },
+    });
+    flushSync();
+
+    const libraries = [...target.querySelectorAll<HTMLAnchorElement>('nav a')].find(
+      (link) => link.textContent.trim() === 'Libraries',
+    );
+    libraries?.click();
+    await tick();
+    await tick();
+
+    const main = target.querySelector<HTMLElement>('#main-content');
+    expect(main?.getAttribute('aria-label')).toBe('Libraries');
+    expect(document.activeElement).toBe(main);
+  });
+
+  it('invalidates a stale focus tick when transitions happen rapidly', async () => {
+    component = mount(DesktopShellTestHost, {
+      target,
+      props: { onNavigate: vi.fn(), onPreload: vi.fn() },
+    });
+    flushSync();
+
+    const main = requireElement(
+      target.querySelector<HTMLElement>('#main-content'),
+      'main landmark',
+    );
+    const focusSpy = vi.spyOn(main, 'focus');
+    const links = [...target.querySelectorAll<HTMLAnchorElement>('nav a')];
+    links.find((link) => link.textContent.trim() === 'Libraries')?.click();
+    links.find((link) => link.textContent.trim() === 'Settings')?.click();
+    await tick();
+    await tick();
+
+    expect(focusSpy).toHaveBeenCalledOnce();
+    expect(main.getAttribute('aria-label')).toBe('Settings');
+    expect(document.activeElement).toBe(main);
+  });
+
+  it('cancels a pending transition focus when the shell unmounts', async () => {
+    component = mount(DesktopShellTestHost, {
+      target,
+      props: { onNavigate: vi.fn(), onPreload: vi.fn() },
+    });
+    flushSync();
+
+    const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+    [...target.querySelectorAll<HTMLAnchorElement>('nav a')]
+      .find((link) => link.textContent.trim() === 'Libraries')
+      ?.click();
+    await unmount(component);
+    component = undefined;
+    await tick();
+
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 
   it('prefetches sidebar pages on pointer and keyboard intent', () => {
@@ -55,9 +192,9 @@ describe('DesktopShell navigation intent', () => {
     });
     flushSync();
 
-    const buttons = [...target.querySelectorAll<HTMLButtonElement>('button')];
-    const libraries = buttons.find((button) => button.textContent.trim() === 'Libraries');
-    const settings = buttons.find((button) => button.textContent.trim() === 'Settings');
+    const links = [...target.querySelectorAll<HTMLAnchorElement>('nav a')];
+    const libraries = links.find((link) => link.textContent.trim() === 'Libraries');
+    const settings = links.find((link) => link.textContent.trim() === 'Settings');
 
     expect(libraries).toBeDefined();
     expect(settings).toBeDefined();
@@ -101,5 +238,73 @@ describe('DesktopShell navigation intent', () => {
     expect(onPreload).toHaveBeenNthCalledWith(1, 'details');
     expect(onPreload).toHaveBeenNthCalledWith(2, 'details');
     expect(onNavigate).toHaveBeenCalledWith('details');
+  });
+
+  it('distinguishes the current page from its parent navigation location', () => {
+    component = mount(DesktopShellTestHost, {
+      target,
+      props: {
+        screen: 'operations',
+        selectedGameTitle: 'Control',
+        onNavigate: vi.fn(),
+        onPreload: vi.fn(),
+      },
+    });
+    flushSync();
+
+    const primaryNavigation = target.querySelector('nav');
+    const games = [...(primaryNavigation?.querySelectorAll<HTMLAnchorElement>('a') ?? [])].find(
+      (link) => link.textContent.trim() === 'Games',
+    );
+    const main = target.querySelector('main');
+
+    expect(games?.getAttribute('aria-current')).toBe('location');
+    expect(main?.getAttribute('aria-label')).toBe('Journal');
+  });
+
+  it('closes mobile navigation before focus enters the named destination landmark', async () => {
+    mockViewport(true);
+    const onNavigate = vi.fn();
+
+    component = mount(DesktopShellTestHost, {
+      target,
+      props: { onNavigate, onPreload: vi.fn() },
+    });
+    flushSync();
+
+    target.querySelector<HTMLButtonElement>('[data-sidebar="trigger"]')?.click();
+    flushSync();
+
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"][data-state="open"]');
+    const libraries = [...(dialog?.querySelectorAll<HTMLAnchorElement>('a') ?? [])].find(
+      (link) => link.textContent.trim() === 'Libraries',
+    );
+
+    expect(dialog).not.toBeNull();
+    expect(libraries).toBeDefined();
+
+    const main = requireElement(
+      target.querySelector<HTMLElement>('#main-content'),
+      'main landmark',
+    );
+    const nativeFocus = main.focus.bind(main);
+    const dialogStatesAtFocus: boolean[] = [];
+    vi.spyOn(main, 'focus').mockImplementation((options?: FocusOptions) => {
+      dialogStatesAtFocus.push(
+        document.body.querySelector('[role="dialog"][data-state="open"]') !== null,
+      );
+      nativeFocus(options);
+    });
+
+    libraries?.click();
+    flushSync();
+    await tick();
+    await tick();
+
+    expect(onNavigate).toHaveBeenCalledWith('libraries');
+    expect(document.body.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
+    expect(main.getAttribute('aria-label')).toBe('Libraries');
+    expect(document.activeElement).toBe(main);
+    expect(dialogStatesAtFocus).toEqual([false]);
   });
 });

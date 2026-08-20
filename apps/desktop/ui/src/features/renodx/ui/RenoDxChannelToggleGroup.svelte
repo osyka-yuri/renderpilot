@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { ToggleGroup, ToggleGroupItem } from '@shared/ui';
+  import {
+    ToggleGroup,
+    ToggleGroupItem,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+  } from '@shared/ui';
   import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import { isReshadeChannel, type ReshadeChannel } from '@entities/addon';
 
@@ -9,6 +15,7 @@
     busy?: boolean;
     ariaLabel: string;
     describedBy?: string;
+    tooltipText?: string;
     onChange: (channel: ReshadeChannel) => void;
   };
 
@@ -34,6 +41,7 @@
     busy = false,
     ariaLabel,
     describedBy,
+    tooltipText,
     onChange,
   }: Props = $props();
 
@@ -70,8 +78,25 @@
   aria-describedby={describedBy}
 >
   {#each CHANNEL_OPTIONS as option (option.value)}
-    <ToggleGroupItem value={option.value} disabled={isChannelDisabled(option.value)}>
-      {t(option.labelKey)}
-    </ToggleGroupItem>
+    {#if tooltipText}
+      <Tooltip>
+        <TooltipTrigger>
+          {#snippet child({ props })}
+            <ToggleGroupItem
+              {...props}
+              value={option.value}
+              disabled={isChannelDisabled(option.value)}
+            >
+              {t(option.labelKey)}
+            </ToggleGroupItem>
+          {/snippet}
+        </TooltipTrigger>
+        <TooltipContent>{tooltipText}</TooltipContent>
+      </Tooltip>
+    {:else}
+      <ToggleGroupItem value={option.value} disabled={isChannelDisabled(option.value)}>
+        {t(option.labelKey)}
+      </ToggleGroupItem>
+    {/if}
   {/each}
 </ToggleGroup>

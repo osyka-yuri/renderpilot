@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { setAriaStrings } from 'svelte-dnd-action';
 
   import DesktopShell from '@app/layout/DesktopShell.svelte';
   import type { Screen } from '@app/navigation/screen';
@@ -21,6 +22,7 @@
   } from '@entities/game';
   import { rollbackComponent } from '@entities/operation';
   import { getCatalogSetting } from '@entities/settings';
+  import { getI18nState, t } from '@shared/i18n';
   import { observeSystemTheme } from '@shared/theme';
   import { isDesktopPreviewMode } from '@shared/api-preview';
   import { invokeDesktop } from '@shared/api';
@@ -99,6 +101,43 @@
   let isRefreshing = $state(false);
   let backgroundCoverHydrationEnabled = $state(false);
   let lastCoverHydrationScope = '';
+
+  $effect(() => {
+    const i18nState = getI18nState();
+    if (i18nState.status !== 'ready') {
+      return;
+    }
+
+    setAriaStrings({
+      dragStarted: ({ itemLabel, zoneLabel, position, count }) =>
+        t('filters.launchers.reorder.dragStarted', {
+          itemLabel,
+          zoneLabel,
+          position,
+          count,
+        }),
+      movedToPosition: ({ itemLabel, position, count }) =>
+        t('filters.launchers.reorder.movedToPosition', { itemLabel, position, count }),
+      movedToZoneStart: ({ itemLabel, zoneLabel }) =>
+        t('filters.launchers.reorder.movedToZoneStart', { itemLabel, zoneLabel }),
+      movedToZoneEnd: ({ itemLabel, zoneLabel }) =>
+        t('filters.launchers.reorder.movedToZoneEnd', { itemLabel, zoneLabel }),
+      dropped: ({ itemLabel, zoneLabel, position, count }) =>
+        t('filters.launchers.reorder.droppedAnnouncement', {
+          itemLabel,
+          zoneLabel,
+          position,
+          count,
+        }),
+      zoneActiveInstruction: t('filters.launchers.reorder.zoneActiveInstruction'),
+      zoneDragDisabledInstruction: t('filters.launchers.reorder.zoneDragDisabledInstruction'),
+    });
+
+    return () => {
+      setAriaStrings(null);
+    };
+  });
+
   const gameDetailsModel = createGameDetailsPageModel({
     getSelectedGameId: () => model.selectedGameId,
     checkIsGameStillSelected: (gameId) => isGameSelected(model.selectedGameId, gameId),
@@ -438,10 +477,6 @@
       });
   }
 </script>
-
-<svelte:head>
-  <title>RenderPilot Desktop</title>
-</svelte:head>
 
 <NotificationsToaster />
 

@@ -92,7 +92,7 @@
 
 <Card>
   <CardHeader>
-    <CardTitle>{t('settings.appearance.title')}</CardTitle>
+    <CardTitle level={2}>{t('settings.appearance.title')}</CardTitle>
     <CardDescription>{t('settings.appearance.description')}</CardDescription>
   </CardHeader>
   <CardContent>

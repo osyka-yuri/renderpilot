@@ -10,7 +10,6 @@
   import type { Component } from 'svelte';
 
   import { formatPresentedError, presentError } from '@shared/error-presentation';
-  import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
   import { publishPresentedErrorNotification } from '@shared/notifications';
   import {
@@ -24,10 +23,11 @@
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-    Separator,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
     buttonVariants,
   } from '@shared/ui';
 
@@ -102,7 +102,7 @@
   let removing = $state(false);
 
   const isMenuOpen = $derived(open && !disabled);
-  const gameOptionsLabel = $derived(t('game.card.menu.ariaLabel', { title }));
+  const gameOptionsLabel = $derived(t('game.card.menu.label', { title }));
 
   const isFetchCoverDisabled = $derived(disabled || autoFetchInProgress);
   const isPickCoverDisabled = $derived(disabled || pickDisabled);
@@ -181,7 +181,7 @@
     triggerEl?.focus({ preventScroll: true });
   }
 
-  function handlePopoverOpenChange(nextOpen: boolean): void {
+  function handleMenuOpenChange(nextOpen: boolean): void {
     if (nextOpen && disabled) {
       return;
     }
@@ -247,45 +247,47 @@
   }
 </script>
 
-<Popover open={isMenuOpen} onOpenChange={handlePopoverOpenChange}>
-  <PopoverTrigger
+<DropdownMenu open={isMenuOpen} onOpenChange={handleMenuOpenChange}>
+  <DropdownMenuTrigger
     data-game-focus-target="menu"
     bind:ref={triggerEl}
     class={buttonVariants({ variant: 'outline', size: 'icon-sm' })}
     aria-label={gameOptionsLabel}
-    aria-haspopup="menu"
     {disabled}
   >
     <EllipsisIcon class="block size-4 shrink-0" aria-hidden="true" />
-  </PopoverTrigger>
+  </DropdownMenuTrigger>
 
-  <PopoverContent align="end" sideOffset={6}>
-    <div role="menu" aria-label={gameOptionsLabel} class="grid gap-1">
-      {#each menuActionGroups as group, i (i)}
-        {#if i > 0}
-          <Separator class="my-1" />
-        {/if}
-        {#each group as action (action.id)}
-          <Button
-            variant={action.danger === true ? 'destructive' : 'ghost'}
-            size="sm"
-            class={cn('w-full justify-start gap-2 text-left')}
-            role="menuitem"
-            disabled={action.disabled}
-            title={action.title}
-            onclick={() => {
-              handleMenuActionClick(action);
-            }}
-          >
-            {@const Icon = action.icon}
-            <Icon class="size-4 shrink-0" aria-hidden="true" />
-            <span class="flex-1 truncate">{action.label}</span>
-          </Button>
-        {/each}
+  <DropdownMenuContent
+    align="end"
+    sideOffset={6}
+    loop
+    aria-label={gameOptionsLabel}
+    class="min-w-56 motion-reduce:animate-none"
+  >
+    {#each menuActionGroups as group, i (i)}
+      {#if i > 0}
+        <DropdownMenuSeparator />
+      {/if}
+      {#each group as action (action.id)}
+        <DropdownMenuItem
+          class="min-h-8"
+          variant={action.danger === true ? 'destructive' : 'default'}
+          disabled={action.disabled}
+          title={action.title}
+          textValue={action.label}
+          onSelect={() => {
+            handleMenuActionClick(action);
+          }}
+        >
+          {@const Icon = action.icon}
+          <Icon class="size-4 shrink-0" aria-hidden="true" />
+          <span class="flex-1 truncate">{action.label}</span>
+        </DropdownMenuItem>
       {/each}
-    </div>
-  </PopoverContent>
-</Popover>
+    {/each}
+  </DropdownMenuContent>
+</DropdownMenu>
 
 {#if canRemoveFromCatalog}
   <AlertDialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
@@ -296,7 +298,7 @@
           {t('game.card.removeConfirm.description')}
         </AlertDialogDescription>
         {#if removalError !== null}
-          <Alert variant="destructive" size="sm" data-removal-error>
+          <Alert variant="destructive" size="sm" role="alert" data-removal-error>
             <AlertTitle>{t('notify.removeGameFailed')}</AlertTitle>
             <AlertDescription class="grid gap-2">
               <span>{removalError}</span>

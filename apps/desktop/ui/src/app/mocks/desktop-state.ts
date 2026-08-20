@@ -29,6 +29,7 @@ export type GameSummaryPatch = Partial<
 export type MockState = {
   games: GameSummary[];
   detailsByGameId: Map<string, GameDetails>;
+  executableOverrideByGameId: Map<string, string>;
   componentBaselinesByGameId: Map<string, Map<string, ComponentFile[]>>;
   autoGameIds: Set<string>;
   manualGameIdByInstallPath: Map<string, string>;
@@ -70,6 +71,7 @@ export function createMockState(): MockState {
     detailsByGameId: new Map(
       seedGames.map(({ details }) => [details.game.identity.id, details] as const),
     ),
+    executableOverrideByGameId: new Map(),
     componentBaselinesByGameId: new Map(),
     autoGameIds: new Set(seedGames.map(({ details }) => details.game.identity.id)),
     manualGameIdByInstallPath: new Map(),
@@ -111,6 +113,10 @@ export function requireGameDetails(gameId: string): GameDetails {
   }
 
   return details;
+}
+
+export function clearGameExecutableOverride(gameId: string): void {
+  mockState.executableOverrideByGameId.delete(gameId);
 }
 
 export function requireComponent(details: GameDetails, componentId: string): GameLibraryComponent {

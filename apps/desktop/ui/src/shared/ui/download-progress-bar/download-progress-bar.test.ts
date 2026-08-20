@@ -70,6 +70,7 @@ describe('DownloadProgressBar', () => {
 
     expect(target.textContent).toContain('Finalizing…');
     expect(target.querySelector('[data-slot="progress"]')).toBeNull();
-    expect(target.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('Loading');
+    expect(target.querySelector('[aria-hidden="true"].animate-spin')).not.toBeNull();
+    expect(target.querySelector('[role="status"]')).toBeNull();
   });
 });

@@ -7,7 +7,6 @@ import {
 import type { DisposableRequestChannel } from '@shared/requests';
 import { t } from '@shared/i18n';
 import type { CoverSourceToggleRow, CoverSourceSettingKey } from './artwork-model';
-import { formatBooleanSetting } from './artwork-model';
 import {
   beginCoverSourceMutation,
   isCurrentCoverSourceMutation,
@@ -20,7 +19,7 @@ import {
 } from './artwork-state';
 
 type GetCatalogSetting = (key: string) => Promise<CatalogSettingPayload>;
-type SetCatalogSetting = (key: string, value: string) => Promise<unknown>;
+type SetCatalogBooleanSetting = (key: CoverSourceSettingKey, value: boolean) => Promise<unknown>;
 
 type FetchCoverRemotePolicy = (getCatalogSetting: GetCatalogSetting) => Promise<CoverRemotePolicy>;
 
@@ -33,7 +32,7 @@ type ArtworkStateChannel = {
 export type ArtworkControllerContext = {
   request: DisposableRequestChannel;
   getCatalogSetting: GetCatalogSetting;
-  setCatalogSetting: SetCatalogSetting;
+  setCatalogBooleanSetting: SetCatalogBooleanSetting;
   state: ArtworkStateChannel;
   fetchCoverRemotePolicy?: FetchCoverRemotePolicy;
 };
@@ -90,7 +89,7 @@ export async function persistCoverSourceToggle(
   context.state.setMessage('');
 
   try {
-    await context.setCatalogSetting(row.settingKey, formatBooleanSetting(nextEnabled));
+    await context.setCatalogBooleanSetting(row.settingKey, nextEnabled);
   } catch {
     if (isCurrentArtworkMutation(context, row.settingKey, mutation.version)) {
       updateArtworkState(context, (state) =>

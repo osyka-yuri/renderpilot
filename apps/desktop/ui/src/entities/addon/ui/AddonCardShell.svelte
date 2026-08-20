@@ -68,7 +68,7 @@
   <CardHeader class="pb-2">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0 space-y-1.5">
-        <CardTitle>{title}</CardTitle>
+        <CardTitle level={2}>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </div>
 

@@ -16,8 +16,30 @@
     onNavigate,
     onPreload,
   }: Props = $props();
+
+  let currentScreen = $derived(screen);
+  let currentGameTitle = $derived(selectedGameTitle);
+
+  function handleNavigate(target: Screen): void {
+    currentScreen = target;
+    onNavigate(target);
+  }
 </script>
 
-<DesktopShell {screen} {selectedGameTitle} {onNavigate} {onPreload}>
+<DesktopShell
+  screen={currentScreen}
+  selectedGameTitle={currentGameTitle}
+  onNavigate={handleNavigate}
+  {onPreload}
+>
   <p>Shell content</p>
+  <button
+    type="button"
+    data-test-action="rename-game"
+    onclick={() => {
+      currentGameTitle = 'Renamed Test Game';
+    }}
+  >
+    Rename game
+  </button>
 </DesktopShell>

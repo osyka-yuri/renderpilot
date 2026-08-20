@@ -96,6 +96,7 @@
     "Temporal Anti Aliasing"
   ],
   "technicalOnlyStaticKeys": [
+    "shell.pageTitle",
     "gameDetails.luma.channel.nightly",
     "gameDetails.luma.channel.stable",
     "gameDetails.luma.features.dlssFsr",

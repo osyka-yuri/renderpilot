@@ -5,6 +5,7 @@ export {
   COVERS_GOG_CDN_SETTING_KEY,
   COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY,
   GAMES_FILTERS_CATALOG_SETTING_KEY,
+  type CatalogBooleanSettingKey,
 } from './model/catalog-setting-keys';
 
 export {
@@ -13,7 +14,7 @@ export {
   type SettingsMessageKind,
 } from './model/view-model';
 
-export { getCatalogSetting, setCatalogSetting } from './api/desktop';
+export { getCatalogSetting, setCatalogSetting, setCatalogBooleanSetting } from './api/desktop';
 
 export {
   catalogSettingHasSteamGridDbKey,

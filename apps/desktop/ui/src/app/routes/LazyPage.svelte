@@ -39,7 +39,7 @@
         <EmptyMedia variant="icon">
           <TriangleAlertIcon aria-hidden="true" />
         </EmptyMedia>
-        <EmptyTitle>{t('pageLoad.error.title')}</EmptyTitle>
+        <EmptyTitle level={1}>{t('pageLoad.error.title')}</EmptyTitle>
         <EmptyDescription>{t('pageLoad.error.description')}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent class="flex-row justify-center">

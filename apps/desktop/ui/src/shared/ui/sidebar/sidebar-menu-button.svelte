@@ -28,7 +28,7 @@
 <script lang="ts">
   import { mergeProps } from 'bits-ui';
   import type { ComponentProps, Snippet } from 'svelte';
-  import type { HTMLAttributes } from 'svelte/elements';
+  import type { HTMLButtonAttributes } from 'svelte/elements';
 
   import { cn } from '@shared/classnames';
   import type { WithElementRef, WithoutChildrenOrChild } from '../types';
@@ -40,10 +40,7 @@
     props: Record<string, unknown>;
   };
 
-  type SidebarMenuButtonProps = WithElementRef<
-    HTMLAttributes<HTMLButtonElement>,
-    HTMLButtonElement
-  > & {
+  type SidebarMenuButtonProps = WithElementRef<HTMLButtonAttributes, HTMLButtonElement> & {
     isActive?: boolean;
     variant?: SidebarMenuButtonVariant;
     size?: SidebarMenuButtonSize;
@@ -81,7 +78,7 @@
   {#if buttonChild}
     {@render buttonChild({ props: buttonProps })}
   {:else}
-    <button bind:this={ref} {...buttonProps}>
+    <button bind:this={ref} type="button" {...buttonProps}>
       {@render children?.()}
     </button>
   {/if}
@@ -94,7 +91,7 @@
         {#if buttonChild}
           {@render buttonChild({ props: mergedProps })}
         {:else}
-          <button bind:this={ref} {...mergedProps}>
+          <button bind:this={ref} type="button" {...mergedProps}>
             {@render children?.()}
           </button>
         {/if}

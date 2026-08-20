@@ -278,7 +278,7 @@
         <div
           use:$rowVirtualizer.measureElement
           data-index={virtualRow.index}
-          class="absolute top-0 left-0 w-full pb-3"
+          class="absolute inset-s-0 top-0 w-full pb-3"
           style:transform={`translateY(${virtualRow.start}px)`}
         >
           {#if row.kind === 'header'}

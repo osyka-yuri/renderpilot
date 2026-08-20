@@ -155,7 +155,7 @@
   <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
     {#if addonDateLabel}
       <span class="text-foreground/80">
-        <CalendarIcon class="mr-1 inline size-3.5 align-text-bottom" aria-hidden="true" />
+        <CalendarIcon class="me-1 inline size-3.5 align-text-bottom" aria-hidden="true" />
         {t(labels.addonDated, { date: addonDateLabel })}
       </span>
     {/if}
@@ -165,7 +165,7 @@
     {/if}
 
     <span>
-      <ClockIcon class="mr-1 inline size-3.5 align-text-bottom" aria-hidden="true" />
+      <ClockIcon class="me-1 inline size-3.5 align-text-bottom" aria-hidden="true" />
       {checkedLabel ? t(labels.lastChecked, { time: checkedLabel }) : t(labels.lastCheckedNever)}
     </span>
   </div>
@@ -211,7 +211,7 @@
   <div class="flex flex-wrap items-center justify-between gap-2 px-1">
     {@render actionRowLeading?.()}
 
-    <div class="ml-auto flex flex-wrap items-center gap-2">
+    <div class="ms-auto flex flex-wrap items-center gap-2">
       <Button
         type="button"
         variant="outline"

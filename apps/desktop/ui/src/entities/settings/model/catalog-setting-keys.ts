@@ -2,8 +2,8 @@
  * Keys for rows in the catalog `settings` table.
  *
  * Must stay in sync with Rust:
- * - `crates/renderpilot-cli/src/catalog/covers/mod.rs` (`STEAMGRIDDB_API_KEY_SETTING`)
- * - `crates/renderpilot-cli/src/catalog/covers/policy.rs` (`COVERS_*`)
+ * - `crates/renderpilot-orchestration/src/covers/mod.rs` (`STEAMGRIDDB_API_KEY_SETTING`)
+ * - `crates/renderpilot-orchestration/src/covers/policy.rs` (`COVERS_*`)
  */
 
 export const CATALOG_SETTING_KEYS = {
@@ -24,6 +24,13 @@ export const CATALOG_SETTING_KEYS = {
 } as const;
 
 export type CatalogSettingKey = (typeof CATALOG_SETTING_KEYS)[keyof typeof CATALOG_SETTING_KEYS];
+
+type CatalogBooleanSettingName =
+  | 'COVERS_STEAM_CDN_ENABLED'
+  | 'COVERS_GOG_CDN_ENABLED'
+  | 'COVERS_STEAMGRIDDB_REMOTE_ENABLED';
+
+export type CatalogBooleanSettingKey = (typeof CATALOG_SETTING_KEYS)[CatalogBooleanSettingName];
 
 export const STEAMGRIDDB_SETTING_KEY = CATALOG_SETTING_KEYS.STEAMGRIDDB_API_KEY;
 

@@ -69,7 +69,7 @@
 
 <Card>
   <CardHeader>
-    <CardTitle>{t('settings.catalog.title')}</CardTitle>
+    <CardTitle level={2}>{t('settings.catalog.title')}</CardTitle>
     <CardDescription>{t('settings.catalog.description')}</CardDescription>
   </CardHeader>
   <CardContent>
@@ -87,7 +87,7 @@
             <Switch
               checked={isCoverSourceChecked(row)}
               disabled={isCoverSourceDisabled(row)}
-              aria-label={t(row.ariaLabelKey)}
+              aria-label={t(row.actionLabelKey)}
               onCheckedChange={() => {
                 handleCoverSourceToggle(row);
               }}

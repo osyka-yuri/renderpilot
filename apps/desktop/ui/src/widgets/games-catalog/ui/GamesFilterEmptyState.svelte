@@ -7,6 +7,7 @@
     EmptyHeader,
     EmptyMedia,
     EmptyTitle,
+    LiveAnnouncer,
   } from '@shared/ui';
   import SearchIcon from '@lucide/svelte/icons/search';
   import { t } from '@shared/i18n';
@@ -18,13 +19,14 @@
   const { onResetFilters = () => undefined }: Props = $props();
 </script>
 
-<div class="flex flex-1 flex-col items-center justify-center" aria-live="polite" aria-atomic="true">
+<div class="flex flex-1 flex-col items-center justify-center">
+  <LiveAnnouncer message={t('games.filterEmpty.title')} />
   <Empty class="border-0">
     <EmptyHeader>
       <EmptyMedia variant="icon">
         <SearchIcon />
       </EmptyMedia>
-      <EmptyTitle>{t('games.filterEmpty.title')}</EmptyTitle>
+      <EmptyTitle level={2}>{t('games.filterEmpty.title')}</EmptyTitle>
       <EmptyDescription>
         {t('games.filterEmpty.description')}
       </EmptyDescription>

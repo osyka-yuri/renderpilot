@@ -31,7 +31,7 @@
   <CardHeader class="pb-2">
     <div class="flex items-start justify-between gap-3">
       <div class="grid min-w-0 gap-1">
-        <CardTitle>{t('settings.nvidia.indicator.title')}</CardTitle>
+        <CardTitle level={2}>{t('settings.nvidia.indicator.title')}</CardTitle>
         <CardDescription>
           {t('settings.nvidia.indicator.description')}
         </CardDescription>
@@ -59,7 +59,7 @@
           <Switch
             checked={dlssIndicator.enabled}
             disabled={dlssIndicator.busy}
-            aria-label={t('settings.nvidia.indicator.toggleAria')}
+            aria-label={t('settings.nvidia.indicator.toggleLabel')}
             onCheckedChange={(checked: boolean) => {
               void dlssIndicator.setEnabled(checked);
             }}

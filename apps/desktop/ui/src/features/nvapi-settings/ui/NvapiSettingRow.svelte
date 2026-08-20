@@ -153,7 +153,7 @@
             size="icon-sm"
             disabled={disabled || !canRestore}
             onclick={onRevertBaseline}
-            aria-label={t('gameDetails.nvapi.restoreBaselineAria')}
+            aria-label={t('gameDetails.nvapi.restoreBaselineLabel')}
           >
             <HistoryIcon class="size-4" aria-hidden="true" />
           </Button>

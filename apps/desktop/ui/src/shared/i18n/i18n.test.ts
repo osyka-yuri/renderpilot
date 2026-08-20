@@ -28,7 +28,7 @@ describe('i18n', () => {
 
     it('interpolates named parameters', async () => {
       await setLanguageMode('en');
-      expect(t('game.card.action.detailsAria', { title: 'Halo' })).toBe('Open details for Halo');
+      expect(t('game.card.action.detailsLabel', { title: 'Halo' })).toBe('Open details for Halo');
     });
 
     it('leaves unknown placeholders untouched', async () => {

@@ -64,6 +64,7 @@
   }}
 >
   <DialogContent
+    closeLabel={t('common.close')}
     class="sm:max-w-lg"
     showCloseButton={canDismiss}
     escapeKeydownBehavior={canDismiss ? 'close' : 'ignore'}

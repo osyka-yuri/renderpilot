@@ -16,14 +16,14 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: oklch(0.45 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.5 0.215 27.325);
   --warning: oklch(0.554 0.135 66.442);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.42 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -37,7 +37,7 @@
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.42 0 0);
 }
 
 .dark {
@@ -59,7 +59,7 @@
   --warning: oklch(0.852 0.199 91.936);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.82 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -72,7 +72,7 @@
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.82 0 0);
 }
 
 @theme inline {
@@ -138,7 +138,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground;
@@ -157,5 +157,40 @@
   body {
     overflow: hidden;
     overflow: clip;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-slot='button']:is([data-variant='default'], [data-variant='destructive']) {
+    color: ButtonText;
+  }
+
+  [data-slot='badge']:is([data-variant='default'], [data-variant='destructive']) {
+    color: CanvasText;
+  }
+
+  [data-slot='switch'][data-state='checked'],
+  [data-slot='toggle'][data-state='on'],
+  [data-slot='toggle-group-item'][data-state='on'] {
+    border-color: Highlight;
+    background-color: Highlight;
+    color: HighlightText;
+  }
+
+  [data-slot='dialog-overlay'],
+  [data-slot='sheet-overlay'],
+  [data-slot='alert-dialog-overlay'] {
+    background-color: CanvasText;
+  }
+
+  [data-slot='sidebar-menu-button'][data-active='true']:not(:focus-visible),
+  [data-slot='toggle-group-item'][data-state='on']:not(:focus-visible) {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+
+  :root :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }

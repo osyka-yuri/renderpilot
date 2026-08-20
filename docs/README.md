@@ -19,6 +19,7 @@ This directory is the documentation hub for RenderPilot. Start with the user gui
 - [Catalogs and producer contracts](development/catalogs-and-contracts.md) documents Libraries V2, CDN validation, receipts, add-on manifests, and producer checks.
 - [Errors and diagnostics](development/errors-and-diagnostics.md) describes error manifests, IPC projection, warning contracts, and logging ownership.
 - [Localization](development/localization.md) covers locale packs, generated contracts, editorial policy, and Luma/NVAPI review.
+- [Accessibility](development/accessibility.md) defines the WCAG target, Chromium browser coverage, and the separate packaged Windows NVDA/Narrator release matrix.
 - [Quality and release](development/quality-and-release.md) lists CI gates, signing, updater assets, portable packaging, and the release lifecycle.
 - [Advanced CLI](development/cli.md) is the source-only command reference, including JSON output and its stability boundary.
 

@@ -30,11 +30,13 @@ pnpm install --frozen-lockfile
 pnpm run format:check
 pnpm run lint
 pnpm test
+pnpm exec playwright install chromium
+pnpm run test:a11y
 pnpm run build
 pnpm run docs:check
 ```
 
-Formatting and Rustdoc run once on Ubuntu in CI. Workspace build, Clippy, nextest, and Cargo doctests run on Ubuntu and Windows with all features; Clippy and Rustdoc deny warnings. The nextest CI profile runs every test without retries, while the separate Cargo step preserves documentation-test coverage. The Windows lane also runs the deterministic portable-release ZIP packaging policy script plus the focused Windows-manifest selector and XML-contract tests. Desktop tests validate localization contracts, and the build repeats contracts, type checking, Vite compilation, and bundle-graph validation. Libraries V2 uses an immutable producer checkout, external localization-source verification, and the exact ignored fixture test described in [Catalogs and producer contracts](catalogs-and-contracts.md#libraries-v2).
+Formatting and Rustdoc run once on Ubuntu in CI. Workspace build, Clippy, nextest, and Cargo doctests run on Ubuntu and Windows with all features; Clippy and Rustdoc deny warnings. The nextest CI profile runs every test without retries, while the separate Cargo step preserves documentation-test coverage. The Windows lane also runs the deterministic portable-release ZIP packaging policy script plus the focused Windows-manifest selector and XML-contract tests. Desktop tests validate localization contracts, Chromium browser accessibility coverage, and repeat contracts, type checking, Vite compilation, and bundle-graph validation during the build. Chromium coverage does not validate the native WebView2 host or Windows screen-reader integration; the required packaged Windows NVDA/Narrator release gate is documented in [Accessibility](accessibility.md). Libraries V2 uses an immutable producer checkout, external localization-source verification, and the exact ignored fixture test described in [Catalogs and producer contracts](catalogs-and-contracts.md#libraries-v2).
 
 ## Release lifecycle
 

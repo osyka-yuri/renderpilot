@@ -17,7 +17,7 @@
     TooltipTrigger,
   } from '@shared/ui';
 
-  import { createCopyResetTimer, copyWithFeedback } from '../model/copy-feedback';
+  import { copyWithFeedback } from '../model/copy-feedback';
   import type { LumaGuidance, LumaGuidanceKind } from '../model/types';
 
   type Props = { guidance: LumaGuidance[] };
@@ -42,15 +42,6 @@
     external_tool: WrenchIcon,
   } as const;
 
-  let copiedId = $state<string | null>(null);
-  const resetTimer = createCopyResetTimer(() => {
-    copiedId = null;
-  });
-
-  $effect(() => () => {
-    resetTimer.dispose();
-  });
-
   function textFor(item: LumaGuidance): string {
     return translateExternalMessage({ key: item.id, fallback: item.fallback_text });
   }
@@ -59,20 +50,16 @@
     if (!item.code) {
       return;
     }
-    const ok = await copyWithFeedback(item.code, {
+    await copyWithFeedback(item.code, {
       copied: 'gameDetails.luma.guidance.copied',
       copyFailed: 'gameDetails.luma.guidance.copyFailed',
     });
-    if (ok) {
-      copiedId = item.id;
-      resetTimer.arm();
-    }
   }
 </script>
 
 {#each guidance as item (item.id)}
   {@const Icon = ICONS[item.kind]}
-  <Alert variant={item.kind === 'warning' ? 'warning' : 'default'} size="sm">
+  <Alert variant={item.kind === 'warning' ? 'warning' : 'default'} size="sm" role="note">
     <Icon aria-hidden="true" />
     {#if item.kind !== 'warning'}
       <AlertTitle>{t(TITLE_KEYS[item.kind])}</AlertTitle>
@@ -81,22 +68,20 @@
       <span>{textFor(item)}</span>
       {#if item.code}
         <div class="relative min-w-0">
-          <pre class="overflow-x-auto rounded-sm bg-muted p-2 pr-10 text-xs"><code>{item.code}</code
+          <pre class="overflow-x-auto rounded-sm bg-muted p-2 pe-10 text-xs"><code>{item.code}</code
             ></pre>
           <Tooltip>
             <TooltipTrigger
               type="button"
               onclick={() => copy(item)}
-              aria-label={copiedId === item.id
-                ? t('gameDetails.luma.guidance.copied')
-                : t('gameDetails.luma.guidance.copy')}
+              aria-label={t('gameDetails.luma.guidance.copy')}
             >
               {#snippet child({ props })}
                 <Button
                   {...props}
                   variant="ghost"
                   size="icon"
-                  class="absolute top-1 right-1 size-6"
+                  class="absolute inset-e-1 top-1 size-6"
                 >
                   <CopyIcon class="size-3" aria-hidden="true" />
                 </Button>
@@ -109,7 +94,3 @@
     </AlertDescription>
   </Alert>
 {/each}
-
-<span class="sr-only" aria-live="polite">
-  {copiedId === null ? '' : t('gameDetails.luma.guidance.copied')}
-</span>

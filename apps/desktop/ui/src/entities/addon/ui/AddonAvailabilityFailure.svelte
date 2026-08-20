@@ -14,7 +14,7 @@
   const retryDisabled = $derived(disabled || retrying);
 </script>
 
-<Alert variant="warning" size="default">
+<Alert variant="warning" size="default" role="alert">
   <TriangleAlertIcon aria-hidden="true" />
   <AlertDescription>
     <p>{t('addon.availability.loadFailed')}</p>

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
 
   import { getActiveNotifications, subscribeToNotificationEvents } from '@shared/notifications';
+  import { t } from '@shared/i18n';
 
   import { Toaster } from '@shared/ui';
   import { dismissSonnerNotification, publishSonnerNotification } from './notification-adapter';
@@ -22,4 +23,8 @@
   });
 </script>
 
-<Toaster position="bottom-center" />
+<Toaster
+  position="bottom-center"
+  containerAriaLabel={t('shell.notifications.regionLabel')}
+  closeButtonAriaLabel={t('shell.notifications.close')}
+/>

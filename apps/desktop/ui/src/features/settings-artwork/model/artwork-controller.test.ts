@@ -14,7 +14,7 @@ import {
 import { createInitialSettingsArtworkState } from './artwork-state';
 
 type ArtworkGetCatalogSetting = ArtworkControllerContext['getCatalogSetting'];
-type ArtworkSetCatalogSetting = ArtworkControllerContext['setCatalogSetting'];
+type ArtworkSetCatalogBooleanSetting = ArtworkControllerContext['setCatalogBooleanSetting'];
 type ArtworkFetchCoverRemotePolicy = NonNullable<
   ArtworkControllerContext['fetchCoverRemotePolicy']
 >;
@@ -102,7 +102,9 @@ describe('artwork-controller', () => {
     it('persists optimistic toggle update and clears saving flag on success', async () => {
       const row = getFirstCoverSourceToggleRow();
       const harness = createArtworkHarness({
-        setCatalogSetting: vi.fn<ArtworkSetCatalogSetting>(() => Promise.resolve({ saved: true })),
+        setCatalogBooleanSetting: vi.fn<ArtworkSetCatalogBooleanSetting>(() =>
+          Promise.resolve({ saved: true }),
+        ),
       });
 
       harness.writeState({
@@ -114,9 +116,9 @@ describe('artwork-controller', () => {
 
       await persistCoverSourceToggle(harness.context, row, !previousEnabled, previousEnabled);
 
-      expect(harness.context.setCatalogSetting).toHaveBeenCalledWith(
+      expect(harness.context.setCatalogBooleanSetting).toHaveBeenCalledWith(
         row.settingKey,
-        String(!previousEnabled),
+        !previousEnabled,
       );
       expect(harness.state.coverSourcesState[row.policyKey]).toBe(!previousEnabled);
       expect(harness.state.savingCoverSourceKeys.has(row.settingKey)).toBe(false);
@@ -126,7 +128,7 @@ describe('artwork-controller', () => {
     it('rolls back optimistic toggle update when save fails', async () => {
       const row = getFirstCoverSourceToggleRow();
       const harness = createArtworkHarness({
-        setCatalogSetting: vi.fn<ArtworkSetCatalogSetting>(() =>
+        setCatalogBooleanSetting: vi.fn<ArtworkSetCatalogBooleanSetting>(() =>
           Promise.reject(new Error('failed')),
         ),
       });
@@ -150,7 +152,7 @@ describe('artwork-controller', () => {
       const row = getFirstCoverSourceToggleRow();
 
       const harness = createArtworkHarness({
-        setCatalogSetting: vi.fn<ArtworkSetCatalogSetting>(() => {
+        setCatalogBooleanSetting: vi.fn<ArtworkSetCatalogBooleanSetting>(() => {
           harness.writeState({
             ...harness.state,
             coverSourceMutationVersion: {
@@ -180,13 +182,13 @@ describe('artwork-controller', () => {
     it('does not start toggle persistence when already disposed', async () => {
       const row = getFirstCoverSourceToggleRow();
 
-      const setCatalogSetting = vi.fn<ArtworkSetCatalogSetting>(() =>
+      const setCatalogBooleanSetting = vi.fn<ArtworkSetCatalogBooleanSetting>(() =>
         Promise.resolve({ saved: true }),
       );
 
       const harness = createArtworkHarness({
         isDisposed: () => true,
-        setCatalogSetting,
+        setCatalogBooleanSetting,
       });
 
       const initialState = harness.state;
@@ -194,7 +196,7 @@ describe('artwork-controller', () => {
 
       await persistCoverSourceToggle(harness.context, row, !previousEnabled, previousEnabled);
 
-      expect(setCatalogSetting).not.toHaveBeenCalled();
+      expect(setCatalogBooleanSetting).not.toHaveBeenCalled();
       expect(harness.state).toBe(initialState);
       expect(harness.message).toBe('');
     });
@@ -205,7 +207,7 @@ function createArtworkHarness(options?: {
   isDisposed?: () => boolean;
   isRequestActive?: (id: number) => boolean;
   getCatalogSetting?: ArtworkGetCatalogSetting;
-  setCatalogSetting?: ArtworkSetCatalogSetting;
+  setCatalogBooleanSetting?: ArtworkSetCatalogBooleanSetting;
   fetchCoverRemotePolicy?: ArtworkFetchCoverRemotePolicy;
 }) {
   const request = createRequestHarness({
@@ -224,9 +226,9 @@ function createArtworkHarness(options?: {
     getCatalogSetting:
       options?.getCatalogSetting ??
       vi.fn<ArtworkGetCatalogSetting>((key) => Promise.resolve(createCatalogPayload(key, null))),
-    setCatalogSetting:
-      options?.setCatalogSetting ??
-      vi.fn<ArtworkSetCatalogSetting>(() => Promise.reject(new Error('failed'))),
+    setCatalogBooleanSetting:
+      options?.setCatalogBooleanSetting ??
+      vi.fn<ArtworkSetCatalogBooleanSetting>(() => Promise.reject(new Error('failed'))),
     fetchCoverRemotePolicy: options?.fetchCoverRemotePolicy ?? createDefaultPolicyLoader(),
     state: {
       readState: () => state.artwork,

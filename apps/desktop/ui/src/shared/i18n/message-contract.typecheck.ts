@@ -67,10 +67,10 @@ defineLocalizedOverrides<'ja', typeof source>()({
 
 // Public translation calls infer their complete parameter contract from English.
 t('nav.games');
-t('game.card.action.detailsAria', { title: 'Halo' });
+t('game.card.action.detailsLabel', { title: 'Halo' });
 t('game.dashboard.games', { count: 2 });
 createMessageRef('nav.games');
-createMessageRef('game.card.action.detailsAria', { title: 'Halo' });
+createMessageRef('game.card.action.detailsLabel', { title: 'Halo' });
 
 function acceptSyntheticSelectParams(params: ParamsForMessage<typeof source.salutation>): void {
   void params;
@@ -79,19 +79,19 @@ function acceptSyntheticSelectParams(params: ParamsForMessage<typeof source.salu
 acceptSyntheticSelectParams({ tone: 'formal', name: 'Ada' });
 
 // @ts-expect-error A parameterized message cannot omit its parameters.
-t('game.card.action.detailsAria');
+t('game.card.action.detailsLabel');
 // @ts-expect-error A no-parameter message cannot receive a parameter object.
 t('nav.games', {});
 // @ts-expect-error Required placeholders cannot be omitted.
-t('game.card.action.detailsAria', {});
+t('game.card.action.detailsLabel', {});
 // @ts-expect-error Undeclared parameters are rejected.
-t('game.card.action.detailsAria', { title: 'Halo', unexpected: 'value' });
+t('game.card.action.detailsLabel', { title: 'Halo', unexpected: 'value' });
 // @ts-expect-error Interpolation values accept only strings and numbers.
-t('game.card.action.detailsAria', { title: true });
+t('game.card.action.detailsLabel', { title: true });
 // @ts-expect-error A plural discriminator must be numeric.
 t('game.dashboard.games', { count: '2' });
 // @ts-expect-error Message references preserve the same exact parameter contract.
-createMessageRef('game.card.action.detailsAria', { title: 'Halo', unexpected: 'value' });
+createMessageRef('game.card.action.detailsLabel', { title: 'Halo', unexpected: 'value' });
 // @ts-expect-error Static translation accepts only keys from the English contract.
 t('backend.unknown');
 // @ts-expect-error Select arguments accept only named source cases.

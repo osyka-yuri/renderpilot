@@ -13,12 +13,9 @@ export function publishWarningNotification(title: string, description?: string):
   return publishNotification({ severity: 'warning', title, description });
 }
 
-/**
- * Error toasts default to `important: true` so they are not auto-dismissed
- * — the user needs to see what action failed and why.
- */
+/** Ordinary error feedback keeps Sonner's polite, auto-dismissing default urgency. */
 export function publishErrorNotification(title: string, description?: string): string {
-  return publishNotification({ severity: 'error', title, description, important: true });
+  return publishNotification({ severity: 'error', title, description });
 }
 
 function publishTransientNotification(

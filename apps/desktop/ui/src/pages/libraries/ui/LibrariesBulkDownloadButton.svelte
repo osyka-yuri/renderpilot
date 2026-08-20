@@ -1,9 +1,13 @@
 <script lang="ts">
   import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
+  import {
+    publishErrorNotification,
+    publishInfoNotification,
+    publishSuccessNotification,
+  } from '@shared/notifications';
   import { Button, Progress, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { t } from '@shared/i18n';
-  import { toast } from 'svelte-sonner';
   import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   type Props = {
@@ -35,18 +39,20 @@
       const { succeeded, failed } = await model.downloadAllLatest();
 
       if (succeeded === 0 && failed === 0) {
-        toast.info(t('libraries.actions.downloadAllNoneToast'));
+        publishInfoNotification(t('libraries.actions.downloadAllNoneToast'));
         return;
       }
 
       if (failed > 0) {
-        toast.error(t('libraries.actions.downloadAllPartialToast', { succeeded, failed }));
+        publishErrorNotification(
+          t('libraries.actions.downloadAllPartialToast', { succeeded, failed }),
+        );
         return;
       }
 
-      toast.success(t('libraries.actions.downloadAllDoneToast', { count: succeeded }));
+      publishSuccessNotification(t('libraries.actions.downloadAllDoneToast', { count: succeeded }));
     } catch {
-      toast.error(
+      publishErrorNotification(
         t('libraries.actions.failedToast', { action: t('libraries.actions.downloadAll') }),
       );
     }

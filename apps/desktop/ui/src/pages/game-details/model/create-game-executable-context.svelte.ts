@@ -34,6 +34,7 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
   let activeGameId: string | null = $state(null);
 
   const effectiveExe = $derived(effective?.file_name ?? null);
+  const effectiveAbsolutePath = $derived(effective?.absolute_path ?? null);
   const effectiveExeSource = $derived(effective?.source ?? null);
   const supportedCandidates = $derived(candidates.filter((c) => c.rejection === null));
   const filteredOutCandidates = $derived(candidates.filter((c) => c.rejection !== null));
@@ -110,6 +111,9 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
     },
     get effectiveExe() {
       return effectiveExe;
+    },
+    get effectiveAbsolutePath() {
+      return effectiveAbsolutePath;
     },
     get effectiveExeSource() {
       return effectiveExeSource;

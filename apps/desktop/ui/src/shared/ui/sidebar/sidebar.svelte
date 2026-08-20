@@ -13,11 +13,17 @@
     collapsible = 'offcanvas',
     class: className,
     children,
+    mobileTitle,
+    mobileDescription,
+    mobileCloseLabel,
     ...restProps
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
     side?: 'left' | 'right';
     variant?: 'sidebar' | 'floating' | 'inset';
     collapsible?: 'offcanvas' | 'icon' | 'none';
+    mobileTitle: string;
+    mobileDescription: string;
+    mobileCloseLabel: string;
   } = $props();
 
   const sidebar = useSidebar();
@@ -53,10 +59,11 @@
       )}
       style="--sidebar-width: {SIDEBAR_WIDTH_MOBILE};"
       {side}
+      closeLabel={mobileCloseLabel}
     >
       <Sheet.Header class="sr-only">
-        <Sheet.Title>Sidebar</Sheet.Title>
-        <Sheet.Description>Displays the mobile sidebar.</Sheet.Description>
+        <Sheet.Title>{mobileTitle}</Sheet.Title>
+        <Sheet.Description>{mobileDescription}</Sheet.Description>
       </Sheet.Header>
       <div class="flex size-full flex-col">
         {@render children?.()}

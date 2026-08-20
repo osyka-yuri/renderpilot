@@ -1,9 +1,9 @@
 <script lang="ts">
   import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
   import FileTextIcon from '@lucide/svelte/icons/file-text';
-  import { toast } from 'svelte-sonner';
   import { openExternal } from '@shared/api';
   import { t } from '@shared/i18n';
+  import { publishErrorNotification } from '@shared/notifications';
   import {
     Button,
     Item,
@@ -49,7 +49,7 @@
     try {
       await openExternal(document.content_url);
     } catch {
-      toast.error(t('libraries.documents.openFailed'));
+      publishErrorNotification(t('libraries.documents.openFailed'));
     } finally {
       openingDocumentId = null;
     }
@@ -65,7 +65,7 @@
   }}
 >
   {#if row}
-    <SheetContent class="w-full gap-0 sm:max-w-lg">
+    <SheetContent closeLabel={t('common.close')} class="w-full gap-0 sm:max-w-lg">
       <SheetHeader class="border-b p-6 pe-12">
         <SheetTitle>{t('libraries.documents.title')}</SheetTitle>
         <SheetDescription>

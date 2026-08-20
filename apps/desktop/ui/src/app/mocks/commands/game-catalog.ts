@@ -1,5 +1,5 @@
 import type { RemoveGameFromCatalogResult } from '@entities/game';
-import { mockState } from '../desktop-state';
+import { clearGameExecutableOverride, mockState } from '../desktop-state';
 import { requireNonEmptyText, resolveMock } from '../desktop-utils';
 
 export function mockRemoveGameFromCatalog(gameId: string): Promise<RemoveGameFromCatalogResult> {
@@ -14,6 +14,7 @@ export function mockRemoveGameFromCatalog(gameId: string): Promise<RemoveGameFro
     }
     mockState.games = mockState.games.filter((game) => game.game_id !== id);
     mockState.detailsByGameId.delete(id);
+    clearGameExecutableOverride(id);
     mockState.componentBaselinesByGameId.delete(id);
     mockState.autoGameIds.delete(id);
     for (const [installPath, mappedId] of mockState.manualGameIdByInstallPath) {

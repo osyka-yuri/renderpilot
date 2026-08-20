@@ -41,6 +41,7 @@
   };
 
   const EMPTY_ARRAY = [] as const;
+  const titleId = $props.id();
 
   let {
     open,
@@ -61,6 +62,8 @@
     onCancel,
     onApply,
   }: Props = $props();
+
+  let keyboardReorderActive = $state(false);
 </script>
 
 <Dialog {open} {onOpenChange}>
@@ -74,27 +77,32 @@
 
     {#if hasFilterIndicator}
       <span
-        class="pointer-events-none absolute -top-0.5 -right-0.5 size-2 rounded-full bg-accent ring-2 ring-background"
+        class="pointer-events-none absolute -inset-e-0.5 -top-0.5 size-2 rounded-full bg-accent ring-2 ring-background"
         aria-hidden="true"
       ></span>
     {/if}
   </div>
 
   <DialogContent
+    closeLabel={t('common.close')}
+    escapeKeydownBehavior={keyboardReorderActive ? 'ignore' : 'close'}
     class="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
   >
     <DialogHeader>
-      <DialogTitle>{t('filters.title')}</DialogTitle>
+      <DialogTitle id={titleId}>{t('filters.title')}</DialogTitle>
     </DialogHeader>
 
-    <ScrollArea type="auto" class="min-h-0">
-      <div class="grid gap-4">
+    <ScrollArea type="auto" class="min-h-0" viewportRegion={{ labelledBy: titleId }}>
+      <div class="grid gap-4 ps-0.5">
         <LauncherFilterSection
           options={launcherFilterOptions}
           {draftLaunchers}
           {draftLauncherOrder}
           onLaunchersChange={onDraftLaunchersChange}
           onOrderChange={onDraftLauncherOrderChange}
+          onKeyboardReorderActiveChange={(active: boolean) => {
+            keyboardReorderActive = active;
+          }}
         />
 
         <Separator />

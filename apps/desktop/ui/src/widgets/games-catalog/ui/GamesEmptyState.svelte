@@ -31,7 +31,7 @@
 
 <Empty {...rest} class={className}>
   <EmptyHeader class="w-full">
-    <EmptyTitle>{t('games.empty.title')}</EmptyTitle>
+    <EmptyTitle level={2}>{t('games.empty.title')}</EmptyTitle>
     <EmptyDescription>
       {t('games.empty.description')}
     </EmptyDescription>

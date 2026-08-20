@@ -5,11 +5,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 
-vi.mock('svelte-sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
-}));
-
 import { setLanguageMode } from '@shared/i18n';
+import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
 
 import LumaGuidanceCalloutsTestHost from './LumaGuidanceCallouts.test-host.svelte';
 
@@ -19,6 +16,7 @@ describe('LumaGuidanceCallouts', () => {
   const writeText = vi.fn<Navigator['clipboard']['writeText']>();
 
   beforeEach(() => {
+    clearAllNotifications();
     target = document.createElement('div');
     document.body.append(target);
     writeText.mockResolvedValue(undefined);
@@ -56,6 +54,7 @@ describe('LumaGuidanceCallouts', () => {
     }
     component = undefined;
     target.remove();
+    clearAllNotifications();
     vi.clearAllMocks();
   });
 
@@ -76,7 +75,7 @@ describe('LumaGuidanceCallouts', () => {
     expect(target.textContent).toContain('[SystemSettings]\nr.DefaultFeature.AntiAliasing=2');
   });
 
-  it('copies the exact code', async () => {
+  it('keeps the copy button name stable while notification feedback reports success and failure', async () => {
     const copyButton = target.querySelector<HTMLButtonElement>('button');
     expect(copyButton?.getAttribute('aria-label')).toBe('Copy');
     expect(copyButton?.textContent).toBe('');
@@ -84,7 +83,26 @@ describe('LumaGuidanceCallouts', () => {
 
     await vi.waitFor(() => {
       expect(writeText).toHaveBeenCalledWith('[SystemSettings]\nr.DefaultFeature.AntiAliasing=2');
-      expect(copyButton?.getAttribute('aria-label')).toBe('Copied');
+      expect(getActiveNotifications()).toEqual([
+        expect.objectContaining({ severity: 'success', title: 'Copied' }),
+      ]);
     });
+    expect(copyButton?.getAttribute('aria-label')).toBe('Copy');
+    expect(target.querySelector('[role="status"]')).toBeNull();
+
+    writeText.mockRejectedValueOnce(new Error('clipboard unavailable'));
+    clearAllNotifications();
+    copyButton?.click();
+
+    await vi.waitFor(() => {
+      expect(getActiveNotifications()).toEqual([
+        expect.objectContaining({
+          severity: 'error',
+          title: 'Could not copy',
+          important: undefined,
+        }),
+      ]);
+    });
+    expect(copyButton?.getAttribute('aria-label')).toBe('Copy');
   });
 });

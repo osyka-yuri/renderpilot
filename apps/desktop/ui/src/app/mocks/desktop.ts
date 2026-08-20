@@ -18,6 +18,12 @@ import {
 } from './commands/libraries';
 import { mockSetGameFavorite, mockSetGameHidden } from './commands/game-ui-state';
 import { mockRemoveGameFromCatalog } from './commands/game-catalog';
+import {
+  mockClearGameExecutableOverride,
+  mockListGameExecutableCandidates,
+  mockResolveGameExecutable,
+  mockSetGameExecutableOverride,
+} from './commands/executables';
 import { mockState, createMockState } from './desktop-state';
 import {
   mockAddonWriteUnsupported,
@@ -45,6 +51,9 @@ export const mockInvoker = mockInvokerImpl as DesktopInvoker<DesktopCommand>;
 
 async function dispatchCommand(command: DesktopCommand, payload: unknown): Promise<unknown> {
   switch (command) {
+    case 'portable_trial_ready':
+      return undefined;
+
     case 'inspect_game_install':
       return mockInspectGameInstall(readStringField(command, payload, 'path'));
 
@@ -99,6 +108,21 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
 
     case 'get_game_details':
       return mockGetGameDetails(readStringField(command, payload, 'gameId'));
+
+    case 'list_game_executable_candidates':
+      return mockListGameExecutableCandidates(readStringField(command, payload, 'gameId'));
+
+    case 'resolve_game_executable':
+      return mockResolveGameExecutable(readStringField(command, payload, 'gameId'));
+
+    case 'set_game_executable_override':
+      return mockSetGameExecutableOverride(
+        readStringField(command, payload, 'gameId'),
+        readStringField(command, payload, 'absolutePath'),
+      );
+
+    case 'clear_game_executable_override':
+      return mockClearGameExecutableOverride(readStringField(command, payload, 'gameId'));
 
     case 'fetch_game_cover':
       return mockFetchGameCover(readStringField(command, payload, 'gameId'));
@@ -258,6 +282,10 @@ export {
   mockScanAutoLibraries,
   mockQueryGameCards,
   mockGetGameDetails,
+  mockListGameExecutableCandidates,
+  mockResolveGameExecutable,
+  mockSetGameExecutableOverride,
+  mockClearGameExecutableOverride,
   mockFetchGameCover,
   mockClearGameCover,
   mockSetGameCover,

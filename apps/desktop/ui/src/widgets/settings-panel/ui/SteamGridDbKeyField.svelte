@@ -64,7 +64,7 @@
 
 <div class="grid gap-2" aria-busy={busy}>
   <Label class="sr-only" for={INPUT_ID}>
-    {t('settings.catalog.steamKey.srLabel')}
+    {t('settings.catalog.steamKey.inputLabel')}
   </Label>
   <div class="flex items-center gap-2">
     <div class="relative flex-1">
@@ -72,7 +72,7 @@
         id={INPUT_ID}
         type={showKey ? 'text' : 'password'}
         autocomplete="off"
-        class="pr-9"
+        class="pe-9"
         {placeholder}
         bind:value={input}
         disabled={!isEditable}
@@ -83,7 +83,7 @@
         type="button"
         variant="ghost"
         size="icon-sm"
-        class="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground"
+        class="absolute inset-e-1 top-1/2 -translate-y-1/2 text-muted-foreground"
         disabled={!isEditable}
         aria-label={showKey
           ? t('settings.catalog.steamKey.hide')
@@ -114,7 +114,7 @@
     <Button
       type="button"
       variant="link"
-      class="ml-auto h-auto gap-1 p-0 text-xs font-normal text-muted-foreground has-[>svg]:px-0"
+      class="ms-auto h-auto gap-1 p-0 text-xs font-normal text-muted-foreground has-[>svg]:px-0"
       onclick={() => void openKeyPage()}
     >
       {t('settings.catalog.steamKey.getKey')}

@@ -11,12 +11,12 @@
     ...restProps
   }: WithoutChildrenOrChild<ProgressPrimitive.RootProps> = $props();
 
-  const translateX = $derived.by(() => {
+  const progressRatio = $derived.by(() => {
     if (max <= 0) {
-      return -100;
+      return 0;
     }
     const clamped = Math.min(Math.max(value ?? 0, 0), max);
-    return (100 * clamped) / max - 100;
+    return clamped / max;
   });
 </script>
 
@@ -30,7 +30,7 @@
 >
   <div
     data-slot="progress-indicator"
-    class="size-full flex-1 bg-primary transition-all"
-    style="transform: translateX({translateX}%)"
+    class="size-full flex-1 origin-left bg-primary transition-transform rtl:origin-right"
+    style="transform: scaleX({progressRatio})"
   ></div>
 </ProgressPrimitive.Root>

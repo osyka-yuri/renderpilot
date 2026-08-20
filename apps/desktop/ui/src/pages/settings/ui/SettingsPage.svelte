@@ -87,52 +87,55 @@
   });
 </script>
 
-<Tabs bind:value={activeTab} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-  <TabsList class="shrink-0">
-    {#each tabOptions as tab (tab.value)}
-      {@const Icon = tabIcons[tab.value]}
-      <TabsTrigger value={tab.value}>
-        <Icon aria-hidden="true" />
-        {t(tab.labelKey)}
-      </TabsTrigger>
-    {/each}
-  </TabsList>
+<section class="flex min-h-0 flex-1 flex-col overflow-hidden" aria-labelledby="settings-title">
+  <h1 id="settings-title" class="sr-only">{t('nav.settings')}</h1>
+  <Tabs bind:value={activeTab} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+    <TabsList class="shrink-0" aria-label={t('nav.settings')}>
+      {#each tabOptions as tab (tab.value)}
+        {@const Icon = tabIcons[tab.value]}
+        <TabsTrigger value={tab.value}>
+          <Icon aria-hidden="true" />
+          {t(tab.labelKey)}
+        </TabsTrigger>
+      {/each}
+    </TabsList>
 
-  <SettingsTabPanel value="general">
-    <SettingsAppearanceSection
-      {themeMode}
-      {languageMode}
-      {languageBusy}
-      themeOptions={localizedThemeOptions}
-      languageOptions={localizedLanguageOptions}
-      onThemeChange={onThemeModeChange}
-      onLanguageChange={onLanguageModeChange}
-    />
-    <SettingsAboutSection {appVersion} {updateAction} {onCheckForUpdates} />
-  </SettingsTabPanel>
+    <SettingsTabPanel value="general">
+      <SettingsAppearanceSection
+        {themeMode}
+        {languageMode}
+        {languageBusy}
+        themeOptions={localizedThemeOptions}
+        languageOptions={localizedLanguageOptions}
+        onThemeChange={onThemeModeChange}
+        onLanguageChange={onLanguageModeChange}
+      />
+      <SettingsAboutSection {appVersion} {updateAction} {onCheckForUpdates} />
+    </SettingsTabPanel>
 
-  <SettingsTabPanel value="renodx">
-    <SettingsRenoDxSection />
-  </SettingsTabPanel>
+    <SettingsTabPanel value="renodx">
+      <SettingsRenoDxSection />
+    </SettingsTabPanel>
 
-  <SettingsTabPanel value="catalog">
-    <SettingsCatalogSection
-      coverSourceToggleRows={model.coverSourceToggleRows}
-      coverSourcesState={model.coverSourcesState}
-      isCoverSourceDisabled={model.isCoverSourceDisabled}
-      onCoverSourceToggle={model.handleCoverSourceToggle}
-      coverSourcesMessage={model.coverSourcesMessage}
-      coverSourcesMessageKind={model.coverSourcesMessageKind}
-      bind:steamGridDbKeyInput={model.steamGridDbKeyInput}
-      steamKeyLoaded={model.steamKeyLoaded}
-      steamKeyBusy={model.steamKeyBusy}
-      steamKeyMessage={model.steamKeyMessage}
-      steamKeyMessageKind={model.steamKeyMessageKind}
-      onSteamGridDbKeySave={model.handleSteamGridDbKeySave}
-    />
-  </SettingsTabPanel>
+    <SettingsTabPanel value="catalog">
+      <SettingsCatalogSection
+        coverSourceToggleRows={model.coverSourceToggleRows}
+        coverSourcesState={model.coverSourcesState}
+        isCoverSourceDisabled={model.isCoverSourceDisabled}
+        onCoverSourceToggle={model.handleCoverSourceToggle}
+        coverSourcesMessage={model.coverSourcesMessage}
+        coverSourcesMessageKind={model.coverSourcesMessageKind}
+        bind:steamGridDbKeyInput={model.steamGridDbKeyInput}
+        steamKeyLoaded={model.steamKeyLoaded}
+        steamKeyBusy={model.steamKeyBusy}
+        steamKeyMessage={model.steamKeyMessage}
+        steamKeyMessageKind={model.steamKeyMessageKind}
+        onSteamGridDbKeySave={model.handleSteamGridDbKeySave}
+      />
+    </SettingsTabPanel>
 
-  <SettingsTabPanel value="nvidia">
-    <SettingsNvidiaSection {dlssIndicator} {globalPresets} />
-  </SettingsTabPanel>
-</Tabs>
+    <SettingsTabPanel value="nvidia">
+      <SettingsNvidiaSection {dlssIndicator} {globalPresets} />
+    </SettingsTabPanel>
+  </Tabs>
+</section>

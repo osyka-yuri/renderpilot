@@ -11,6 +11,15 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'nav.donate': '寄付する',
   'shell.refresh': '更新',
   'shell.updateAvailable': 'アップデートがあります',
+  'nav.skipToContent': 'コンテンツへ移動',
+  'nav.primaryLabel': 'メインナビゲーション',
+  'nav.breadcrumbLabel': 'パンくずリスト',
+  'shell.sidebar.toggle': 'サイドバーを切り替え',
+  'shell.sidebar.title': 'ナビゲーション',
+  'shell.sidebar.description': 'アプリケーションのメインナビゲーションです。',
+  'shell.notifications.regionLabel': '通知',
+  'shell.notifications.close': '通知を閉じる',
+  'shell.pageTitle': '{page} — RenderPilot',
 
   'settings.appearance.title': '外観',
   'settings.appearance.description': 'アプリケーションの見た目と言語をカスタマイズします。',
@@ -48,7 +57,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'settings.nvidia.indicator.systemWide': 'システム全体',
   'settings.nvidia.indicator.overlayTitle': '画面オーバーレイ',
   'settings.nvidia.indicator.overlayDescription': 'この PC 上のすべてのゲームに適用されます。',
-  'settings.nvidia.indicator.toggleAria': 'DLSS インジケーターの切り替え',
+  'settings.nvidia.indicator.toggleLabel': 'DLSS インジケーターの切り替え',
   'settings.nvidia.global.title': 'グローバル DLSS 設定',
   'settings.nvidia.global.description':
     'NVIDIA ベースプロファイルを介して、ゲーム固有の上書きがないすべてのゲームに適用される既定値です。',
@@ -61,7 +70,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
     'これらの設定には対応する NVIDIA グラフィックスカードが必要です。',
 
   'game.card.action.details': '詳細',
-  'game.card.action.detailsAria': '{title} の詳細を開く',
+  'game.card.action.detailsLabel': '{title} の詳細を開く',
   'game.card.detectedLibraries': '検出されたコンポーネント',
   'game.card.availableAddons': '利用可能なアドオン',
   'game.card.badge.upToDate': '最新',
@@ -69,7 +78,9 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'game.card.badge.updatesAvailableCount': plural('count', {
     other: '{count}件のアップデートが利用可能',
   }),
-  'game.card.menu.ariaLabel': '{title} のオプション',
+  'game.card.status.favorite': 'お気に入り',
+  'game.card.status.hidden': '非表示',
+  'game.card.menu.label': '{title} のオプション',
   'game.card.menu.favorite.add': 'お気に入りに追加',
   'game.card.menu.favorite.remove': 'お気に入りから削除',
   'game.card.menu.favorite.toggleHint': 'このゲームのお気に入り状態を切り替えます。',
@@ -215,7 +226,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'settings.catalog.title': 'カバー画像のソース',
   'settings.catalog.description':
     'ゲームのカバー画像をダウンロードするオンラインソースを選択します。',
-  'settings.catalog.steamKey.srLabel': 'SteamGridDB API キー',
+  'settings.catalog.steamKey.inputLabel': 'SteamGridDB API キー',
   'settings.catalog.steamKey.placeholder': 'API キー',
   'settings.catalog.steamKey.loading': '読み込み中…',
   'settings.catalog.steamKey.save': '保存',
@@ -238,6 +249,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
 
   'common.unknown': '不明',
   'common.downloadProgress': 'ダウンロードの進行状況',
+  'common.close': '閉じる',
 
   'gameDetails.noGameSelected.title': 'ゲームが選択されていません',
   'gameDetails.noGameSelected.description':
@@ -261,7 +273,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.streamline.mixed': '混在するバージョン',
   'gameDetails.streamline.mixedRange': '混在するバージョン (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} 件のアップデート · {missing} 個の不足',
-  'gameDetails.streamline.restoreAllAria': 'すべてのプラグインを元の状態に復元',
+  'gameDetails.streamline.restoreAllLabel': 'すべてのプラグインを元の状態に復元',
   'gameDetails.streamline.restoreAllTooltip': 'すべて元の状態に復元',
   'gameDetails.updateAll.action': 'すべて更新',
   'gameDetails.updateAll.actionCount': 'すべて更新 ({count})',
@@ -272,6 +284,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
     other: '{count} 個のコンポーネントを最新の安定版に更新します',
   }),
   'gameDetails.executable.title': 'ゲームの実行ファイル',
+  'gameDetails.executable.groupLabel': '利用可能なゲーム実行ファイル',
   'gameDetails.developerMode.requiredTitle': 'Windows の開発者モードが無効です',
   'gameDetails.developerMode.requiredDescription':
     'Microsoft D3D12 Agility Preview には、この Windows 設定が必要です。',
@@ -330,7 +343,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
     'D3D12 カードの手順に従って復旧してから、ゲームを再スキャンしてください。',
   'gameDetails.executable.description':
     'ゲームの実行ファイル — NVIDIA プロファイルが適用され、RenoDX はそのフォルダーにインストールされます。',
-  'gameDetails.executable.triggerAria': 'ゲーム実行ファイル: {fileName}',
+  'gameDetails.executable.triggerLabel': 'ゲーム実行ファイル: {fileName}',
   'gameDetails.executable.detectedGroup': '検出されたゲーム実行ファイル',
   'gameDetails.executable.otherGroup': 'その他（ランチャー・インストーラー・ツール）',
   'gameDetails.executable.customBadge': '手動',
@@ -351,7 +364,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.nvapi.unavailable': '利用不可',
   'gameDetails.nvapi.resetDefault': 'デフォルトにリセット',
   'gameDetails.nvapi.alreadyDefault': '既にデフォルトです',
-  'gameDetails.nvapi.restoreBaselineAria': '初期値に戻す',
+  'gameDetails.nvapi.restoreBaselineLabel': '初期値に戻す',
   'gameDetails.nvapi.restoreBaseline': '初期値に戻す',
   'gameDetails.nvapi.alreadyBaseline': '既に初期値です',
   'gameDetails.nvapi.noBaseline': '初期値が保存されていません',
@@ -388,14 +401,15 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'libraries.state.missing': 'ファイルがありません',
   'libraries.state.corrupt': 'ファイルが破損しています',
   'libraries.hash.copy': 'ハッシュをコピー',
+  'libraries.hash.copyVersion': '{version} のハッシュをコピー',
   'libraries.hash.copied': 'コピーしました',
   'libraries.hash.failed': 'コピーに失敗しました',
   'libraries.hash.copiedToast': 'ハッシュをクリップボードにコピーしました',
-  'libraries.sort.asc': '昇順',
-  'libraries.sort.desc': '降順',
-  'libraries.sort.none': '並べ替えなし',
+  'libraries.sort.byColumn': '{label} で並べ替え',
   'libraries.actions.delete': '削除',
   'libraries.actions.download': 'ダウンロード',
+  'libraries.actions.deleteVersion': '{version} を削除',
+  'libraries.actions.downloadVersion': '{version} をダウンロード',
   'libraries.actions.deletedToast': '{version} を削除しました',
   'libraries.actions.downloadedToast': '{version} をダウンロードしました',
   'libraries.actions.failedToast': '{action} に失敗しました',
@@ -410,6 +424,9 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   }),
   'libraries.actions.downloadAllPartialToast': '{succeeded} 個ダウンロード、{failed} 個失敗',
   'libraries.actions.downloadAllNoneToast': 'すべての最新バージョンはダウンロード済みです',
+  'libraries.filters.vendorLabel': 'ライブラリベンダー',
+  'libraries.filters.typeLabel': 'ライブラリの種類',
+  'libraries.table.caption': '{vendor} {type} ライブラリのバージョン',
 
   'common.cancel': 'キャンセル',
   'common.apply': '適用',
@@ -417,7 +434,27 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'filters.title': 'フィルター',
   'filters.launchers.title': 'ランチャー',
   'filters.launchers.empty': 'ランチャーが見つかりません',
-  'filters.launchers.reorder': '{label} を移動',
+  'filters.launchers.reorder.instructions':
+    '並べ替えるには移動ボタンにフォーカスし、Space または Enter を押して矢印キーで移動し、もう一度 Space または Enter で確定します。Escape でキャンセルします。',
+  'filters.launchers.reorder.move': '{label} を移動、{total} 件中 {position} 番目',
+  'filters.launchers.reorder.zoneLabel': 'ランチャー並べ替えゾーン',
+  'filters.launchers.reorder.itemLabel': '{label} ランチャー',
+  'filters.launchers.reorder.dragStarted':
+    '{zoneLabel} で {itemLabel} を取得、{count} 件中 {position} 番目。',
+  'filters.launchers.reorder.movedToPosition':
+    '{itemLabel} を {count} 件中 {position} 番目に移動。',
+  'filters.launchers.reorder.movedToZoneStart': '{itemLabel} を {zoneLabel} の先頭に移動。',
+  'filters.launchers.reorder.movedToZoneEnd': '{itemLabel} を {zoneLabel} の末尾に移動。',
+  'filters.launchers.reorder.droppedAnnouncement':
+    '{zoneLabel} の {count} 件中 {position} 番目に {itemLabel} を配置。',
+  'filters.launchers.reorder.zoneActiveInstruction':
+    'Space または Enter で取得し、矢印キーで移動します。',
+  'filters.launchers.reorder.zoneDragDisabledInstruction': 'ランチャーの並べ替えは利用できません。',
+  'filters.launchers.reorder.pickedUp':
+    '{label} を選択しました。{total} 件中 {position} 番目です。',
+  'filters.launchers.reorder.moved': '{label} を {total} 件中 {position} 番目に移動しました。',
+  'filters.launchers.reorder.dropped': '{label} を {total} 件中 {position} 番目に配置しました。',
+  'filters.launchers.reorder.cancelled': '{label} の並べ替えをキャンセルしました。',
   'filters.libraries.title': 'コンポーネント',
   'filters.libraries.empty': 'コンポーネントが見つかりません',
   'filters.addons.title': 'アドオン',
@@ -445,7 +482,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'operation.filesRestored.count': plural('count', {
     other: '{count}個のファイルが復元されました。',
   }),
-  'operation.itemAria': '{kind}、{status}',
+  'operation.itemLabel': '{kind}、{status}',
 
   'notify.stalePlan': '操作プランが古くなっています。再試行してください。',
   'notify.missingStableGameId': 'ゲームを特定できませんでした。',
@@ -521,15 +558,15 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
     'ライブラリをダウンロードしましたが、状態の更新に失敗しました',
   'libraries.error.deletedRefreshFailed': 'ライブラリを削除しましたが、状態の更新に失敗しました',
 
-  'settings.catalog.source.steam.aria': 'Steam からカバー画像をダウンロード',
+  'settings.catalog.source.steam.actionLabel': 'Steam からカバー画像をダウンロード',
   'settings.catalog.source.steam.title': 'Steam',
   'settings.catalog.source.steam.description':
     'パブリック Steam カタログからカバー画像をダウンロードします。',
-  'settings.catalog.source.gog.aria': 'GOG からカバー画像をダウンロード',
+  'settings.catalog.source.gog.actionLabel': 'GOG からカバー画像をダウンロード',
   'settings.catalog.source.gog.title': 'GOG',
   'settings.catalog.source.gog.description':
     '公式 GOG カタログからカバー画像をダウンロードします。',
-  'settings.catalog.source.steamgriddb.aria': 'SteamGridDB からカバー画像をダウンロード',
+  'settings.catalog.source.steamgriddb.actionLabel': 'SteamGridDB からカバー画像をダウンロード',
   'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
   'settings.catalog.source.steamgriddb.description':
     'SteamGridDB からコミュニティのカバー画像をダウンロードします。API キーが必要です。',
@@ -637,7 +674,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'settings.about.updateDialog.restartRequiredDescription':
     'アップデートはインストールされましたが、アプリを自動で再起動できませんでした。RenderPilot を手動で再起動して更新を完了してください。',
 
-  'settings.about.updateDialog.progressAria': 'ダウンロード進捗',
+  'settings.about.updateDialog.progressLabel': 'ダウンロード進捗',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

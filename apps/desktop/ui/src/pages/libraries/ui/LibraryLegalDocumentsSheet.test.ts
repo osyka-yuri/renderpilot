@@ -10,17 +10,15 @@ import LibraryLegalDocumentsSheetTestHost from './LibraryLegalDocumentsSheet.tes
 
 const mocks = vi.hoisted(() => ({
   openExternal: vi.fn<(url: string) => Promise<void>>(),
-  toastError: vi.fn(),
+  publishErrorNotification: vi.fn(),
 }));
 
 vi.mock('@shared/api', () => ({
   openExternal: mocks.openExternal,
 }));
 
-vi.mock('svelte-sonner', () => ({
-  toast: {
-    error: mocks.toastError,
-  },
+vi.mock('@shared/notifications', () => ({
+  publishErrorNotification: mocks.publishErrorNotification,
 }));
 
 describe('LibraryLegalDocumentsSheet', () => {
@@ -74,7 +72,7 @@ describe('LibraryLegalDocumentsSheet', () => {
         row.legal_documents[0].content_url,
       );
     });
-    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(mocks.publishErrorNotification).not.toHaveBeenCalled();
   });
 
   it('reports an external-open failure and re-enables the action', async () => {
@@ -89,7 +87,7 @@ describe('LibraryLegalDocumentsSheet', () => {
     button.click();
 
     await vi.waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledWith('Could not open the document');
+      expect(mocks.publishErrorNotification).toHaveBeenCalledWith('Could not open the document');
       expect(button.disabled).toBe(false);
     });
   });

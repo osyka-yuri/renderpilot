@@ -1,5 +1,4 @@
-import { strict as assert } from 'node:assert';
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -487,41 +486,75 @@ describe('FSD boundaries factory', () => {
 });
 
 describe('production FSD composition', () => {
-  it('keeps boundaries on classified sources and foundation exemptions narrowly scoped', async () => {
+  it('composes boundaries and import policies for representative source paths', async () => {
     const eslint = new ESLint({
       cwd: PROJECT_ROOT,
       overrideConfigFile: ESLINT_CONFIG_FILE,
     });
-    const themeConfig = await eslint.calculateConfigForFile(
-      path.join(PROJECT_ROOT, 'ui/src/shared/theme/index.ts'),
+
+    const representativeConfigs = await Promise.all(
+      [
+        ['JavaScript source', 'ui/src/features/example/probe.js'],
+        ['TypeScript source', 'ui/src/features/sync-covers/model/notifications.ts'],
+        ['Svelte source', 'ui/src/features/filter-games/ui/GamesFilterDialog.svelte'],
+        ['shared foundation source', 'ui/src/shared/theme/index.ts'],
+        ['app bootstrap source', 'ui/src/app/bootstrap.ts'],
+        ['foundation entry point', 'ui/src/main.ts'],
+      ].map(async ([label, relativePath]) => [
+        label,
+        await eslint.calculateConfigForFile(path.join(PROJECT_ROOT, relativePath)),
+      ]),
     );
-    const internalPath = path.join(
-      PROJECT_ROOT,
-      'ui/src/features/sync-covers/model/notifications.ts',
+
+    for (const [label, config] of representativeConfigs) {
+      expect(config, label).toBeDefined();
+      expect(ruleSeverity(config, 'local-architecture/import-boundaries'), label).toBe(2);
+    }
+
+    for (const [label, config] of representativeConfigs.slice(0, 5)) {
+      expectBoundariesEnabled(config, label);
+    }
+
+    const javascriptConfig = representativeConfigs[0][1];
+    const typeScriptConfig = representativeConfigs[1][1];
+    const svelteConfig = representativeConfigs[2][1];
+    expect(ruleSeverity(javascriptConfig, 'no-restricted-imports')).toBe(2);
+    expect(ruleSeverity(typeScriptConfig, '@typescript-eslint/no-restricted-imports')).toBe(2);
+    expect(ruleSeverity(svelteConfig, '@typescript-eslint/no-restricted-imports')).toBe(2);
+    expect(typeScriptConfig.rules['@typescript-eslint/no-restricted-imports']).toEqual(
+      javascriptConfig.rules['no-restricted-imports'],
     );
-    const internalConfig = await eslint.calculateConfigForFile(internalPath);
-    const bootstrapPath = path.join(PROJECT_ROOT, 'ui/src/app/bootstrap.ts');
-    const bootstrapConfig = await eslint.calculateConfigForFile(bootstrapPath);
-    const dormantMainConfig = await eslint.calculateConfigForFile(
-      path.join(PROJECT_ROOT, 'ui/src/main.ts'),
+    expect(svelteConfig.rules['@typescript-eslint/no-restricted-imports']).toEqual(
+      javascriptConfig.rules['no-restricted-imports'],
     );
+    expect(javascriptConfig.rules['@typescript-eslint/no-restricted-imports']).toBeUndefined();
+    expect(ruleSeverity(typeScriptConfig, 'no-restricted-imports')).toBe(0);
+    expect(ruleSeverity(svelteConfig, 'no-restricted-imports')).toBe(0);
 
-    await access(internalPath);
-    await access(bootstrapPath);
+    const [javascriptResult] = await eslint.lintText(
+      "import '@shared';\nimport '@shared/i18n/private';\n",
+      {
+        filePath: path.join(PROJECT_ROOT, 'ui/src/features/example/probe.js'),
+      },
+    );
+    const restrictedImportMessages = javascriptResult.messages.filter(
+      (message) => message.ruleId === 'no-restricted-imports',
+    );
+    expect(restrictedImportMessages).toHaveLength(2);
+    expect(
+      restrictedImportMessages.some((message) => message.message.includes('shared layer root')),
+    ).toBe(true);
+    expect(
+      restrictedImportMessages.some((message) =>
+        message.message.includes('shared segment public API'),
+      ),
+    ).toBe(true);
 
-    expectBoundariesEnabled(themeConfig);
-    expectBoundariesEnabled(internalConfig);
-    expectBoundariesEnabled(bootstrapConfig);
-    expect(ruleSeverity(bootstrapConfig, '@typescript-eslint/no-restricted-imports')).toBe(2);
-    expect(ruleSeverity(bootstrapConfig, 'local-architecture/no-fsd-alias-re-export')).toBe(2);
-    expect(dormantMainConfig.rules['boundaries/no-unknown-files']).toBeUndefined();
-    expect(ruleSeverity(dormantMainConfig, 'no-restricted-imports')).toBe(0);
-    expect(ruleSeverity(dormantMainConfig, '@typescript-eslint/no-restricted-imports')).toBe(0);
-    expect(ruleSeverity(dormantMainConfig, 'local-architecture/no-fsd-alias-re-export')).toBe(2);
-
-    const bootstrapResult = await eslint.lintFiles([bootstrapPath]);
-
-    assert.equal(bootstrapResult[0].errorCount, 0);
-    assert.equal(bootstrapResult[0].warningCount, 0);
+    const foundationConfig = representativeConfigs.at(-1)[1];
+    expect(foundationConfig.rules['boundaries/no-unknown-files']).toBeUndefined();
+    expect(ruleSeverity(foundationConfig, 'no-restricted-imports')).toBe(0);
+    expect(ruleSeverity(foundationConfig, '@typescript-eslint/no-restricted-imports')).toBe(0);
+    expect(ruleSeverity(foundationConfig, 'local-architecture/no-fsd-alias-re-export')).toBe(2);
+    expect(ruleSeverity(foundationConfig, 'local-architecture/import-boundaries')).toBe(2);
   });
 });

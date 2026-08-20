@@ -3,11 +3,11 @@
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
-  import { type SortableTableFeatures } from '@shared/ui';
+  import { Button, type SortableTableFeatures } from '@shared/ui';
+  import { useSelector } from '@tanstack/svelte-store';
   import type { Column } from '@tanstack/table-core';
+  import { untrack } from 'svelte';
   import type { LibraryPackageRow } from '../model/libraries-page-model';
-
-  type SortState = false | 'asc' | 'desc';
 
   type Props = {
     label: string;
@@ -17,23 +17,14 @@
 
   let { label, column, class: className = '' }: Props = $props();
 
-  const sortState = $derived(column.getIsSorted());
+  const tableState = useSelector(untrack(() => column.table.store));
+  const sortState = $derived.by(() => {
+    void tableState.current;
+    return column.getIsSorted();
+  });
   const canSort = $derived(column.getCanSort());
 
-  const sortButtonLabel = $derived(getSortButtonLabel(sortState));
-
-  function getSortButtonLabel(state: SortState): string {
-    switch (state) {
-      case 'asc':
-        return t('libraries.sort.asc');
-
-      case 'desc':
-        return t('libraries.sort.desc');
-
-      default:
-        return t('libraries.sort.none');
-    }
-  }
+  const sortButtonLabel = $derived(t('libraries.sort.byColumn', { label }));
 
   function handleSortClick(): void {
     if (!canSort) {
@@ -44,13 +35,11 @@
   }
 </script>
 
-<button
+<Button
   type="button"
-  class={cn(
-    'flex items-center gap-1 select-none',
-    canSort ? 'cursor-pointer' : 'cursor-default opacity-60',
-    className,
-  )}
+  variant="ghost"
+  size="sm"
+  class={cn('select-none', className)}
   disabled={!canSort}
   aria-label={sortButtonLabel}
   onclick={handleSortClick}
@@ -62,4 +51,4 @@
   {:else if sortState === 'desc'}
     <ArrowDownIcon class="size-3 shrink-0" aria-hidden="true" />
   {/if}
-</button>
+</Button>

@@ -1,7 +1,6 @@
-import { toast } from 'svelte-sonner';
-
 import { t } from '@shared/i18n';
 import { ClientError, reportClientError } from '@shared/errors';
+import { publishErrorNotification, publishSuccessNotification } from '@shared/notifications';
 import { createDisposableRequestChannel } from '@shared/requests';
 
 import type {
@@ -28,7 +27,7 @@ import type {
 
 export type CreateAppUpdaterModelOptions = {
   gateway: AppUpdaterGateway;
-  /** Override for tests; defaults to svelte-sonner toasts. */
+  /** Override for tests; defaults to the shared notification bus. */
   notifySuccess?: (message: string) => void;
   notifyError?: (message: string) => void;
   /**
@@ -43,8 +42,8 @@ export type CreateAppUpdaterModelOptions = {
 
 export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): AppUpdaterModel {
   const { gateway } = options;
-  const notifySuccess = options.notifySuccess ?? ((message: string) => toast.success(message));
-  const notifyError = options.notifyError ?? ((message: string) => toast.error(message));
+  const notifySuccess = options.notifySuccess ?? publishSuccessNotification;
+  const notifyError = options.notifyError ?? publishErrorNotification;
   const settleUiBeforeInstallExit =
     options.settleUiBeforeInstallExit ?? defaultSettleUiBeforeInstallExit;
   const waitBeforeDownloadRetry = options.waitBeforeDownloadRetry ?? waitForDownloadRetry;

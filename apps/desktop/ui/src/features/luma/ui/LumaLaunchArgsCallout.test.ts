@@ -5,11 +5,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 
-vi.mock('svelte-sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
-}));
-
 import { hasKnownLaunchArgsInstructions } from '../model/launch-args';
+import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
 import LumaLaunchArgsCalloutTestHost from './LumaLaunchArgsCallout.test-host.svelte';
 
 const KNOWN_LAUNCHERS = ['Steam', 'Gog', 'Epic', 'Ea', 'Ubisoft'] as const;
@@ -28,6 +25,7 @@ describe('LumaLaunchArgsCallout', () => {
   }
 
   beforeEach(() => {
+    clearAllNotifications();
     target = document.createElement('div');
     document.body.append(target);
     writeText.mockResolvedValue(undefined);
@@ -40,6 +38,7 @@ describe('LumaLaunchArgsCallout', () => {
       component = undefined;
     }
     target.remove();
+    clearAllNotifications();
     vi.clearAllMocks();
   });
 
@@ -67,7 +66,7 @@ describe('LumaLaunchArgsCallout', () => {
     expect(target.textContent).not.toContain('If you start the game through Steam');
   });
 
-  it('copies the required argument', async () => {
+  it('keeps the argument copy name stable while notification feedback reports success and failure', async () => {
     render('Steam');
 
     const copyButton = target.querySelector<HTMLButtonElement>('button');
@@ -76,7 +75,26 @@ describe('LumaLaunchArgsCallout', () => {
 
     await vi.waitFor(() => {
       expect(writeText).toHaveBeenCalledWith('-dx11');
-      expect(copyButton?.getAttribute('aria-label')).toBe('Copied');
+      expect(getActiveNotifications()).toEqual([
+        expect.objectContaining({ severity: 'success', title: 'Copied' }),
+      ]);
     });
+    expect(copyButton?.getAttribute('aria-label')).toBe('Copy arguments');
+    expect(target.querySelector('[role="status"]')).toBeNull();
+
+    writeText.mockRejectedValueOnce(new Error('clipboard unavailable'));
+    clearAllNotifications();
+    copyButton?.click();
+
+    await vi.waitFor(() => {
+      expect(getActiveNotifications()).toEqual([
+        expect.objectContaining({
+          severity: 'error',
+          title: 'Could not copy the launch arguments',
+          important: undefined,
+        }),
+      ]);
+    });
+    expect(copyButton?.getAttribute('aria-label')).toBe('Copy arguments');
   });
 });

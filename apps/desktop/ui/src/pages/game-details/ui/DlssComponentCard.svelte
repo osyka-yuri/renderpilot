@@ -62,7 +62,7 @@
   <CardHeader class="pb-2">
     <div class="flex items-start justify-between gap-3">
       <div class="grid min-w-0 gap-1">
-        <CardTitle>{title}</CardTitle>
+        <CardTitle level={2}>{title}</CardTitle>
         <CardDescription>
           {nvapiAvailable
             ? t('gameDetails.dlss.description')
@@ -70,7 +70,7 @@
         </CardDescription>
       </div>
       {#if dllInfo}
-        <div class="shrink-0 text-right text-xs text-muted-foreground">
+        <div class="shrink-0 text-end text-xs text-muted-foreground">
           <div class="font-medium text-foreground">
             {dllLabel}
           </div>

@@ -2,9 +2,9 @@
   import DownloadIcon from '@lucide/svelte/icons/download';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
+  import { publishErrorNotification, publishSuccessNotification } from '@shared/notifications';
   import { Button, DownloadProgressBar, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { t } from '@shared/i18n';
-  import { toast } from 'svelte-sonner';
   import {
     shouldDeleteLibraryPackage,
     type LibraryPackageRow,
@@ -27,8 +27,13 @@
   const isDownloading = $derived(pendingAction === 'download');
   const shouldDelete = $derived(shouldDeleteLibraryPackage(row));
 
-  const actionLabel = $derived(
+  const shortActionLabel = $derived(
     shouldDelete ? t('libraries.actions.delete') : t('libraries.actions.download'),
+  );
+  const actionLabel = $derived(
+    shouldDelete
+      ? t('libraries.actions.deleteVersion', { version: row.release.version })
+      : t('libraries.actions.downloadVersion', { version: row.release.version }),
   );
 
   async function handleActionClick() {
@@ -42,16 +47,20 @@
     try {
       if (shouldDelete) {
         if (await onDelete(packageId)) {
-          toast.success(t('libraries.actions.deletedToast', { version: row.release.version }));
+          publishSuccessNotification(
+            t('libraries.actions.deletedToast', { version: row.release.version }),
+          );
         }
         return;
       }
 
       if (await onDownload(packageId)) {
-        toast.success(t('libraries.actions.downloadedToast', { version: row.release.version }));
+        publishSuccessNotification(
+          t('libraries.actions.downloadedToast', { version: row.release.version }),
+        );
       }
     } catch {
-      toast.error(t('libraries.actions.failedToast', { action: actionLabel }));
+      publishErrorNotification(t('libraries.actions.failedToast', { action: shortActionLabel }));
     }
   }
 </script>

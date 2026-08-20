@@ -12,7 +12,7 @@
   } from '@shared/ui';
   import { t } from '@shared/i18n';
 
-  import { createCopyResetTimer, copyWithFeedback } from '../model/copy-feedback';
+  import { copyWithFeedback } from '../model/copy-feedback';
   import {
     hasKnownLaunchArgsInstructions,
     includesDx11LaunchArg,
@@ -37,50 +37,39 @@
       : t('gameDetails.luma.launchArgs.title'),
   );
 
-  type CopyStatus = 'idle' | 'copied';
-  let copyStatus = $state<CopyStatus>('idle');
-  const resetTimer = createCopyResetTimer(() => {
-    copyStatus = 'idle';
-  });
-
-  const copyLabel = $derived(
-    copyStatus === 'copied'
-      ? t('gameDetails.luma.launchArgs.copied')
-      : t('gameDetails.luma.launchArgs.copy'),
-  );
-
-  $effect(() => () => {
-    resetTimer.dispose();
-  });
-
   async function copyArgs(): Promise<void> {
-    const ok = await copyWithFeedback(argsText, {
+    await copyWithFeedback(argsText, {
       copied: 'gameDetails.luma.launchArgs.copied',
       copyFailed: 'gameDetails.luma.launchArgs.copyFailed',
     });
-    if (ok) {
-      copyStatus = 'copied';
-      resetTimer.arm();
-    }
   }
 </script>
 
 {#if launchArgs.length > 0}
-  <Alert variant="default" size="sm">
+  <Alert variant="default" size="sm" role="note">
     <InfoIcon aria-hidden="true" />
     <AlertTitle>{title}</AlertTitle>
     <AlertDescription>
-      <ol class="mt-2 list-decimal space-y-2 pl-4">
+      <ol class="mt-2 list-decimal space-y-2 ps-4">
         <li class="space-y-1.5">
           <span>{t('gameDetails.luma.launchArgs.copyStep')}</span>
           <div class="relative inline-flex max-w-full items-center">
-            <code class="overflow-x-auto rounded-sm bg-muted py-1 pr-8 pl-1.5 text-xs"
+            <code class="overflow-x-auto rounded-sm bg-muted py-1 ps-1.5 pe-8 text-xs"
               >{argsText}</code
             >
             <Tooltip>
-              <TooltipTrigger type="button" onclick={copyArgs} aria-label={copyLabel}>
+              <TooltipTrigger
+                type="button"
+                onclick={copyArgs}
+                aria-label={t('gameDetails.luma.launchArgs.copy')}
+              >
                 {#snippet child({ props })}
-                  <Button {...props} variant="ghost" size="icon" class="absolute right-0.5 size-6">
+                  <Button
+                    {...props}
+                    variant="ghost"
+                    size="icon"
+                    class="absolute inset-e-0.5 size-6"
+                  >
                     <CopyIcon class="size-3" aria-hidden="true" />
                   </Button>
                 {/snippet}
@@ -98,7 +87,6 @@
           {/if}
         </li>
       </ol>
-      <span class="sr-only" aria-live="polite">{copyStatus === 'copied' ? copyLabel : ''}</span>
     </AlertDescription>
   </Alert>
 {/if}

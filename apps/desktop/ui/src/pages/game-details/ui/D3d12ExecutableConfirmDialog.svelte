@@ -39,7 +39,7 @@
 </script>
 
 <Dialog {open} onOpenChange={requestOpenChange}>
-  <DialogContent>
+  <DialogContent closeLabel={t('common.close')}>
     <DialogHeader>
       <DialogTitle>{t('gameDetails.d3d12.confirm.title')}</DialogTitle>
       <DialogDescription>
@@ -74,7 +74,7 @@
     </div>
 
     {#if includesIntegrityChange}
-      <Alert variant="warning" size="sm">
+      <Alert variant="warning" size="sm" role="note">
         <TriangleAlertIcon aria-hidden="true" />
         <AlertDescription>{t('gameDetails.d3d12.confirm.signatureWarning')}</AlertDescription>
       </Alert>

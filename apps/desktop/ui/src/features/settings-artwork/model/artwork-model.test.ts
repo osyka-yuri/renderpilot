@@ -4,7 +4,7 @@ import {
   COVERS_STEAM_CDN_SETTING_KEY,
   COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY,
 } from '@entities/settings';
-import { coverSourceToggleRows, formatBooleanSetting } from './artwork-model';
+import { coverSourceToggleRows } from './artwork-model';
 
 import { createInitialSettingsArtworkState } from './artwork-state';
 
@@ -26,15 +26,6 @@ function expectNonEmptyString(value: string): void {
 }
 
 describe('artwork-model', () => {
-  describe('formatBooleanSetting', () => {
-    it.each([
-      [true, 'true'],
-      [false, 'false'],
-    ] as const)('formats %s for catalog persistence', (value, expected) => {
-      expect(formatBooleanSetting(value)).toBe(expected);
-    });
-  });
-
   describe('coverSourceToggleRows', () => {
     it('declares one row for every supported cover source setting', () => {
       expect(coverSourceToggleRows).toHaveLength(Object.keys(expectedCoverPolicyBySetting).length);
@@ -65,7 +56,7 @@ describe('artwork-model', () => {
 
     it('provides complete non-empty UI metadata for every cover source row', () => {
       for (const row of coverSourceToggleRows) {
-        expectNonEmptyString(row.ariaLabelKey);
+        expectNonEmptyString(row.actionLabelKey);
         expectNonEmptyString(row.eyebrow);
         expectNonEmptyString(row.titleKey);
         expectNonEmptyString(row.descriptionKey);

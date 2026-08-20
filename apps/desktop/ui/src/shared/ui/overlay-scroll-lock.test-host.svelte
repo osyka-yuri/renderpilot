@@ -22,7 +22,7 @@
 </Select>
 
 <Dialog bind:open={dialogOpen}>
-  <DialogContent>
+  <DialogContent closeLabel="Close test dialog">
     <DialogTitle>Confirm change</DialogTitle>
     <DialogClose>Cancel</DialogClose>
   </DialogContent>

@@ -19,6 +19,15 @@ export const en = defineSourceCatalog({
   'nav.donate': 'Donate',
   'shell.refresh': 'Refresh',
   'shell.updateAvailable': 'Update available',
+  'nav.skipToContent': 'Skip to content',
+  'nav.primaryLabel': 'Primary navigation',
+  'nav.breadcrumbLabel': 'Breadcrumb',
+  'shell.sidebar.toggle': 'Toggle sidebar',
+  'shell.sidebar.title': 'Navigation',
+  'shell.sidebar.description': 'Primary application navigation.',
+  'shell.notifications.regionLabel': 'Notifications',
+  'shell.notifications.close': 'Close notification',
+  'shell.pageTitle': '{page} — RenderPilot',
 
   // ── Settings: appearance section ──
   'settings.appearance.title': 'Appearance',
@@ -60,7 +69,7 @@ export const en = defineSourceCatalog({
   'settings.nvidia.indicator.systemWide': 'System-wide',
   'settings.nvidia.indicator.overlayTitle': 'On-screen overlay',
   'settings.nvidia.indicator.overlayDescription': 'Applies to all games on this PC.',
-  'settings.nvidia.indicator.toggleAria': 'Toggle DLSS indicator',
+  'settings.nvidia.indicator.toggleLabel': 'Toggle DLSS indicator',
   'settings.nvidia.global.title': 'Global DLSS settings',
   'settings.nvidia.global.description':
     'Defaults applied to every game that has no game-specific override, via the NVIDIA base profile.',
@@ -74,7 +83,7 @@ export const en = defineSourceCatalog({
 
   // ── Game card ──
   'game.card.action.details': 'Details',
-  'game.card.action.detailsAria': 'Open details for {title}',
+  'game.card.action.detailsLabel': 'Open details for {title}',
   'game.card.detectedLibraries': 'Detected components',
   'game.card.availableAddons': 'Available add-ons',
   'game.card.badge.upToDate': 'Up to date',
@@ -83,7 +92,9 @@ export const en = defineSourceCatalog({
     one: '1 update available',
     other: '{count} updates available',
   }),
-  'game.card.menu.ariaLabel': 'Options for {title}',
+  'game.card.status.favorite': 'Favorite',
+  'game.card.status.hidden': 'Hidden',
+  'game.card.menu.label': 'Options for {title}',
   'game.card.menu.favorite.add': 'Add to favorites',
   'game.card.menu.favorite.remove': 'Remove from favorites',
   'game.card.menu.favorite.toggleHint': 'Toggle favorite status for this game.',
@@ -233,7 +244,7 @@ export const en = defineSourceCatalog({
   // ── Settings: catalog (cover sources) ──
   'settings.catalog.title': 'Cover sources',
   'settings.catalog.description': 'Select online sources for downloading game covers.',
-  'settings.catalog.steamKey.srLabel': 'SteamGridDB API key',
+  'settings.catalog.steamKey.inputLabel': 'SteamGridDB API key',
   'settings.catalog.steamKey.placeholder': 'API key',
   'settings.catalog.steamKey.loading': 'Loading…',
   'settings.catalog.steamKey.save': 'Save',
@@ -299,11 +310,12 @@ export const en = defineSourceCatalog({
   'settings.about.updateDialog.restartRequiredDescription':
     'The update was installed, but the application could not restart automatically. Restart RenderPilot manually to finish the update.',
 
-  'settings.about.updateDialog.progressAria': 'Download progress',
+  'settings.about.updateDialog.progressLabel': 'Download progress',
 
   // ── Common ──
   'common.unknown': 'Unknown',
   'common.downloadProgress': 'Download progress',
+  'common.close': 'Close',
 
   // ── Game details: empty states ──
   'gameDetails.noGameSelected.title': 'No game selected',
@@ -331,7 +343,7 @@ export const en = defineSourceCatalog({
   'gameDetails.streamline.mixed': 'Mixed versions',
   'gameDetails.streamline.mixedRange': 'Mixed versions (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} updates · {missing} missing',
-  'gameDetails.streamline.restoreAllAria': 'Restore all plugins to original',
+  'gameDetails.streamline.restoreAllLabel': 'Restore all plugins to original',
   'gameDetails.streamline.restoreAllTooltip': 'Restore all to original',
   'gameDetails.updateAll.action': 'Update all',
   'gameDetails.updateAll.actionCount': 'Update all ({count})',
@@ -344,6 +356,7 @@ export const en = defineSourceCatalog({
   }),
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Game executable',
+  'gameDetails.executable.groupLabel': 'Available game executables',
   'gameDetails.developerMode.requiredTitle': 'Windows Developer Mode is off',
   'gameDetails.developerMode.requiredDescription':
     'Microsoft D3D12 Agility Preview requires this Windows setting.',
@@ -400,7 +413,7 @@ export const en = defineSourceCatalog({
     'Follow the recovery steps in the D3D12 card, then scan the game again.',
   'gameDetails.executable.description':
     'The game executable — the NVIDIA profile applies to it, and RenoDX installs into its folder.',
-  'gameDetails.executable.triggerAria': 'Game executable: {fileName}',
+  'gameDetails.executable.triggerLabel': 'Game executable: {fileName}',
   'gameDetails.executable.detectedGroup': 'Detected game executables',
   'gameDetails.executable.otherGroup': 'Other (launchers, installers, tools)',
   'gameDetails.executable.customBadge': 'Custom',
@@ -423,7 +436,7 @@ export const en = defineSourceCatalog({
   'gameDetails.nvapi.unavailable': 'unavailable',
   'gameDetails.nvapi.resetDefault': 'Reset to default',
   'gameDetails.nvapi.alreadyDefault': 'Already at default',
-  'gameDetails.nvapi.restoreBaselineAria': 'Restore baseline',
+  'gameDetails.nvapi.restoreBaselineLabel': 'Restore baseline',
   'gameDetails.nvapi.restoreBaseline': 'Restore baseline',
   'gameDetails.nvapi.alreadyBaseline': 'Already at baseline',
   'gameDetails.nvapi.noBaseline': 'No baseline saved',
@@ -462,14 +475,15 @@ export const en = defineSourceCatalog({
   'libraries.state.missing': 'Missing files',
   'libraries.state.corrupt': 'Corrupt files',
   'libraries.hash.copy': 'Copy Hash',
+  'libraries.hash.copyVersion': 'Copy hash for {version}',
   'libraries.hash.copied': 'Copied',
   'libraries.hash.failed': 'Failed to copy',
   'libraries.hash.copiedToast': 'Hash copied to clipboard',
-  'libraries.sort.asc': 'Sort ascending',
-  'libraries.sort.desc': 'Sort descending',
-  'libraries.sort.none': 'Not sorted',
+  'libraries.sort.byColumn': 'Sort by {label}',
   'libraries.actions.delete': 'Delete',
   'libraries.actions.download': 'Download',
+  'libraries.actions.deleteVersion': 'Delete {version}',
+  'libraries.actions.downloadVersion': 'Download {version}',
   'libraries.actions.deletedToast': 'Deleted {version}',
   'libraries.actions.downloadedToast': 'Downloaded {version}',
   'libraries.actions.failedToast': 'Failed to {action}',
@@ -486,6 +500,9 @@ export const en = defineSourceCatalog({
   }),
   'libraries.actions.downloadAllPartialToast': 'Downloaded {succeeded}, {failed} failed',
   'libraries.actions.downloadAllNoneToast': 'All latest versions already downloaded',
+  'libraries.filters.vendorLabel': 'Library vendors',
+  'libraries.filters.typeLabel': 'Library types',
+  'libraries.table.caption': '{vendor} {type} library versions',
 
   // ── Common actions ──
   'common.cancel': 'Cancel',
@@ -495,7 +512,26 @@ export const en = defineSourceCatalog({
   'filters.title': 'Filters',
   'filters.launchers.title': 'Launchers',
   'filters.launchers.empty': 'No launchers found',
-  'filters.launchers.reorder': 'Move {label}',
+  'filters.launchers.reorder.instructions':
+    'To reorder a launcher, focus its move button, press Space or Enter, use the arrow keys, then press Space or Enter to drop it. Press Escape to cancel.',
+  'filters.launchers.reorder.move': 'Move {label}, position {position} of {total}',
+  'filters.launchers.reorder.zoneLabel': 'Launcher reorder zone',
+  'filters.launchers.reorder.itemLabel': '{label} launcher',
+  'filters.launchers.reorder.dragStarted':
+    'Picked up {itemLabel} in {zoneLabel}, position {position} of {count}.',
+  'filters.launchers.reorder.movedToPosition':
+    '{itemLabel} moved to position {position} of {count}.',
+  'filters.launchers.reorder.movedToZoneStart': '{itemLabel} moved to the start of {zoneLabel}.',
+  'filters.launchers.reorder.movedToZoneEnd': '{itemLabel} moved to the end of {zoneLabel}.',
+  'filters.launchers.reorder.droppedAnnouncement':
+    '{itemLabel} dropped in {zoneLabel}, position {position} of {count}.',
+  'filters.launchers.reorder.zoneActiveInstruction':
+    'Use Space or Enter to pick up an item, then use the arrow keys to move it.',
+  'filters.launchers.reorder.zoneDragDisabledInstruction': 'Launcher reordering is unavailable.',
+  'filters.launchers.reorder.pickedUp': 'Picked up {label}, position {position} of {total}.',
+  'filters.launchers.reorder.moved': '{label} moved to position {position} of {total}.',
+  'filters.launchers.reorder.dropped': '{label} dropped at position {position} of {total}.',
+  'filters.launchers.reorder.cancelled': 'Reordering {label} was cancelled.',
   'filters.libraries.title': 'Components',
   'filters.libraries.empty': 'No components found',
   'filters.addons.title': 'Add-ons',
@@ -521,7 +557,7 @@ export const en = defineSourceCatalog({
     one: '1 file restored.',
     other: '{count} files restored.',
   }),
-  'operation.itemAria': '{kind}, {status}',
+  'operation.itemLabel': '{kind}, {status}',
 
   // ── Notifications (toasts) ──
   'notify.stalePlan': 'The operation plan is outdated. Please try again.',
@@ -608,13 +644,13 @@ export const en = defineSourceCatalog({
   'libraries.error.deletedRefreshFailed': 'Library deleted, but status refresh failed',
 
   // ── Settings: cover source rows ──
-  'settings.catalog.source.steam.aria': 'Download covers from Steam',
+  'settings.catalog.source.steam.actionLabel': 'Download covers from Steam',
   'settings.catalog.source.steam.title': 'Steam',
   'settings.catalog.source.steam.description': 'Download covers from the public Steam catalog.',
-  'settings.catalog.source.gog.aria': 'Download covers from GOG',
+  'settings.catalog.source.gog.actionLabel': 'Download covers from GOG',
   'settings.catalog.source.gog.title': 'GOG',
   'settings.catalog.source.gog.description': 'Download covers from the official GOG catalog.',
-  'settings.catalog.source.steamgriddb.aria': 'Download covers from SteamGridDB',
+  'settings.catalog.source.steamgriddb.actionLabel': 'Download covers from SteamGridDB',
   'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
   'settings.catalog.source.steamgriddb.description':
     'Download community covers from SteamGridDB. Requires an API key.',

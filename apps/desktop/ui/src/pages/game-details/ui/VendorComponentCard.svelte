@@ -21,7 +21,7 @@
 
 <Card>
   <CardHeader class="pb-2">
-    <CardTitle>{title}</CardTitle>
+    <CardTitle level={2}>{title}</CardTitle>
     <CardDescription>{t('gameDetails.vendor.description')}</CardDescription>
   </CardHeader>
 

@@ -51,7 +51,7 @@
 </script>
 
 <Dialog {open} onOpenChange={requestOpenChange}>
-  <DialogContent class="sm:max-w-md">
+  <DialogContent closeLabel={t('common.close')} class="sm:max-w-md">
     <DialogHeader>
       <DialogTitle>{t(titleKey)}</DialogTitle>
       <DialogDescription>

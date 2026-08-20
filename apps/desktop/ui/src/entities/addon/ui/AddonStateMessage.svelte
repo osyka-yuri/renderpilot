@@ -28,7 +28,7 @@
   const Icon = $derived(ICON_BY_TYPE[icon]);
 </script>
 
-<Alert variant={tone} size="sm">
+<Alert variant={tone} size="sm" role="status" aria-live="polite" aria-atomic="true">
   <Icon aria-hidden="true" />
 
   <AlertDescription>{message}</AlertDescription>

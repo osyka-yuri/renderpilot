@@ -128,8 +128,14 @@ describe('GameExecutablePopover', () => {
     const content = popoverContent();
     const text = content.textContent;
     expect(text.indexOf('Detected game executables')).toBeLessThan(text.indexOf('Other'));
+    expect(
+      [...content.querySelectorAll('[role="group"]')].map((group) => group.textContent),
+    ).toEqual([
+      expect.stringContaining('Detected game executables'),
+      expect.stringContaining('Other'),
+    ]);
 
-    const alternate = findButton(content, 'alternate.exe');
+    const alternate = findOption(content, 'alternate.exe');
     alternate.click();
     flushSync();
 
@@ -216,6 +222,16 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return button;
 }
 
+function findOption(container: HTMLElement, text: string): HTMLLabelElement {
+  const option = [...container.querySelectorAll<HTMLLabelElement>('label')].find((candidate) =>
+    candidate.textContent.includes(text),
+  );
+  if (!option) {
+    throw new Error(`Radio option containing "${text}" was not found`);
+  }
+  return option;
+}
+
 async function settleOverlays(): Promise<void> {
   await tick();
   await new Promise<void>((resolve) => {
@@ -233,6 +249,7 @@ function executableContext(overrides: Partial<GameExecutableContext> = {}): Game
     busy: false,
     loadError: null,
     effectiveExe: 'game.exe',
+    effectiveAbsolutePath: 'C:/Games/Test/game.exe',
     effectiveExeSource: 'auto',
     supportedCandidates: [],
     filteredOutCandidates: [],

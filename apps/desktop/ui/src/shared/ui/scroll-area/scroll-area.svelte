@@ -4,6 +4,8 @@
   import { cn } from '@shared/classnames';
   import type { WithoutChild } from '../types';
 
+  type ViewportRegion = { label: string } | { labelledBy: string };
+
   let {
     ref = $bindable(null),
     viewportRef = $bindable(null),
@@ -11,6 +13,8 @@
     orientation = 'vertical',
     scrollbarXClasses = '',
     scrollbarYClasses = '',
+    viewportRegion,
+    viewportFocusable = false,
     children,
     ...restProps
   }: WithoutChild<ScrollAreaPrimitive.RootProps> & {
@@ -18,7 +22,17 @@
     scrollbarXClasses?: string | undefined;
     scrollbarYClasses?: string | undefined;
     viewportRef?: HTMLElement | null;
+    viewportRegion?: ViewportRegion;
+    viewportFocusable?: boolean;
   } = $props();
+
+  const viewportAriaProps = $derived(
+    viewportRegion === undefined
+      ? {}
+      : 'label' in viewportRegion
+        ? { role: 'region' as const, 'aria-label': viewportRegion.label }
+        : { role: 'region' as const, 'aria-labelledby': viewportRegion.labelledBy },
+  );
 </script>
 
 <ScrollAreaPrimitive.Root
@@ -28,11 +42,13 @@
   {...restProps}
 >
   <ScrollAreaPrimitive.Viewport
+    {...viewportAriaProps}
+    tabindex={viewportFocusable ? 0 : undefined}
     bind:ref={viewportRef}
     data-slot="scroll-area-viewport"
     class={cn(
-      'size-full rounded-[inherit] ring-ring/10 outline-ring/50 transition-[color,box-shadow] focus-visible:ring-4 focus-visible:outline-1 dark:ring-ring/20 dark:outline-ring/40',
-      (orientation === 'vertical' || orientation === 'both') && 'pr-3',
+      'size-full rounded-[inherit] ring-ring/10 transition-[color,box-shadow] focus-visible:ring-4 focus-visible:outline-2 dark:ring-ring/20',
+      (orientation === 'vertical' || orientation === 'both') && 'pe-3',
       (orientation === 'horizontal' || orientation === 'both') && 'pb-3',
     )}
   >

@@ -22,8 +22,8 @@ describe('createI18nRuntime facade', () => {
 
   it('creates parameterless and parameterized message references without extra fields', () => {
     expect(createMessageRef('nav.games')).toEqual({ key: 'nav.games' });
-    expect(createMessageRef('game.card.action.detailsAria', { title: 'Control' })).toEqual({
-      key: 'game.card.action.detailsAria',
+    expect(createMessageRef('game.card.action.detailsLabel', { title: 'Control' })).toEqual({
+      key: 'game.card.action.detailsLabel',
       params: { title: 'Control' },
     });
   });

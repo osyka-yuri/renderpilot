@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import RenoDxChannelToggleGroup from './RenoDxChannelToggleGroup.svelte';
 
   import type { ReshadeChannel } from '@entities/addon';
@@ -27,24 +26,15 @@
   }: Props = $props();
 </script>
 
-{#if tooltipText}
-  <Tooltip>
-    <TooltipTrigger>
-      <RenoDxChannelToggleGroup
-        {value}
-        {stableSupported}
-        {busy}
-        {ariaLabel}
-        {describedBy}
-        {onChange}
-      />
-    </TooltipTrigger>
-
-    <TooltipContent>{tooltipText}</TooltipContent>
-  </Tooltip>
-{:else}
-  <RenoDxChannelToggleGroup {value} {stableSupported} {busy} {ariaLabel} {describedBy} {onChange} />
-{/if}
+<RenoDxChannelToggleGroup
+  {value}
+  {stableSupported}
+  {busy}
+  {ariaLabel}
+  {describedBy}
+  {tooltipText}
+  {onChange}
+/>
 
 {#if tooltipText}
   <span id={tooltipDescriptionId} class="sr-only">{tooltipText}</span>

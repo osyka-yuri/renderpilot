@@ -170,7 +170,7 @@
   <div class="flex flex-wrap items-center justify-between gap-2 px-1">
     {@render actionRowLeading?.()}
 
-    <div class="ml-auto flex flex-wrap items-center gap-2">
+    <div class="ms-auto flex flex-wrap items-center gap-2">
       {#if installBlocked}
         <Button type="button" size="sm" disabled>
           {t(labels.installAction)}

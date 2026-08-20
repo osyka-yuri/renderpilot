@@ -2,19 +2,25 @@
   import { Button } from '../button/index.js';
   import { cn } from '@shared/classnames';
   import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
+  import type { ComponentProps } from 'svelte';
   import { useSidebar } from './context.svelte.js';
+
+  type Props = Omit<
+    ComponentProps<typeof Button>,
+    'children' | 'class' | 'href' | 'onclick' | 'size' | 'type' | 'variant'
+  > & {
+    class?: string;
+    label: string;
+    onclick?: (event: MouseEvent) => void;
+  };
 
   let {
     ref = $bindable(null),
     class: className,
     onclick: onclickProp,
+    label,
     ...restProps
-  }: {
-    ref?: HTMLElement | null;
-    class?: string;
-    onclick?: (e: MouseEvent) => void;
-    [key: string]: unknown;
-  } = $props();
+  }: Props = $props();
 
   const sidebar = useSidebar();
 
@@ -33,8 +39,8 @@
   class={cn('size-7', className)}
   type="button"
   {onclick}
-  {...restProps as Record<string, unknown>}
+  {...restProps}
 >
-  <PanelLeftIcon />
-  <span class="sr-only">Toggle Sidebar</span>
+  <PanelLeftIcon class="rtl:rotate-180" aria-hidden="true" />
+  <span class="sr-only">{label}</span>
 </Button>

@@ -59,7 +59,7 @@
       <EmptyMedia variant="icon">
         <CpuIcon aria-hidden="true" />
       </EmptyMedia>
-      <EmptyTitle>{t('settings.nvidia.unsupported.title')}</EmptyTitle>
+      <EmptyTitle level={2}>{t('settings.nvidia.unsupported.title')}</EmptyTitle>
       <EmptyDescription>{t('settings.nvidia.unsupported.description')}</EmptyDescription>
     </EmptyHeader>
   </Empty>

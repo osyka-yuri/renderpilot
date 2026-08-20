@@ -14,11 +14,14 @@ describe('createSvelteTable', () => {
         addColumn: () => void;
         addDataRow: () => void;
         getRowIds: () => string[];
+        getIdSortState: () => false | 'asc' | 'desc';
         getSorting: () => { id: string; desc: boolean }[];
         getTable: () => object;
         getVisibleCellCount: () => number;
         hideIdColumn: () => void;
         sortByValue: () => void;
+        toggleIdSorting: () => void;
+        toggleValueSorting: () => void;
       }
     | undefined;
 
@@ -65,6 +68,49 @@ describe('createSvelteTable', () => {
     expect(onSortingChange).toHaveBeenCalledWith([{ id: 'value', desc: false }]);
     expect(component.getRowIds()).toEqual(['one', 'two']);
     expect(target.textContent).toContain('one,two');
+  });
+
+  it('keeps automatic sorting cycles synchronized with controlled state', () => {
+    component = mount(DataTableTestHost, { target });
+    flushSync();
+
+    component.toggleValueSorting();
+    flushSync();
+    expect(component.getSorting()).toEqual([{ id: 'value', desc: true }]);
+
+    component.toggleValueSorting();
+    flushSync();
+    expect(component.getSorting()).toEqual([{ id: 'value', desc: false }]);
+
+    component.toggleValueSorting();
+    flushSync();
+    expect(component.getSorting()).toEqual([]);
+  });
+
+  it('cycles a string column from descending through none, ascending, and descending', () => {
+    component = mount(DataTableTestHost, {
+      target,
+      props: { initialSorting: [{ id: 'id', desc: true }] },
+    });
+    flushSync();
+
+    component.toggleIdSorting();
+    flushSync();
+    expect(component.getSorting()).toEqual([]);
+    expect(component.getIdSortState()).toBe(false);
+    expect(target.querySelector('output')?.dataset.idSort).toBe('none');
+
+    component.toggleIdSorting();
+    flushSync();
+    expect(component.getSorting()).toEqual([{ id: 'id', desc: false }]);
+    expect(component.getIdSortState()).toBe('asc');
+    expect(target.querySelector('output')?.dataset.idSort).toBe('asc');
+
+    component.toggleIdSorting();
+    flushSync();
+    expect(component.getSorting()).toEqual([{ id: 'id', desc: true }]);
+    expect(component.getIdSortState()).toBe('desc');
+    expect(target.querySelector('output')?.dataset.idSort).toBe('desc');
   });
 
   it('reacts to internally owned column visibility while preserving table identity', () => {

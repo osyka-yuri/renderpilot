@@ -32,7 +32,7 @@
       }}
       aria-label={openLabel}
     >
-      <PanelRightOpenIcon class="size-4" aria-hidden="true" />
+      <PanelRightOpenIcon class="size-4 rtl:rotate-180" aria-hidden="true" />
     </TooltipTrigger>
     <TooltipContent>{openLabel}</TooltipContent>
   </Tooltip>

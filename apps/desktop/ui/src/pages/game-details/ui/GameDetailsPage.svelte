@@ -254,11 +254,14 @@
   }
 </script>
 
-<section class="flex h-full min-h-0 flex-col overflow-hidden">
+<section class="flex h-full min-h-0 flex-col overflow-hidden" aria-labelledby="game-details-title">
+  <h1 id="game-details-title" class="sr-only">
+    {details?.game.identity.title ?? t('nav.gameFallback')}
+  </h1>
   {#if !details}
     <Card>
       <CardContent>
-        <CardTitle>{t('gameDetails.noGameSelected.title')}</CardTitle>
+        <CardTitle level={2}>{t('gameDetails.noGameSelected.title')}</CardTitle>
         <CardDescription>
           {t('gameDetails.noGameSelected.description')}
         </CardDescription>
@@ -269,7 +272,7 @@
     <Tabs bind:value={selectedTab} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
         {#if tabs.values.length > 0}
-          <TabsList>
+          <TabsList aria-label={details.game.identity.title}>
             {#each vendorTabs as tab (tab.key)}
               <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
             {/each}
@@ -279,7 +282,7 @@
           </TabsList>
         {/if}
 
-        <div class="ml-auto flex flex-wrap items-center gap-2">
+        <div class="ms-auto flex flex-wrap items-center gap-2">
           {#if showProgress && downloadCount > 0}
             <div class="w-16">
               <Progress

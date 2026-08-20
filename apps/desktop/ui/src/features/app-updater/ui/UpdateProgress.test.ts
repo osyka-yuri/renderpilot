@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 
 import { setLanguageMode } from '@shared/i18n';
@@ -24,6 +24,7 @@ describe('UpdateProgress', () => {
       await unmount(component);
       component = undefined;
     }
+    vi.useRealTimers();
     target.remove();
   });
 
@@ -49,6 +50,7 @@ describe('UpdateProgress', () => {
     expect(progress?.getAttribute('aria-valuemax')).toBe('1');
     expect(progress?.getAttribute('aria-valuenow')).toBe('0.6');
     expect(progress?.getAttribute('aria-valuetext')).toBe('60%');
+    expect(target.querySelector('p')?.hasAttribute('aria-hidden')).toBe(false);
 
     await setLanguageMode('ru');
     flushSync();
@@ -77,5 +79,33 @@ describe('UpdateProgress', () => {
     expect(progress?.getAttribute('aria-label')).toBe('Download progress');
     expect(progress?.hasAttribute('aria-valuenow')).toBe(false);
     expect(progress?.hasAttribute('aria-valuetext')).toBe(false);
+  });
+
+  it('announces phase changes once while the progress bar owns percentage semantics', async () => {
+    vi.useFakeTimers();
+    component = mount(UpdateProgress, {
+      target,
+      props: {
+        phase: 'verifying',
+        progress: {
+          ratio: 0.25,
+          receivedBytes: 256,
+          totalBytes: 1024,
+          networkFinished: true,
+        },
+      },
+    });
+    flushSync();
+
+    const announcers = target.querySelectorAll('[role="status"]');
+    const progress = target.querySelector('[data-slot="progress"]');
+    expect(announcers).toHaveLength(1);
+    expect(announcers[0]?.textContent).toBe('');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(announcers[0]?.textContent).toBe('Verifying update…');
+    expect(target.querySelectorAll('[aria-live]').length).toBe(1);
+    expect(target.textContent).toContain('25%');
+    expect(progress?.getAttribute('aria-valuetext')).toBe('25%');
+    expect(progress?.getAttribute('aria-valuenow')).toBe('0.25');
   });
 });

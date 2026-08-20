@@ -1,5 +1,6 @@
 import { invokeDesktop } from '@shared/api';
 import { requireNonBlankString, requireString } from '@shared/validation';
+import type { CatalogBooleanSettingKey } from '../model/catalog-setting-keys';
 import type { CatalogSettingPayload } from '../model/view-model';
 
 export async function getCatalogSetting(key: string): Promise<CatalogSettingPayload> {
@@ -13,4 +14,11 @@ export async function setCatalogSetting(key: string, value: string): Promise<{ s
     key: requireNonBlankString(key, 'key'),
     value: requireString(value, 'value'),
   });
+}
+
+export function setCatalogBooleanSetting(
+  key: CatalogBooleanSettingKey,
+  value: boolean,
+): Promise<{ saved: boolean }> {
+  return setCatalogSetting(key, value ? 'true' : 'false');
 }

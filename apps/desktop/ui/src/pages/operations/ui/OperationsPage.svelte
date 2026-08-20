@@ -156,7 +156,7 @@
     {:else if !hasOperations}
       <Card>
         <CardContent>
-          <CardTitle>{t('operations.empty')}</CardTitle>
+          <CardTitle level={2}>{t('operations.empty')}</CardTitle>
         </CardContent>
       </Card>
     {:else}

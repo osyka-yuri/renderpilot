@@ -8,6 +8,7 @@ import type {
   GameSummary,
   RemoveGameFromCatalogResult,
 } from '@entities/game';
+import type { EffectiveExecutable, ExecutableCandidate } from '@features/nvapi-settings';
 import type { CatalogSettingPayload } from '@entities/settings';
 import type {
   ApplySwapResult,
@@ -31,6 +32,7 @@ import { isRecord, isString, requireNonBlankString } from '@shared/validation';
 type PayloadRecord = Record<PropertyKey, unknown>;
 
 export type DesktopCommandPayloadMap = {
+  portable_trial_ready: undefined;
   inspect_game_install: { path: string };
   add_game: {
     selectedRoot: string;
@@ -46,6 +48,10 @@ export type DesktopCommandPayloadMap = {
   bootstrap_games_catalog: { limit: number };
   start_background_refresh: undefined;
   get_game_details: { gameId: string };
+  list_game_executable_candidates: { gameId: string };
+  resolve_game_executable: { gameId: string };
+  set_game_executable_override: { gameId: string; absolutePath: string };
+  clear_game_executable_override: { gameId: string };
   fetch_game_cover: { gameId: string };
   clear_game_cover: { gameId: string };
   set_game_cover: { gameId: string; sourcePath: string };
@@ -98,6 +104,7 @@ export type DesktopCommandPayloadMap = {
 };
 
 export type DesktopCommandResultMap = {
+  portable_trial_ready: undefined;
   inspect_game_install: AddGameInspection;
   add_game: AddGameResult;
   scan_auto_libraries: AutoScanResponse;
@@ -107,6 +114,10 @@ export type DesktopCommandResultMap = {
   bootstrap_games_catalog: GamesCatalogBootstrap;
   start_background_refresh: { started: boolean; partialFailureCount: number };
   get_game_details: GameDetails;
+  list_game_executable_candidates: ExecutableCandidate[];
+  resolve_game_executable: EffectiveExecutable | null;
+  set_game_executable_override: undefined;
+  clear_game_executable_override: undefined;
   fetch_game_cover: CoverArtworkResult;
   clear_game_cover: { cleared: boolean };
   set_game_cover: CoverArtworkResult;
@@ -153,6 +164,7 @@ export type DesktopCommandResultMap = {
 export type DesktopCommand = keyof DesktopCommandPayloadMap & keyof DesktopCommandResultMap;
 
 const ALL_DESKTOP_COMMANDS = [
+  'portable_trial_ready',
   'inspect_game_install',
   'add_game',
   'scan_auto_libraries',
@@ -162,6 +174,10 @@ const ALL_DESKTOP_COMMANDS = [
   'bootstrap_games_catalog',
   'start_background_refresh',
   'get_game_details',
+  'list_game_executable_candidates',
+  'resolve_game_executable',
+  'set_game_executable_override',
+  'clear_game_executable_override',
   'fetch_game_cover',
   'clear_game_cover',
   'set_game_cover',

@@ -50,12 +50,13 @@ describe('GameCardActionsMenu catalog removal', () => {
     flushSync();
     await tick();
 
-    button(t('game.card.menu.removeFromCatalog')).click();
+    menuAction(t('game.card.menu.removeFromCatalog')).click();
     await vi.waitFor(() => {
-      expect(document.body.textContent).toContain(t('game.card.removeConfirm.description'));
+      const confirmationDialog = document.querySelector('[role="alertdialog"]');
+      expect(confirmationDialog).not.toBeNull();
+      expect(confirmationDialog?.textContent).toContain(t('game.card.removeConfirm.description'));
     });
     expect(onRemoveFromCatalog).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-removal-actions]')).toBeNull();
 
     const confirmationActions = buttons(t('game.card.removeConfirm.action'));
     const confirm = confirmationActions.pop();
@@ -82,7 +83,7 @@ describe('GameCardActionsMenu catalog removal', () => {
     });
     flushSync();
 
-    button(t('game.card.menu.removeFromCatalog')).click();
+    menuAction(t('game.card.menu.removeFromCatalog')).click();
     await vi.waitFor(() => {
       expect(document.body.textContent).toContain(t('game.card.removeConfirm.description'));
     });
@@ -119,7 +120,7 @@ describe('GameCardActionsMenu catalog removal', () => {
     });
     flushSync();
 
-    button(t('game.card.menu.removeFromCatalog')).click();
+    menuAction(t('game.card.menu.removeFromCatalog')).click();
     await vi.waitFor(() => {
       expect(document.body.textContent).toContain(t('game.card.removeConfirm.description'));
     });
@@ -146,15 +147,15 @@ describe('GameCardActionsMenu catalog removal', () => {
     await tick();
 
     expect(
-      [...document.body.querySelectorAll('button')].some(
+      [...document.body.querySelectorAll('button, [role="menuitem"]')].some(
         (candidate) => candidate.textContent.trim() === t('game.card.menu.removeFromCatalog'),
       ),
     ).toBe(false);
   });
 });
 
-function button(label: string): HTMLButtonElement {
-  const found = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+function menuAction(label: string): HTMLElement {
+  const found = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
     (candidate) => candidate.textContent.trim() === label,
   );
   if (!found) {

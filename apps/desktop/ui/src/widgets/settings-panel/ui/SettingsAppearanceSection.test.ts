@@ -69,6 +69,7 @@ describe('SettingsAppearanceSection language loading state', () => {
     expect(trigger?.disabled).toBe(false);
     expect(trigger?.getAttribute('aria-busy')).toBe('true');
     expect(trigger?.textContent).toContain('Русский');
-    expect(trigger?.querySelector('[role="status"]')).not.toBeNull();
+    expect(trigger?.querySelector('[aria-hidden="true"].animate-spin')).not.toBeNull();
+    expect(trigger?.querySelector('[role="status"]')).toBeNull();
   });
 });

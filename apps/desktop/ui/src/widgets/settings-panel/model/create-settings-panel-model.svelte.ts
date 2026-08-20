@@ -13,7 +13,12 @@ import {
   type CoverSourceToggleRow,
   type SettingsArtworkState,
 } from '@features/settings-artwork';
-import { getCatalogSetting, setCatalogSetting, type SettingsMessageKind } from '@entities/settings';
+import {
+  getCatalogSetting,
+  setCatalogBooleanSetting,
+  setCatalogSetting,
+  type SettingsMessageKind,
+} from '@entities/settings';
 import { createDisposableRequestChannel } from '@shared/requests';
 
 export type SettingsPanelModel = ReturnType<typeof createSettingsPanelModel>;
@@ -59,7 +64,7 @@ export function createSettingsPanelModel() {
   const artworkContext: ArtworkControllerContext = {
     request: artworkRequest,
     getCatalogSetting,
-    setCatalogSetting,
+    setCatalogBooleanSetting,
     state: {
       readState: () => artworkState,
       writeState: (nextState: SettingsArtworkState) => {

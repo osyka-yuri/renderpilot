@@ -13,6 +13,13 @@ export {
 } from './breadcrumb';
 export { Button, buttonVariants } from './button';
 export {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './dropdown-menu';
+export {
   Dialog,
   DialogClose,
   DialogContent,
@@ -59,6 +66,7 @@ export { Label } from './label';
 export { Popover, PopoverClose, PopoverContent, PopoverPortal, PopoverTrigger } from './popover';
 export { Progress } from './progress';
 export { DownloadProgressBar } from './download-progress-bar';
+export { LiveAnnouncer } from './live-announcer';
 export { ScrollArea, ScrollAreaScrollbar } from './scroll-area';
 
 export {
@@ -115,6 +123,7 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
+  useSidebar,
 } from './sidebar';
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs';
 export {

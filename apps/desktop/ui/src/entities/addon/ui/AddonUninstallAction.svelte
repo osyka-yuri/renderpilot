@@ -66,7 +66,7 @@
   type="button"
   variant="destructive"
   size="sm"
-  class="ml-auto"
+  class="ms-auto"
   {disabled}
   aria-haspopup="dialog"
   aria-expanded={open}

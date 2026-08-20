@@ -11,6 +11,15 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'nav.donate': 'Donar',
   'shell.refresh': 'Actualizar',
   'shell.updateAvailable': 'Actualización disponible',
+  'nav.skipToContent': 'Saltar al contenido',
+  'nav.primaryLabel': 'Navegación principal',
+  'nav.breadcrumbLabel': 'Ruta de navegación',
+  'shell.sidebar.toggle': 'Alternar barra lateral',
+  'shell.sidebar.title': 'Navegación',
+  'shell.sidebar.description': 'Navegación principal de la aplicación.',
+  'shell.notifications.regionLabel': 'Notificaciones',
+  'shell.notifications.close': 'Cerrar notificación',
+  'shell.pageTitle': '{page} — RenderPilot',
 
   'settings.appearance.title': 'Apariencia',
   'settings.appearance.description': 'Personaliza el aspecto de la aplicación y el idioma.',
@@ -48,7 +57,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'settings.nvidia.indicator.systemWide': 'En todo el sistema',
   'settings.nvidia.indicator.overlayTitle': 'Superposición en pantalla',
   'settings.nvidia.indicator.overlayDescription': 'Se aplica a todos los juegos en esta PC.',
-  'settings.nvidia.indicator.toggleAria': 'Alternar indicador DLSS',
+  'settings.nvidia.indicator.toggleLabel': 'Alternar indicador DLSS',
   'settings.nvidia.global.title': 'Ajustes globales de DLSS',
   'settings.nvidia.global.description':
     'Valores predeterminados aplicados a cada juego sin anulación específica, mediante el perfil base de NVIDIA.',
@@ -61,7 +70,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     'Estos ajustes requieren una tarjeta gráfica NVIDIA compatible.',
 
   'game.card.action.details': 'Detalles',
-  'game.card.action.detailsAria': 'Abrir detalles de {title}',
+  'game.card.action.detailsLabel': 'Abrir detalles de {title}',
   'game.card.detectedLibraries': 'Componentes detectados',
   'game.card.availableAddons': 'Complementos disponibles',
   'game.card.badge.upToDate': 'Actualizado',
@@ -71,7 +80,9 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     many: '{count} actualizaciones disponibles',
     other: '{count} actualizaciones disponibles',
   }),
-  'game.card.menu.ariaLabel': 'Opciones para {title}',
+  'game.card.status.favorite': 'Favorito',
+  'game.card.status.hidden': 'Oculto',
+  'game.card.menu.label': 'Opciones para {title}',
   'game.card.menu.favorite.add': 'Añadir a favoritos',
   'game.card.menu.favorite.remove': 'Eliminar de favoritos',
   'game.card.menu.favorite.toggleHint': 'Alternar el estado de favorito para este juego.',
@@ -233,7 +244,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
 
   'settings.catalog.title': 'Fuentes de carátulas',
   'settings.catalog.description': 'Selecciona fuentes en línea para descargar carátulas de juegos.',
-  'settings.catalog.steamKey.srLabel': 'Clave API de SteamGridDB',
+  'settings.catalog.steamKey.inputLabel': 'Clave API de SteamGridDB',
   'settings.catalog.steamKey.placeholder': 'Clave API',
   'settings.catalog.steamKey.loading': 'Cargando…',
   'settings.catalog.steamKey.save': 'Guardar',
@@ -256,6 +267,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
 
   'common.unknown': 'Desconocido',
   'common.downloadProgress': 'Progreso de descarga',
+  'common.close': 'Cerrar',
 
   'gameDetails.noGameSelected.title': 'Ningún juego seleccionado',
   'gameDetails.noGameSelected.description': 'Selecciona un juego del panel para ver sus detalles.',
@@ -282,7 +294,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'gameDetails.streamline.mixed': 'Versiones mixtas',
   'gameDetails.streamline.mixedRange': 'Versiones mixtas (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} actualizaciones · {missing} faltantes',
-  'gameDetails.streamline.restoreAllAria': 'Restaurar todos los complementos a su estado original',
+  'gameDetails.streamline.restoreAllLabel': 'Restaurar todos los complementos a su estado original',
   'gameDetails.streamline.restoreAllTooltip': 'Restaurar todo a su estado original',
   'gameDetails.updateAll.action': 'Actualizar todo',
   'gameDetails.updateAll.actionCount': 'Actualizar todo ({count})',
@@ -295,6 +307,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     other: 'Actualizar {count} componentes a sus últimas versiones estables',
   }),
   'gameDetails.executable.title': 'Ejecutable del juego',
+  'gameDetails.executable.groupLabel': 'Ejecutables del juego disponibles',
   'gameDetails.developerMode.requiredTitle': 'El modo de desarrollador de Windows está desactivado',
   'gameDetails.developerMode.requiredDescription':
     'Microsoft D3D12 Agility Preview requiere esta configuración de Windows.',
@@ -355,7 +368,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     'Sigue las instrucciones de recuperación de la tarjeta D3D12 y vuelve a analizar el juego.',
   'gameDetails.executable.description':
     'El ejecutable del juego: el perfil de NVIDIA se aplica a él y RenoDX se instala en su carpeta.',
-  'gameDetails.executable.triggerAria': 'Ejecutable del juego: {fileName}',
+  'gameDetails.executable.triggerLabel': 'Ejecutable del juego: {fileName}',
   'gameDetails.executable.detectedGroup': 'Ejecutables del juego detectados',
   'gameDetails.executable.otherGroup': 'Otros (lanzadores, instaladores, herramientas)',
   'gameDetails.executable.customBadge': 'Manual',
@@ -377,7 +390,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'gameDetails.nvapi.unavailable': 'no disponible',
   'gameDetails.nvapi.resetDefault': 'Restablecer por defecto',
   'gameDetails.nvapi.alreadyDefault': 'Ya es por defecto',
-  'gameDetails.nvapi.restoreBaselineAria': 'Restaurar valor inicial',
+  'gameDetails.nvapi.restoreBaselineLabel': 'Restaurar valor inicial',
   'gameDetails.nvapi.restoreBaseline': 'Restaurar valor inicial',
   'gameDetails.nvapi.alreadyBaseline': 'Ya en el valor inicial',
   'gameDetails.nvapi.noBaseline': 'Ningún valor inicial guardado',
@@ -416,14 +429,15 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'libraries.state.missing': 'Faltan archivos',
   'libraries.state.corrupt': 'Archivos dañados',
   'libraries.hash.copy': 'Copiar hash',
+  'libraries.hash.copyVersion': 'Copiar hash de {version}',
   'libraries.hash.copied': 'Copiado',
   'libraries.hash.failed': 'Error al copiar',
   'libraries.hash.copiedToast': 'Hash copiado al portapapeles',
-  'libraries.sort.asc': 'Orden ascendente',
-  'libraries.sort.desc': 'Orden descendente',
-  'libraries.sort.none': 'No ordenado',
+  'libraries.sort.byColumn': 'Ordenar por {label}',
   'libraries.actions.delete': 'Eliminar',
   'libraries.actions.download': 'Descargar',
+  'libraries.actions.deleteVersion': 'Eliminar {version}',
+  'libraries.actions.downloadVersion': 'Descargar {version}',
   'libraries.actions.deletedToast': 'Eliminado {version}',
   'libraries.actions.downloadedToast': 'Descargado {version}',
   'libraries.actions.failedToast': 'No se pudo {action}',
@@ -442,6 +456,9 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   }),
   'libraries.actions.downloadAllPartialToast': '{succeeded} descargadas, {failed} con error',
   'libraries.actions.downloadAllNoneToast': 'Todas las últimas versiones ya están descargadas',
+  'libraries.filters.vendorLabel': 'Proveedores de bibliotecas',
+  'libraries.filters.typeLabel': 'Tipos de bibliotecas',
+  'libraries.table.caption': 'Versiones de bibliotecas {vendor} {type}',
 
   'common.cancel': 'Cancelar',
   'common.apply': 'Aplicar',
@@ -449,7 +466,26 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'filters.title': 'Filtros',
   'filters.launchers.title': 'Lanzadores',
   'filters.launchers.empty': 'No se encontraron lanzadores',
-  'filters.launchers.reorder': 'Mover {label}',
+  'filters.launchers.reorder.instructions':
+    'Para reordenar un iniciador, enfoca su botón de movimiento, pulsa Espacio o Intro, usa las flechas y pulsa Espacio o Intro para soltarlo. Escape cancela.',
+  'filters.launchers.reorder.move': 'Mover {label}, posición {position} de {total}',
+  'filters.launchers.reorder.zoneLabel': 'Zona para reordenar lanzadores',
+  'filters.launchers.reorder.itemLabel': 'Lanzador {label}',
+  'filters.launchers.reorder.dragStarted':
+    '{itemLabel} recogido en {zoneLabel}, posición {position} de {count}.',
+  'filters.launchers.reorder.movedToPosition':
+    '{itemLabel} movido a la posición {position} de {count}.',
+  'filters.launchers.reorder.movedToZoneStart': '{itemLabel} movido al inicio de {zoneLabel}.',
+  'filters.launchers.reorder.movedToZoneEnd': '{itemLabel} movido al final de {zoneLabel}.',
+  'filters.launchers.reorder.droppedAnnouncement':
+    '{itemLabel} soltado en {zoneLabel}, posición {position} de {count}.',
+  'filters.launchers.reorder.zoneActiveInstruction':
+    'Usa Espacio o Intro para recoger un elemento y las flechas para moverlo.',
+  'filters.launchers.reorder.zoneDragDisabledInstruction': 'No se puede reordenar los lanzadores.',
+  'filters.launchers.reorder.pickedUp': '{label} seleccionado, posición {position} de {total}.',
+  'filters.launchers.reorder.moved': '{label} movido a la posición {position} de {total}.',
+  'filters.launchers.reorder.dropped': '{label} soltado en la posición {position} de {total}.',
+  'filters.launchers.reorder.cancelled': 'Se canceló la reordenación de {label}.',
   'filters.libraries.title': 'Componentes',
   'filters.libraries.empty': 'No se encontraron componentes',
   'filters.addons.title': 'Complementos',
@@ -481,7 +517,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     many: '{count} archivos restaurados.',
     other: '{count} archivos restaurados.',
   }),
-  'operation.itemAria': '{kind}, {status}',
+  'operation.itemLabel': '{kind}, {status}',
 
   'notify.stalePlan': 'El plan de operación está desactualizado. Por favor, inténtalo de nuevo.',
   'notify.missingStableGameId': 'No se pudo identificar el juego.',
@@ -564,13 +600,13 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'libraries.error.deletedRefreshFailed':
     'Biblioteca eliminada, pero no se pudo actualizar el estado',
 
-  'settings.catalog.source.steam.aria': 'Descargar carátulas de Steam',
+  'settings.catalog.source.steam.actionLabel': 'Descargar carátulas de Steam',
   'settings.catalog.source.steam.title': 'Steam',
   'settings.catalog.source.steam.description': 'Descarga carátulas del catálogo público de Steam.',
-  'settings.catalog.source.gog.aria': 'Descargar carátulas de GOG',
+  'settings.catalog.source.gog.actionLabel': 'Descargar carátulas de GOG',
   'settings.catalog.source.gog.title': 'GOG',
   'settings.catalog.source.gog.description': 'Descarga carátulas del catálogo oficial de GOG.',
-  'settings.catalog.source.steamgriddb.aria': 'Descargar carátulas de SteamGridDB',
+  'settings.catalog.source.steamgriddb.actionLabel': 'Descargar carátulas de SteamGridDB',
   'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
   'settings.catalog.source.steamgriddb.description':
     'Descarga carátulas de la comunidad desde SteamGridDB. Requiere una clave API.',
@@ -681,7 +717,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'settings.about.updateDialog.restartRequiredDescription':
     'La actualización se instaló, pero la aplicación no pudo reiniciarse automáticamente. Reinicia RenderPilot manualmente para finalizar la actualización.',
 
-  'settings.about.updateDialog.progressAria': 'Progreso de descarga',
+  'settings.about.updateDialog.progressLabel': 'Progreso de descarga',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':
