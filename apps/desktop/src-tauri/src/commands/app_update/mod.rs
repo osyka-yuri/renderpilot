@@ -20,11 +20,19 @@ use tauri::ipc::Channel;
 
 use super::{CommandBoundary, CommandError, error::CommandErrorKind};
 
+const APP_UPDATES_ENABLED: bool = !cfg!(dev);
+
 #[tauri::command]
 pub async fn app_update_check(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppUpdateState>,
 ) -> UpdateResult<Option<AppUpdateCheckResponse>> {
+    // A Tauri dev shell runs the current source tree and is not an installed
+    // update target. Keep it entirely outside the production updater lifecycle.
+    if !APP_UPDATES_ENABLED {
+        return Ok(None);
+    }
+
     let boundary = CommandBoundary::new(CommandOperation::AppUpdateCheck);
     async {
         portable_request_open()?;
@@ -172,6 +180,12 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[cfg(dev)]
+    #[test]
+    fn development_build_disables_application_updates() {
+        const { assert!(!APP_UPDATES_ENABLED) };
+    }
 
     #[test]
     fn updater_boundary_registers_diagnostics_without_expanding_the_wire_shape() {
