@@ -12,6 +12,8 @@ Before applying a choice, review the affected paths and any warnings. Games can 
 
 Planning reads the current files and prepares a state-specific operation. Applying repeats the important checks, saves the original baseline when one does not already exist, and replaces the selected files. If the files changed after planning, create a new plan.
 
+Library replacements participate in the same [game-file safety](game-file-safety.md) flow as other file-changing features. Game Details presents the multiplayer and anti-cheat context once for the selected game rather than repeating it beside each component action.
+
 Rollback has its own preview and lists every affected path. It restores the verified original baseline, not merely the version that happened to be installed immediately before the most recent update. The Operations view retains a readable history of completed swaps and rollbacks. Keep RenderPilot's data until you no longer need that recovery path.
 
 For the implementation protocol behind preflight, baselines, and recovery, see [Mutation safety and storage](../development/safety-and-storage.md).

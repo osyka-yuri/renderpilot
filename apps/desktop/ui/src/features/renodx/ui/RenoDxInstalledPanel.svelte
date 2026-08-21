@@ -57,7 +57,7 @@
   const dlssFix = $derived(store.dlssFix);
 
   function handleRepair(): void {
-    void store.install(gameId, store.selectedReshadeChannel, false);
+    void store.install(gameId, store.selectedReshadeChannel);
   }
 
   function handleSwitchChannel(channel: ReshadeChannel): void {

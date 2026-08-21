@@ -12,7 +12,6 @@
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import { RENODX_ATTRIBUTION } from '../model/attribution';
   import type { ReshadeChannel } from '@entities/addon';
-  import { riskMessage } from '../model/reshade-presenters';
   import RenoDxChannelControl from './RenoDxChannelControl.svelte';
 
   type Props = {
@@ -26,16 +25,6 @@
   const RENODX_INSTALLABLE_LABELS = createInstallableLabels('gameDetails.renodx');
   const CONFIDENCE_LABEL_KEY = createConfidenceLabelKeys('gameDetails.renodx');
 
-  const riskText = $derived.by((): string => {
-    const risk = store.risk;
-
-    if (!risk) {
-      return '';
-    }
-
-    return riskMessage(risk);
-  });
-
   const genericProfileLabel = $derived.by((): string | null => {
     const profile = store.genericProfile;
     return profile
@@ -46,8 +35,8 @@
       : null;
   });
 
-  function onInstall(gid: string, force: boolean): void {
-    void store.install(gid, store.selectedReshadeChannel, force);
+  function onInstall(gid: string): void {
+    void store.install(gid, store.selectedReshadeChannel);
   }
 
   function setChannel(channel: ReshadeChannel): void {
@@ -62,7 +51,6 @@
   labels={RENODX_INSTALLABLE_LABELS}
   confidenceLabelKey={CONFIDENCE_LABEL_KEY}
   {onInstall}
-  {riskText}
 >
   {#snippet confidenceTrailing()}
     {#if genericProfileLabel}

@@ -6,6 +6,7 @@ export type SwapRequest = {
   artifactId: string;
   isDownloaded: boolean;
   confirmationToken?: string | null;
+  gameContextToken?: string;
 };
 
 /** Immutable component/artifact selection captured before preflight. */

@@ -704,6 +704,12 @@ export const en = defineSourceCatalog({
   'user_message.access_denied': 'Access was denied. Check your permissions and try again.',
   'user_message.nvapi_catalog_not_ready':
     'Rescan the game before changing DLL-dependent NVIDIA settings.',
+  'user_message.safety_context_missing':
+    'The file-safety check is not ready. Refresh the assessment before trying again.',
+  'user_message.safety_context_stale':
+    'The file-safety assessment is outdated. Refresh it before trying again.',
+  'user_message.safety_context_scope_mismatch':
+    'The file-safety assessment belongs to a different resource. Refresh it before trying again.',
 
   // ── Backend suggested actions ──
   'suggested_action.refresh_games': 'Refresh the games list and try again.',
@@ -715,6 +721,7 @@ export const en = defineSourceCatalog({
   'suggested_action.retry_or_restart': 'If the problem persists, try restarting the app.',
   'suggested_action.rebuild_operation_plan': 'Please restart the action.',
   'suggested_action.refresh_or_scan_game_folder': 'Refresh the list or scan the folder again.',
+  'suggested_action.reload_file_safety': 'Refresh the file-safety assessment and try again.',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':
@@ -738,7 +745,6 @@ export const en = defineSourceCatalog({
     'This removes the RenoDX add-on and restores only ReShade files that were changed during RenoDX setup.',
   'gameDetails.renodx.uninstallConfirmAction': 'Remove',
   'gameDetails.renodx.installing': 'Installing…',
-  'gameDetails.renodx.confirmTitle': 'Install RenoDX despite anti-cheat risk?',
   'gameDetails.renodx.cancel': 'Cancel',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.title': 'Shared Vulkan layer',
@@ -880,21 +886,17 @@ export const en = defineSourceCatalog({
   'gameDetails.renodx.attribution': 'RenoDX by clshortfuse.',
   'gameDetails.renodx.attributionLink': 'View project',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
-  'gameDetails.addon.riskSafe': 'No anti-cheat detected — safe to install.',
-  'gameDetails.addon.riskWarn': 'Anti-cheat detected — installing may risk a ban.',
-  'addon.risk.sp_safe':
-    'No known anti-cheat signatures were found — installing {addonName} is likely safe, but not guaranteed.',
-  'addon.risk.anticheat_detected':
-    'Anti-cheat signatures were detected — installing {addonName} may risk a ban.',
-  'gameDetails.addon.confirmAccept': 'Install anyway',
-  'gameDetails.addon.confirmBody':
-    'This game uses anti-cheat. The ReShade add-on may trigger it and get you banned. Continue at your own risk.',
-  'gameDetails.addon.fullAddonWarning':
-    'ReShade full add-on support can be unsafe for multiplayer or anti-cheat protected games.',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     '{installedAddon} is installed for this game — uninstall it before installing {blockedAddon}.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
     '{installedAddon} files were found on disk for this game — remove them before installing {blockedAddon}.',
+  'gameDetails.fileSafety.generic':
+    'Changes to multiplayer game files may result in account restrictions or a ban.',
+  'gameDetails.fileSafety.detectedOne':
+    '{engine} detected. Changes to game files may result in account restrictions or a ban.',
+  'gameDetails.fileSafety.detectedMany':
+    'Anti-cheat detected: {engines}. Changes to game files may result in account restrictions or a ban.',
+  'gameDetails.fileSafety.loadError': 'Could not check file-change risks',
   'addon.availability.loadFailed': 'Could not check',
   'addon.availability.retry': 'Retry',
   'addon.availability.checking': 'Checking…',
@@ -929,7 +931,6 @@ export const en = defineSourceCatalog({
   'gameDetails.luma.uninstallConfirmBody':
     'This removes Luma. If Luma owns the DLSS DLL, its Library Swap is rolled back and the exact pre-Luma baseline is restored. Reused DLLs and independent swaps stay unchanged.',
   'gameDetails.luma.uninstallConfirmAction': 'Remove',
-  'gameDetails.luma.confirmTitle': 'Install Luma despite anti-cheat risk?',
   'gameDetails.luma.vcredistWarning':
     'A recent Visual C++ Redistributable may be missing on this system. If Luma fails to load, install the redistributable.',
   'gameDetails.luma.vcredistLink': 'Download the redistributable',

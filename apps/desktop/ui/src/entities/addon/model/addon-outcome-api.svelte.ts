@@ -48,12 +48,6 @@ export function commonOutcomeApi<O extends { kind: string }>(outcome: () => O | 
     get blacklistMessage() {
       return common.blacklistMessage;
     },
-    get risk() {
-      return common.risk;
-    },
-    get requiresConfirmation() {
-      return common.requiresConfirmation;
-    },
   };
 }
 

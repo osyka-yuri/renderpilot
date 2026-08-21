@@ -1,6 +1,6 @@
 //! Commands for the shared ReShade Vulkan layer lifecycle.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{Architecture, SharedArtifactOrigin};
 
@@ -17,30 +17,103 @@ use crate::addons::vulkan_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
-use super::update_reshade::UpdateReShadeCommand;
+use super::update_reshade::PreparedReShadeUpdate;
 
-/// Ensures the shared Vulkan host is ready for this install.
-///
-/// Returns `true` only when this call downloaded the host, allowing the caller
-/// to place the following add-on download in the next operation-progress stage.
-pub(crate) async fn ensure_for_install(
-    context: &Context,
-    plan: &ResolvedInstall,
-    reshade_config: &ReshadeSourceCatalog,
-    channel: ReshadeChannel,
-    allow_shared_vulkan_layer_install: bool,
-    exe_path: Option<&Path>,
-    progress: Option<&ProgressObserver<'_>>,
-) -> Result<bool, ServiceError> {
-    if !matches!(plan.host_kind, HostKind::Vulkan) {
-        return Ok(false);
+pub(crate) struct PrepareInstallRequest<'a> {
+    pub plan: &'a ResolvedInstall,
+    pub reshade_config: &'a ReshadeSourceCatalog,
+    pub channel: ReshadeChannel,
+    pub allow_shared_vulkan_layer_install: bool,
+    pub exe_path: Option<&'a Path>,
+    pub progress: Option<&'a ProgressObserver<'a>>,
+}
+
+/// A shared-layer change prepared without mutation locks or forward writes.
+pub(crate) enum PreparedInstallChange {
+    NotNeeded,
+    RegisterApp {
+        exe_path: PathBuf,
+        channel: ReshadeChannel,
+    },
+    Install {
+        exe_path: PathBuf,
+        source: crate::addons::reshade::source::ReshadeSource,
+        download: crate::addons::reshade::fetch::Download,
+        installing_from_scratch: bool,
+    },
+}
+
+impl PreparedInstallChange {
+    #[must_use]
+    pub(crate) const fn mutates_shared_resource(&self) -> bool {
+        !matches!(self, Self::NotNeeded)
     }
-    let exe_path = exe_path.ok_or_else(|| {
+
+    /// Applies the prepared change. The caller must invoke this from the
+    /// combined game/shared authority commit closure.
+    pub(crate) fn commit(self, context: &Context) -> Result<bool, ServiceError> {
+        match self {
+            Self::NotNeeded => Ok(false),
+            Self::RegisterApp { exe_path, channel } => {
+                vulkan::register_app(&exe_path)?;
+                record_shared_layer_best_effort(vulkan::record_detected_layer(
+                    context.storage(),
+                    SharedArtifactOrigin::AdoptedOfficial,
+                    Some(channel),
+                ));
+                Ok(false)
+            }
+            Self::Install {
+                exe_path,
+                source,
+                download,
+                installing_from_scratch,
+            } => {
+                if let Err(error) = vulkan::install_layer(&download.bytes) {
+                    if installing_from_scratch {
+                        cleanup_after_failed_install();
+                    }
+                    return Err(error);
+                }
+                if let Err(error) = vulkan::register_app(&exe_path) {
+                    if installing_from_scratch {
+                        cleanup_after_failed_install();
+                    }
+                    return Err(error);
+                }
+                record_shared_layer_best_effort(vulkan::record_downloaded_layer(
+                    context.storage(),
+                    &source,
+                    &download,
+                    SharedArtifactOrigin::RenderPilotCreated,
+                ));
+                Ok(true)
+            }
+        }
+    }
+}
+
+/// Resolves and downloads any shared Vulkan host change without writing the
+/// layer, application registration, or advisory storage record.
+pub(crate) async fn prepare_for_install(
+    request: PrepareInstallRequest<'_>,
+) -> Result<PreparedInstallChange, ServiceError> {
+    let PrepareInstallRequest {
+        plan,
+        reshade_config,
+        channel,
+        allow_shared_vulkan_layer_install,
+        exe_path,
+        progress,
+    } = request;
+    if !matches!(plan.host_kind, HostKind::Vulkan) {
+        return Ok(PreparedInstallChange::NotNeeded);
+    }
+    let exe_path = exe_path.map(Path::to_path_buf).ok_or_else(|| {
         errors::invalid(
             "cannot install RenoDX for this Vulkan game without a resolved executable".to_owned(),
         )
     })?;
-    let _shared_guard = vulkan_lock::shared_vulkan_lock().await;
     let report = vulkan::layer_report();
     match layer_mutation_gate(&report) {
         LayerMutationGate::ExternalReadOnly => {
@@ -57,13 +130,7 @@ pub(crate) async fn ensure_for_install(
     }
 
     if matches!(report.detection(), VulkanLayerDetection::Installed) {
-        vulkan::register_app(exe_path)?;
-        record_shared_layer_best_effort(vulkan::record_detected_layer(
-            context.storage(),
-            SharedArtifactOrigin::AdoptedOfficial,
-            Some(channel),
-        ));
-        return Ok(false);
+        return Ok(PreparedInstallChange::RegisterApp { exe_path, channel });
     }
 
     // Remaining states after the gate above: NotInstalled, InstalledDisabled, or a
@@ -90,25 +157,12 @@ pub(crate) async fn ensure_for_install(
         report.detection(),
         VulkanLayerDetection::NotInstalled | VulkanLayerDetection::InstalledDisabled
     );
-    if let Err(error) = vulkan::install_layer(&download.bytes) {
-        if installing_from_scratch {
-            cleanup_after_failed_install();
-        }
-        return Err(error);
-    }
-    if let Err(error) = vulkan::register_app(exe_path) {
-        if installing_from_scratch {
-            cleanup_after_failed_install();
-        }
-        return Err(error);
-    }
-    record_shared_layer_best_effort(vulkan::record_downloaded_layer(
-        context.storage(),
-        &source,
-        &download,
-        SharedArtifactOrigin::RenderPilotCreated,
-    ));
-    Ok(true)
+    Ok(PreparedInstallChange::Install {
+        exe_path,
+        source,
+        download,
+        installing_from_scratch,
+    })
 }
 
 /// Best-effort cleanup after a from-scratch layer install fails partway
@@ -130,7 +184,8 @@ fn record_shared_layer_best_effort(result: Result<(), ServiceError>) {
 /// Removes RenderPilot's shared ReShade Vulkan layer (a user maintenance action).
 /// External layers are never touched. Per-game installs are left in place; they simply
 /// stop loading until a layer is present again.
-pub fn remove_vulkan_layer(context: &Context) -> Result<(), ServiceError> {
+pub async fn remove_vulkan_layer(context: &Context) -> Result<(), ServiceError> {
+    let _shared_guard = vulkan_lock::shared_vulkan_lock().await;
     vulkan::remove_layer()?;
     vulkan::forget_layer_record(context.storage());
     Ok(())
@@ -142,20 +197,21 @@ pub async fn apply_vulkan_layer(
     context: &Context,
     reshade_sources: &ReshadeSourceCatalog,
     channel: ReshadeChannel,
+    safety: crate::SharedVulkanSafetyPermit,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<VulkanLayerManagementReport, ServiceError> {
     if !reshade_sources.supports_channel(channel) {
         return Err(errors::channel_unavailable(channel));
     }
 
-    UpdateReShadeCommand {
-        context,
-        reshade_sources,
-        channel,
-        progress,
-    }
-    .execute()
-    .await?;
+    let prepared = PreparedReShadeUpdate::prepare(reshade_sources, channel, progress).await?;
+    let guard = vulkan_lock::shared_vulkan_lock().await;
+    crate::FileSafetyAuthority::new().authorize_shared_vulkan_commit(
+        renderpilot_domain::mutation_features::SHARED_VULKAN_APPLY,
+        &guard,
+        &safety,
+        || prepared.commit(context).map(|_| ()),
+    )?;
 
     Ok(
         crate::addons::renodx::use_cases::queries::vulkan_layer::management_status(
@@ -191,11 +247,19 @@ mod tests {
         reshade_sources.stable = None;
         let dir = tempfile::tempdir().expect("tempdir");
         let context = Context::open_at(dir.path().join("catalog.sqlite")).expect("context");
+        let authority = crate::FileSafetyAuthority::new();
+        let assessment = authority
+            .issue_shared_vulkan_assessment()
+            .expect("assessment");
+        let safety = authority
+            .shared_vulkan_permit(Some(&assessment.context_token))
+            .expect("permit");
 
         let error = poll_ready(apply_vulkan_layer(
             &context,
             &reshade_sources,
             ReshadeChannel::Stable,
+            safety,
             None,
         ))
         .expect_err("unsupported channel should be rejected");

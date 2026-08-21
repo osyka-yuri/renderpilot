@@ -4,7 +4,7 @@ RenderPilot can manage supported RenoDX and Luma installations. Both are indepen
 
 ## RenoDX
 
-RenoDX profiles can add HDR and related rendering controls to supported games. RenderPilot evaluates the selected game, displays match confidence and risk information, and prepares the required RenoDX and ReShade files. Some profiles can use an optional DLSS Frame Generation fix so the ReShade output is handled correctly with generated frames.
+RenoDX profiles can add HDR and related rendering controls to supported games. RenderPilot evaluates the selected game, displays match confidence and host requirements, and prepares the required RenoDX and ReShade files. Some profiles can use an optional DLSS Frame Generation fix so the ReShade output is handled correctly with generated frames.
 
 Where a profile is not distributed from an automatically supported source, RenderPilot can validate a file you downloaded yourself through the file picker or drag-and-drop flow. That path does not make an unknown archive trusted: obtain it from the profile's official distribution channel and verify its instructions.
 
@@ -14,14 +14,13 @@ Luma profiles can provide DirectX 11 upscaling, HDR, and shader replacement for 
 
 Luma and RenoDX are treated as mutually exclusive managed add-ons for a game. Remove the active one before installing the other. Shared ReShade files are tracked so removal can distinguish an add-on's managed files from files that another supported feature still needs.
 
-## Updates, removal, and anti-cheat
+## Updates and removal
 
 Status and update checks use current manifests and, when supported, the add-on's upstream source. A failed remote check can leave the last known information available, but it should not be mistaken for proof that no update exists. Removal previews and reverses files tracked by RenderPilot; unrelated files are not intentionally deleted.
 
-Injectors, shader replacements, DLL proxies, and executable-adjacent modifications may be prohibited by an anti-cheat system or a game's terms. Do not install them for protected multiplayer use unless the game and service explicitly permit the modification. A warning is information, not a guarantee of safety.
+Installing, updating, or repairing an add-on changes files in the selected game and therefore participates in RenderPilot's general [game-file safety](game-file-safety.md) flow. Add-on removal remains available so managed files can be restored even when a fresh safety context cannot be acquired.
 
 ## Sources of truth
 
 - [RenoDX orchestration](../../crates/renderpilot-orchestration/src/addons/renodx/mod.rs)
 - [Luma orchestration](../../crates/renderpilot-orchestration/src/addons/luma/mod.rs)
-- [Anti-cheat detection](../../crates/renderpilot-detection/src/anticheat.rs)

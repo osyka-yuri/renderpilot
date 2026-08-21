@@ -15,9 +15,9 @@ mod pattern;
 mod pe;
 
 pub use anticheat::{
-    AntiCheatEngine, AntiCheatEvidence, AntiCheatEvidenceKind, AntiCheatScanOptions,
-    AntiCheatScanReport, DEFAULT_ANTICHEAT_MAX_SCANNED_ENTRIES, scan_anticheat,
-    scan_anticheat_with_options,
+    AntiCheatEngine, AntiCheatEvidence, AntiCheatEvidenceKind, AntiCheatScanCompleteness,
+    AntiCheatScanOptions, AntiCheatScanReport, DEFAULT_ANTICHEAT_MAX_SCANNED_ENTRIES,
+    scan_anticheat, scan_anticheat_with_options,
 };
 pub use dlss_binary::{DlssBinaryError, DlssBinaryInfo, NVNGX_DLSS_FILE_NAME};
 pub use error::LibraryPatternError;

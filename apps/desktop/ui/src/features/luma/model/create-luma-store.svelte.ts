@@ -5,6 +5,7 @@ import {
   hostSnapshotApi,
   mergeAddonApis,
   type AddonMutationResult,
+  type MutationSafetyTokens,
 } from '@entities/addon';
 
 import { lumaApi, type LumaApi } from '../api/desktop';
@@ -41,6 +42,8 @@ export type LumaStoreOptions = {
    * separate companion add-on and does not need this path.
    */
   onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
+  requireSafetyTokens?: (gameId: string, scope: 'game') => Promise<MutationSafetyTokens>;
+  onSafetyContextError?: (error: unknown, scope: 'game') => void | Promise<void>;
 };
 
 /**
@@ -51,6 +54,8 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
   const api = options.api ?? lumaApi;
   const onExclusivityChange = options.onExclusivityChange;
   const onGameDetailsInvalidate = options.onGameDetailsInvalidate;
+  const requireSafetyTokens = options.requireSafetyTokens;
+  const onSafetyContextError = options.onSafetyContextError;
 
   type RetainedProfileMeta = {
     profile: LumaProfile | null;
@@ -94,6 +99,11 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
     },
     messages: { loadFailed: 'addon.availability.loadFailed' },
     onExclusivityChange,
+    onMutationError: (error) => {
+      if (requireSafetyTokens) {
+        void onSafetyContextError?.(error, 'game');
+      }
+    },
     // Advisory ZIP / dgVoodoo ownership need a passive probe after mutations.
     postMutationProbe: 'passive',
     onMutationSideEffect: onGameDetailsInvalidate
@@ -210,11 +220,19 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
         : [],
   );
 
-  async function install(gameId: string, confirmAnticheat: boolean): Promise<AddonMutationResult> {
-    return core.runBusyMutation(gameId, () => api.install(gameId, confirmAnticheat), {
-      errorKey: 'gameDetails.luma.installError',
-      notifyExclusivity: true,
-    });
+  async function install(gameId: string): Promise<AddonMutationResult> {
+    return core.runBusyMutation(
+      gameId,
+      async () => {
+        const tokens = await requireSafetyTokens?.(gameId, 'game');
+        return tokens ? api.install(gameId, tokens.gameContextToken) : api.install(gameId);
+      },
+      {
+        errorKey: 'gameDetails.luma.installError',
+        safetyScope: 'game',
+        notifyExclusivity: true,
+      },
+    );
   }
 
   async function mutateUpdate(
@@ -223,10 +241,20 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
     requireUpdateAvailable: boolean,
     forceFull: boolean,
   ): Promise<AddonMutationResult> {
-    return core.runBusyMutation(gameId, () => api.update(gameId, { forceFull }), {
-      errorKey,
-      requireUpdateAvailable,
-    });
+    return core.runBusyMutation(
+      gameId,
+      async () => {
+        const tokens = await requireSafetyTokens?.(gameId, 'game');
+        return tokens
+          ? api.update(gameId, { forceFull, gameContextToken: tokens.gameContextToken })
+          : api.update(gameId, { forceFull });
+      },
+      {
+        errorKey,
+        safetyScope: 'game',
+        requireUpdateAvailable,
+      },
+    );
   }
 
   async function update(gameId: string): Promise<AddonMutationResult> {

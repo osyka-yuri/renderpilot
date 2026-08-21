@@ -1,10 +1,12 @@
 //! Sentinel finish semantics and set-diff apply regressions.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
-use renderpilot_application::InstalledAddonRepository;
+use renderpilot_application::{GameRepository, InstalledAddonRepository};
 use renderpilot_domain::{
-    AddonKind, GameId, InstalledAddon, ManagedFileMode, TrackedSource, TrackedSourceRole,
+    AddonKind, GameId, GameIdentity, GameInstallation, GameRuntime, InstalledAddon, Launcher,
+    ManagedFileMode, PathRef, Platform, TrackedSource, TrackedSourceRole,
 };
 use tempfile::tempdir;
 
@@ -61,6 +63,109 @@ fn prepare_update_mutation(
         paths,
     )
     .expect("prepare mutation")
+}
+
+fn seed_safety_game(context: &Context, game_id: &GameId, game_root: &Path) {
+    let game = GameInstallation::new(
+        GameIdentity::new(game_id.clone(), "Luma Safety Test", Launcher::Manual).expect("identity"),
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(game_root.to_string_lossy()).expect("game path"),
+    );
+    context.storage().upsert_game(&game).expect("game");
+}
+
+fn game_safety(context: &Context, game_id: &GameId) -> crate::GameSafetyPermit {
+    let authority = crate::FileSafetyAuthority::new();
+    let assessment = authority
+        .issue_game_assessment(context, game_id)
+        .expect("assessment");
+    authority
+        .game_permit(game_id.clone(), Some(&assessment.context_token))
+        .expect("permit")
+}
+
+#[test]
+fn update_safety_boundary_rejects_missing_stale_and_scope_mismatched_permits_before_writes() {
+    let db_root = tempdir().expect("db root");
+    let game_root = tempdir().expect("game root");
+    let context = Context::open_at(db_root.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("manual:luma-update-safety").expect("game id");
+    seed_safety_game(&context, &game_id, game_root.path());
+    let target = game_root.path().join("Luma-Game.addon");
+
+    let authority = crate::FileSafetyAuthority::new();
+    let missing = authority
+        .game_permit(game_id.clone(), None)
+        .expect_err("missing permit must reject before update writes");
+    assert!(matches!(missing, ServiceError::SafetyContextMissing { .. }));
+    assert!(!target.exists());
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(&game_id)
+            .expect("pending rows")
+            .is_empty()
+    );
+    let assessment = authority
+        .issue_game_assessment(&context, &game_id)
+        .expect("assessment");
+    let permit = authority
+        .game_permit(game_id.clone(), Some(&assessment.context_token))
+        .expect("permit");
+    fs::write(game_root.path().join("EasyAntiCheat"), b"detected marker").expect("marker");
+    let guard = crate::game_mutation_lock::try_lock(&game_id).expect("lock");
+    let stale = authority
+        .authorize_game_commit(
+            &context,
+            crate::addons::mutation_features::LUMA_UPDATE,
+            &guard,
+            &permit,
+            || -> Result<(), ServiceError> { panic!("stale permit entered commit") },
+        )
+        .expect_err("stale permit must reject before update writes");
+    assert!(matches!(stale, ServiceError::SafetyContextStale { .. }));
+    assert!(!target.exists());
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(&game_id)
+            .expect("pending rows")
+            .is_empty()
+    );
+    drop(guard);
+
+    let other_root = tempdir().expect("other game root");
+    let other_id = GameId::new("manual:luma-update-other-safety").expect("other game id");
+    seed_safety_game(&context, &other_id, other_root.path());
+    let other_assessment = authority
+        .issue_game_assessment(&context, &other_id)
+        .expect("other assessment");
+    let mismatched = authority
+        .game_permit(game_id.clone(), Some(&other_assessment.context_token))
+        .expect("well-formed permit");
+    let guard = crate::game_mutation_lock::try_lock(&game_id).expect("lock");
+    let scope = authority
+        .authorize_game_commit(
+            &context,
+            crate::addons::mutation_features::LUMA_UPDATE,
+            &guard,
+            &mismatched,
+            || -> Result<(), ServiceError> { panic!("mismatched permit entered commit") },
+        )
+        .expect_err("scope-mismatched permit must reject before update writes");
+    assert!(matches!(
+        scope,
+        ServiceError::SafetyContextScopeMismatch { .. }
+    ));
+    assert!(!target.exists());
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(&game_id)
+            .expect("pending rows")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -140,20 +245,24 @@ async fn prepare_failure_never_opens_the_update_sentinel() {
     let game_id = GameId::new("steam:403652").expect("id");
     let addon_path = game_dir.path().join("Luma-Game.addon");
     std::fs::write(&addon_path, b"old-addon").expect("write addon");
+    seed_safety_game(&context, &game_id, game_dir.path());
     let record = InstalledAddon::new(game_id.clone(), AddonKind::Luma, path_ref(&addon_path));
     context
         .storage()
         .upsert_installed_addon(&record)
         .expect("persist record");
 
-    let result = update(
-        &context,
-        &crate::addons::luma::test_support::manifest(Vec::new()),
-        &crate::addons::luma::test_support::reshade_sources(),
-        &game_id,
-        false,
-        None,
-    )
+    let manifest = crate::addons::luma::test_support::manifest(Vec::new());
+    let reshade_sources = crate::addons::luma::test_support::reshade_sources();
+    let result = update(super::UpdateRequest {
+        context: &context,
+        manifest: &manifest,
+        reshade_sources: &reshade_sources,
+        game_id: &game_id,
+        force_full: false,
+        safety: game_safety(&context, &game_id),
+        progress: None,
+    })
     .await;
 
     result.expect_err("prepare must fail before a live target or payload can be resolved");

@@ -21,10 +21,6 @@ describe('createRenoDxStore', () => {
       outcome: {
         kind: 'installable',
         confidence: 'untested',
-        risk: {
-          severity: 'info',
-          message_key: 'addon.risk.sp_safe',
-        },
         generic_profile: null,
         host_kind: 'vulkan',
       },
@@ -38,9 +34,9 @@ describe('createRenoDxStore', () => {
     await store.load('steam:1091500');
 
     // Vulkan layer is installed transparently — no consent needed.
-    await store.install('steam:1091500', 'nightly', false);
+    await store.install('steam:1091500', 'nightly');
 
-    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'nightly', false);
+    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'nightly');
     expect(api.vulkanLayerStatus).toHaveBeenCalled();
     // The layer report comes from the backend, not from optimistic inference.
     expect(store.vulkanLayer?.layer_detection).toBe('installed');

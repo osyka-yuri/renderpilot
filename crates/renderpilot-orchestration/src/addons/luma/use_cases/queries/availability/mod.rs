@@ -1,13 +1,10 @@
 //! Queries Luma availability for a specific game.
-use std::path::Path;
-
 use renderpilot_domain::{AddonKind, Architecture, GameId, LumaInstallState};
 
 use crate::Context;
 use crate::ServiceError;
 
 use super::host_report::host_report;
-use crate::addons::anticheat::{RiskSeverity, assess_risk};
 use crate::addons::availability_pipeline::{self, AvailabilityPreflight};
 use crate::addons::engine;
 use crate::addons::game_analysis::install_target_dir;
@@ -85,7 +82,7 @@ fn build_report(
         resolution,
         roots: install_roots,
     } = preflight;
-    let scan_dir = Path::new(game.install_path().as_str());
+    let _game = game;
     let min_version = manifest.min_reshade_version_parsed()?;
     let mut host = host_report(
         &analysis,
@@ -146,7 +143,6 @@ fn build_report(
         match resolution {
             LumaResolution::Installable(plan) => AvailabilityOutcome::Installable {
                 confidence: plan.confidence,
-                risk: assess_risk(scan_dir, RiskSeverity::Info),
                 launch_args,
                 profile: plan.profile,
                 features: plan.features,

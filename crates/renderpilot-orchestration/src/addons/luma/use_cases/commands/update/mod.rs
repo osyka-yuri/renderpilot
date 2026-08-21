@@ -80,19 +80,39 @@ use crate::game_mutation_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
+/// Complete request for a Luma update or repair.
+pub struct UpdateRequest<'a> {
+    /// Application services and storage.
+    pub context: &'a Context,
+    /// Luma release manifest used to resolve the update.
+    pub manifest: &'a LumaManifest,
+    /// ReShade source catalog used when the host binary must be updated.
+    pub reshade_sources: &'a ReshadeSourceCatalog,
+    /// Game whose installation is being updated.
+    pub game_id: &'a GameId,
+    /// Whether to replace the full managed file set even when versions match.
+    pub force_full: bool,
+    /// Fresh permit authorizing this game-file mutation.
+    pub safety: crate::GameSafetyPermit,
+    /// Optional download progress observer.
+    pub progress: Option<&'a ProgressObserver<'a>>,
+}
+
 /// Applies an update to the installed Luma add-on and, when needed, its ReShade
 /// host.
 ///
 /// When `force_full` is true (desktop Repair), prepare always re-fetches the
 /// release ZIP and runs a full set-diff even if the ETag pre-check reports current.
-pub async fn update(
-    context: &Context,
-    manifest: &LumaManifest,
-    reshade_sources: &ReshadeSourceCatalog,
-    game_id: &GameId,
-    force_full: bool,
-    progress: Option<&ProgressObserver<'_>>,
-) -> Result<(), ServiceError> {
+pub async fn update(request: UpdateRequest<'_>) -> Result<(), ServiceError> {
+    let UpdateRequest {
+        context,
+        manifest,
+        reshade_sources,
+        game_id,
+        force_full,
+        safety,
+        progress,
+    } = request;
     // Phase 1: snapshot under the per-game lock, then release for network work.
     let (snapshot, had_torn_marker) = {
         let _guard =
@@ -148,45 +168,54 @@ pub async fn update(
     let game_root = crate::catalog::game_root_for_mutation(context.storage(), game_id, None)
         .map_err(|_| errors::invalid("game is no longer present in the library".to_owned()))?;
     let targets = update_mutation_targets(context, &record, &layout, &prepared, game_root)?;
-    let mutation = crate::addons::durable::prepare_targets_mutation(
-        crate::addons::durable::TargetsMutation {
-            context,
-            guard: &guard,
-            targets,
-            feature: crate::addons::mutation_features::LUMA_UPDATE,
-            game_id,
-        },
-    )?;
+    crate::FileSafetyAuthority::new().authorize_game_commit(
+        context,
+        crate::addons::mutation_features::LUMA_UPDATE,
+        &guard,
+        &safety,
+        || {
+            let mutation = crate::addons::durable::prepare_targets_mutation(
+                crate::addons::durable::TargetsMutation {
+                    context,
+                    guard: &guard,
+                    targets,
+                    feature: crate::addons::mutation_features::LUMA_UPDATE,
+                    game_id,
+                },
+            )?;
 
-    let sentinel = match engine::OperationSentinel::begin(layout.sentinel_dir(), AddonKind::Luma) {
-        Ok(sentinel) => sentinel,
-        Err(error) => {
-            return mutation.commit_or_rollback(
-                context.storage(),
-                || Err::<(), _>(error),
-                |_| {},
-                || {},
-            );
-        }
-    };
-    let result = match prepared {
-        PreparedUpdate::HostOnly(prepared) => {
-            apply::apply_host_only(context, &record, *prepared, progress, mutation.id())
-        }
-        PreparedUpdate::Full(prepared) => {
-            // `payload_dir` is the set-diff root (may differ from game_dir when
-            // ReShade AddonPath is split). Host/dgVoodoo use target.game_dir.
-            apply::apply_set_diff_with_mutation(
-                context,
-                &record,
-                &layout.payload_dir,
-                *prepared,
-                progress,
-                mutation.id(),
-            )
-        }
-    };
-    finish_durable_transaction(context, sentinel, mutation, result)
+            let sentinel =
+                match engine::OperationSentinel::begin(layout.sentinel_dir(), AddonKind::Luma) {
+                    Ok(sentinel) => sentinel,
+                    Err(error) => {
+                        return mutation.commit_or_rollback(
+                            context.storage(),
+                            || Err::<(), _>(error),
+                            |_| {},
+                            || {},
+                        );
+                    }
+                };
+            let result = match prepared {
+                PreparedUpdate::HostOnly(prepared) => {
+                    apply::apply_host_only(context, &record, *prepared, progress, mutation.id())
+                }
+                PreparedUpdate::Full(prepared) => {
+                    // `payload_dir` is the set-diff root (may differ from game_dir when
+                    // ReShade AddonPath is split). Host/dgVoodoo use target.game_dir.
+                    apply::apply_set_diff_with_mutation(
+                        context,
+                        &record,
+                        &layout.payload_dir,
+                        *prepared,
+                        progress,
+                        mutation.id(),
+                    )
+                }
+            };
+            finish_durable_transaction(context, sentinel, mutation, result)
+        },
+    )
 }
 
 fn finish_durable_transaction(

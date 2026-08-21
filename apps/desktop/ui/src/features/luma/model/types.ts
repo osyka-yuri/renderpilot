@@ -11,7 +11,6 @@ import type {
   HostDetection,
   HostFacts,
   MatchConfidence,
-  RiskAssessment,
   UpdateStatus,
 } from '@entities/addon';
 
@@ -107,7 +106,6 @@ export type AvailabilityOutcome =
       kind: 'installable';
       /** Honest confidence shown as a badge. */
       confidence: MatchConfidence;
-      risk: RiskAssessment;
       /** Required launch arguments, shown as a copyable callout. */
       launch_args: string[];
       /** Dedicated game profile vs shared engine payload (UI badge source). */

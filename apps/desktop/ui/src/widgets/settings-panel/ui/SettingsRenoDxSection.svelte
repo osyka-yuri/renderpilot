@@ -44,7 +44,6 @@
   } from '@shared/ui';
 
   import SettingsStatusMessage from './SettingsStatusMessage.svelte';
-
   const store = createVulkanLayerSettingsStore();
 
   type PrimaryAction = NonNullable<typeof store.primaryAction>;
@@ -149,11 +148,13 @@
     <CardDescription>{t('settings.renodx.vulkan.description')}</CardDescription>
   </CardHeader>
 
-  <CardContent class="flex flex-col gap-6">
-    {#if store.error}
+  {#if store.error}
+    <CardContent>
       <SettingsStatusMessage message={store.error} kind="error" />
-    {/if}
+    </CardContent>
+  {/if}
 
+  <CardContent>
     <div class="flex flex-col gap-4">
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <AddonFieldLabel label={t('gameDetails.renodx.status.label')} class="flex-nowrap gap-1.5">

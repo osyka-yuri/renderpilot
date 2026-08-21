@@ -17,11 +17,11 @@ export async function getLumaAvailability(gameId: string): Promise<AvailabilityR
  */
 export async function installLuma(
   gameId: string,
-  confirmAnticheat: boolean,
+  gameContextToken?: string,
 ): Promise<LumaInstallState> {
   return invokeDesktop<LumaInstallState>('luma_install', {
     gameId: requireNonBlankString(gameId, 'gameId'),
-    confirmAnticheat,
+    ...(gameContextToken === undefined ? {} : { gameContextToken }),
   });
 }
 
@@ -62,11 +62,14 @@ export async function checkLumaUpdate(
  */
 export async function updateLuma(
   gameId: string,
-  options?: { forceFull?: boolean },
+  options?: { forceFull?: boolean; gameContextToken?: string },
 ): Promise<LumaInstallState> {
   return invokeDesktop<LumaInstallState>('luma_update', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     forceFull: options?.forceFull ?? false,
+    ...(options?.gameContextToken === undefined
+      ? {}
+      : { gameContextToken: options.gameContextToken }),
   });
 }
 

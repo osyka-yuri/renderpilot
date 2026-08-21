@@ -117,6 +117,27 @@
       "actions": ["rebuild_operation_plan"]
     },
     {
+      "code": "safety_context_missing",
+      "rustVariant": "SafetyContextMissing",
+      "messageKey": "user_message.safety_context_missing",
+      "severity": "warning",
+      "actions": ["reload_file_safety"]
+    },
+    {
+      "code": "safety_context_stale",
+      "rustVariant": "SafetyContextStale",
+      "messageKey": "user_message.safety_context_stale",
+      "severity": "warning",
+      "actions": ["reload_file_safety"]
+    },
+    {
+      "code": "safety_context_scope_mismatch",
+      "rustVariant": "SafetyContextScopeMismatch",
+      "messageKey": "user_message.safety_context_scope_mismatch",
+      "severity": "warning",
+      "actions": ["reload_file_safety"]
+    },
+    {
       "code": "game_not_found",
       "rustVariant": "GameNotFound",
       "messageKey": "user_message.game_not_in_catalog",
@@ -327,6 +348,10 @@
     {
       "code": "refresh_or_scan_game_folder",
       "messageKey": "suggested_action.refresh_or_scan_game_folder"
+    },
+    {
+      "code": "reload_file_safety",
+      "messageKey": "suggested_action.reload_file_safety"
     }
   ]
 }

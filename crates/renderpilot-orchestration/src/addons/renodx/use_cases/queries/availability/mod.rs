@@ -1,12 +1,9 @@
 //! Queries RenoDX availability for a specific game.
-use std::path::Path;
-
 use renderpilot_domain::{AddonKind, Architecture, GameId, RenoDxInstallState};
 
 use crate::Context;
 use crate::ServiceError;
 
-use crate::addons::anticheat::{RiskSeverity, assess_risk};
 use crate::addons::availability_pipeline::{self, AvailabilityPreflight};
 use crate::addons::matching::MatchFacts;
 use crate::addons::renodx::dto::availability::*;
@@ -83,7 +80,7 @@ fn build_report(
         resolution,
         roots: _,
     } = preflight;
-    let scan_dir = Path::new(game.install_path().as_str());
+    let _game = game;
     let host_report =
         host_report::reshade_report(&analysis, &resolution, record.as_ref(), reshade_sources);
 
@@ -96,7 +93,7 @@ fn build_report(
     // exclusivity block by hand-installing RenoDX anyway; withhold it too. Must
     // run before `resolution` is consumed by the `outcome` match below.
     let manual_install = if blocked.is_none() {
-        manual_file_install(manifest, &analysis.facts, &resolution, scan_dir)
+        manual_file_install(manifest, &analysis.facts, &resolution)
     } else {
         None
     };
@@ -111,7 +108,6 @@ fn build_report(
         match resolution {
             RenoDxResolution::Installable(plan) => AvailabilityOutcome::Installable {
                 confidence: plan.confidence,
-                risk: assess_risk(scan_dir, RiskSeverity::Info),
                 generic_profile: plan.generic_profile,
                 host_kind: plan.host_kind,
             },
@@ -124,7 +120,6 @@ fn build_report(
                 message,
                 file_install: file_install.map(|fi| ExternalFileInstall {
                     confidence: fi.confidence,
-                    risk: assess_risk(scan_dir, RiskSeverity::Info),
                     host_kind: fi.host_kind,
                     generic_profile: fi.generic_profile,
                 }),
@@ -162,7 +157,6 @@ fn manual_file_install(
     manifest: &RenoDxManifest,
     facts: &MatchFacts,
     resolution: &RenoDxResolution,
-    scan_dir: &Path,
 ) -> Option<ManualFileInstall> {
     let offered = matches!(resolution, RenoDxResolution::Incompatible { .. });
     let host_kind = host_decision(primary_api(&facts.graphics))?;
@@ -170,7 +164,6 @@ fn manual_file_install(
         return None;
     }
     Some(ManualFileInstall {
-        risk: assess_risk(scan_dir, RiskSeverity::Info),
         host_kind,
         expected_addon_name: matched_slug(manifest, facts)
             .map(|slug| source::addon_file_stem(&slug)),

@@ -22,7 +22,7 @@ describe('mock addon-tools IPC', () => {
 
   it('rejects luma write commands with an explicit mock message', async () => {
     await expect(
-      mockInvoker('luma_install', { gameId: 'steam:1', confirmAnticheat: false }),
+      mockInvoker('luma_install', { gameId: 'steam:1', gameContextToken: 'game-token' }),
     ).rejects.toThrow(/Mock preview does not simulate/);
   });
 

@@ -75,6 +75,16 @@ export function getErrorCode(error: unknown): string {
   return 'unexpected_client_error';
 }
 
+/** Whether an error requires the caller to discard and reacquire file-safety context. */
+export function isFileSafetyContextError(error: unknown): boolean {
+  const code = getErrorCode(error);
+  return (
+    code === 'safety_context_missing' ||
+    code === 'safety_context_stale' ||
+    code === 'safety_context_scope_mismatch'
+  );
+}
+
 export function getErrorContractStatus(error: unknown): ErrorContractStatus {
   if (error instanceof DesktopCommandError) {
     return error.contractStatus;

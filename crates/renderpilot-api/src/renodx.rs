@@ -1,6 +1,6 @@
 //! Desktop UI facade for installing the RenoDX HDR add-on.
 //!
-//! All work (manifest fetch, matching, risk assessment, download, install) lives
+//! All work (manifest fetch, matching, file-safety validation, download, install) lives
 //! in `renderpilot-orchestration::addons::renodx`. This module parses GUI string
 //! ids, loads/caches the manifest, and wraps the typed results in
 //! `serde_json::Value` for the command layer.
@@ -15,7 +15,7 @@ use renodx::types::ReshadeChannel;
 
 use crate::utils::{JsonResult, parse_game_id, to_json};
 
-/// Previews whether RenoDX can be installed for a game, with risk and a match
+/// Previews whether RenoDX can be installed for a game, with match
 /// explanation. Loads (and caches) the manifest as needed.
 pub async fn renodx_availability(context: &Context, game_id: impl Into<String>) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
@@ -32,18 +32,24 @@ pub async fn renodx_availability(context: &Context, game_id: impl Into<String>) 
 }
 
 /// Installs RenoDX into a game, reporting download progress, and returns the
-/// resulting install state. `confirm_anticheat` must be `true` to proceed when the
-/// risk assessment requires confirmation. The desktop flow transparently permits
+/// resulting install state. `game_context_token` must come from a fresh file
+/// safety assessment. The desktop flow transparently permits
 /// installing the shared Vulkan layer when a Vulkan game needs it.
 pub async fn renodx_install(
     context: &Context,
     game_id: impl Into<String>,
     reshade_channel: impl Into<String>,
-    confirm_anticheat: bool,
+    game_context_token: Option<String>,
+    shared_vulkan_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new().game_mutation_permits(
+        game_id.clone(),
+        game_context_token.as_deref(),
+        shared_vulkan_context_token.as_deref(),
+    )?;
     let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     renodx::use_cases::commands::install::install(InstallRequest {
         context,
@@ -51,7 +57,7 @@ pub async fn renodx_install(
         reshade_sources: &bundle.reshade.sources,
         game_id: &game_id,
         requested_channel: reshade_channel,
-        confirm_anticheat,
+        safety,
         allow_shared_vulkan_layer_install: true,
         progress,
     })
@@ -63,20 +69,27 @@ pub async fn renodx_install(
 
 /// Installs RenoDX into a game from a user-downloaded add-on file (for external,
 /// Discord/Nexus-distributed games), reporting ReShade-host download progress,
-/// and returns the resulting install state. `confirm_anticheat` gates the
-/// anti-cheat risk; shared Vulkan layer installation is permitted transparently
+/// and returns the resulting install state. The game and optional shared-layer
+/// safety contexts are validated again after download. Shared Vulkan layer
+/// installation is permitted transparently
 /// in the desktop flow.
 pub async fn renodx_install_from_file(
     context: &Context,
     game_id: impl Into<String>,
     file_path: impl Into<String>,
     reshade_channel: impl Into<String>,
-    confirm_anticheat: bool,
+    game_context_token: Option<String>,
+    shared_vulkan_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     let file_path = file_path.into();
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new().game_mutation_permits(
+        game_id.clone(),
+        game_context_token.as_deref(),
+        shared_vulkan_context_token.as_deref(),
+    )?;
     let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     renodx::use_cases::commands::install::install_from_file(
         InstallRequest {
@@ -85,7 +98,7 @@ pub async fn renodx_install_from_file(
             reshade_sources: &bundle.reshade.sources,
             game_id: &game_id,
             requested_channel: reshade_channel,
-            confirm_anticheat,
+            safety,
             allow_shared_vulkan_layer_install: true,
             progress,
         },
@@ -111,18 +124,28 @@ pub async fn renodx_switch_reshade_channel(
     context: &Context,
     game_id: impl Into<String>,
     reshade_channel: impl Into<String>,
+    game_context_token: Option<String>,
+    shared_vulkan_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new().game_mutation_permits(
+        game_id.clone(),
+        game_context_token.as_deref(),
+        shared_vulkan_context_token.as_deref(),
+    )?;
     let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     let state = renodx::use_cases::commands::switch_reshade_channel::switch_reshade_channel(
-        context,
-        &bundle.tool,
-        &bundle.reshade.sources,
-        &game_id,
-        reshade_channel,
-        progress,
+        renodx::use_cases::commands::switch_reshade_channel::SwitchChannelRequest {
+            context,
+            manifest: &bundle.tool,
+            reshade_sources: &bundle.reshade.sources,
+            game_id: &game_id,
+            target_channel: reshade_channel,
+            safety,
+            progress,
+        },
     )
     .await?;
     to_json(state)
@@ -152,15 +175,19 @@ pub async fn renodx_vulkan_layer_management_status(context: &Context) -> JsonRes
 pub async fn renodx_apply_vulkan_layer(
     context: &Context,
     reshade_channel: impl Into<String>,
+    shared_vulkan_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new()
+        .shared_vulkan_permit(shared_vulkan_context_token.as_deref())?;
     let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     to_json(
         renodx::use_cases::commands::shared_vulkan_layer::apply_vulkan_layer(
             context,
             &bundle.reshade.sources,
             reshade_channel,
+            safety,
             progress,
         )
         .await?,
@@ -170,8 +197,8 @@ pub async fn renodx_apply_vulkan_layer(
 /// Removes RenderPilot's shared ReShade Vulkan layer (an external layer is left
 /// untouched), returning the resulting layer status. A user maintenance action;
 /// per-game installs are unaffected but stop loading until a layer is present again.
-pub fn renodx_remove_vulkan_layer(context: &Context) -> JsonResult {
-    renodx::use_cases::commands::shared_vulkan_layer::remove_vulkan_layer(context)?;
+pub async fn renodx_remove_vulkan_layer(context: &Context) -> JsonResult {
+    renodx::use_cases::commands::shared_vulkan_layer::remove_vulkan_layer(context).await?;
     to_json(renodx::use_cases::queries::vulkan_layer::status())
 }
 
@@ -211,16 +238,26 @@ pub async fn renodx_check_update(context: &Context, game_id: impl Into<String>) 
 pub async fn renodx_update(
     context: &Context,
     game_id: impl Into<String>,
+    game_context_token: Option<String>,
+    shared_vulkan_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new().game_mutation_permits(
+        game_id.clone(),
+        game_context_token.as_deref(),
+        shared_vulkan_context_token.as_deref(),
+    )?;
     let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     renodx::use_cases::commands::update::update(
-        context,
-        &bundle.tool,
-        &bundle.reshade.sources,
-        &game_id,
-        progress,
+        renodx::use_cases::commands::update::UpdateRequest {
+            context,
+            manifest: &bundle.tool,
+            reshade_sources: &bundle.reshade.sources,
+            game_id: &game_id,
+            safety,
+            progress,
+        },
     )
     .await?;
     to_json(renodx::use_cases::queries::status::status(
@@ -233,12 +270,16 @@ pub async fn renodx_update(
 pub async fn renodx_install_dlss_fix(
     context: &Context,
     game_id: impl Into<String>,
+    game_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
-    let state =
-        renodx::use_cases::commands::dlss_fix::install_dlss_fix(context, &game_id, progress)
-            .await?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new()
+        .game_permit(game_id.clone(), game_context_token.as_deref())?;
+    let state = renodx::use_cases::commands::dlss_fix::install_dlss_fix(
+        context, &game_id, safety, progress,
+    )
+    .await?;
     to_json(state)
 }
 
@@ -247,11 +288,15 @@ pub async fn renodx_install_dlss_fix(
 pub async fn renodx_update_dlss_fix(
     context: &Context,
     game_id: impl Into<String>,
+    game_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new()
+        .game_permit(game_id.clone(), game_context_token.as_deref())?;
     let state =
-        renodx::use_cases::commands::dlss_fix::update_dlss_fix(context, &game_id, progress).await?;
+        renodx::use_cases::commands::dlss_fix::update_dlss_fix(context, &game_id, safety, progress)
+            .await?;
     to_json(state)
 }
 
@@ -290,4 +335,92 @@ fn parse_reshade_channel(value: impl Into<String>) -> Result<ReshadeChannel, cra
         .map_err(|error: renodx::types::ReshadeChannelParseError| {
             renderpilot_orchestration::ServiceError::invalid_input(error.to_string()).into()
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::Future;
+    use std::task::{Context as TaskContext, Poll, Waker};
+
+    use renderpilot_orchestration::{SafetyScope, ServiceError};
+
+    use super::*;
+
+    fn poll_ready<F: Future>(future: F) -> F::Output {
+        let mut task_context = TaskContext::from_waker(Waker::noop());
+        let mut future = Box::pin(future);
+        match Future::poll(future.as_mut(), &mut task_context) {
+            Poll::Ready(output) => output,
+            Poll::Pending => panic!("missing safety context reached an async prepare boundary"),
+        }
+    }
+
+    fn assert_missing_game_context(error: &crate::ApiError) {
+        assert!(matches!(
+            error,
+            crate::ApiError::Service(ServiceError::SafetyContextMissing {
+                scope: SafetyScope::Game(_)
+            })
+        ));
+    }
+
+    #[test]
+    fn risky_renodx_commands_reject_missing_game_context_before_async_prepare() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let context = Context::open_at(dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = "manual:missing-safety";
+
+        assert_missing_game_context(
+            &poll_ready(renodx_install(
+                &context, game_id, "stable", None, None, None,
+            ))
+            .expect_err("install must require game context"),
+        );
+        assert_missing_game_context(
+            &poll_ready(renodx_install_from_file(
+                &context,
+                game_id,
+                "unused.addon64",
+                "stable",
+                None,
+                None,
+                None,
+            ))
+            .expect_err("manual install must require game context"),
+        );
+        assert_missing_game_context(
+            &poll_ready(renodx_switch_reshade_channel(
+                &context, game_id, "stable", None, None, None,
+            ))
+            .expect_err("channel switch must require game context"),
+        );
+        assert_missing_game_context(
+            &poll_ready(renodx_update(&context, game_id, None, None, None))
+                .expect_err("update must require game context"),
+        );
+        assert_missing_game_context(
+            &poll_ready(renodx_install_dlss_fix(&context, game_id, None, None))
+                .expect_err("DLSS-Fix install must require game context"),
+        );
+        assert_missing_game_context(
+            &poll_ready(renodx_update_dlss_fix(&context, game_id, None, None))
+                .expect_err("DLSS-Fix update must require game context"),
+        );
+    }
+
+    #[test]
+    fn shared_vulkan_apply_rejects_missing_global_context_before_async_prepare() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let context = Context::open_at(dir.path().join("catalog.sqlite")).expect("context");
+
+        let error = poll_ready(renodx_apply_vulkan_layer(&context, "stable", None, None))
+            .expect_err("shared apply must require global context");
+
+        assert!(matches!(
+            error,
+            crate::ApiError::Service(ServiceError::SafetyContextMissing {
+                scope: SafetyScope::SharedVulkan
+            })
+        ));
+    }
 }

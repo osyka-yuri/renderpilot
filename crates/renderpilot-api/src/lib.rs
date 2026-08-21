@@ -4,6 +4,7 @@
 //! GUI string ids into domain ids.
 
 mod error;
+mod file_safety;
 pub use error::ApiError;
 
 /// Serves image bytes for cover requests made via the `rp-cover://` URI scheme.
@@ -61,6 +62,7 @@ pub use self::covers::{
     set_game_cover,
 };
 pub use self::dlss_indicator::{get_dlss_indicator_state, set_dlss_indicator_enabled};
+pub use self::file_safety::{get_game_file_safety_assessment, get_shared_vulkan_safety_assessment};
 pub use self::libraries::{
     DownloadProgress, LibraryCatalogStatus, LibraryLegalDocumentFormat, LibraryLegalDocumentKind,
     LibraryLegalDocumentLink, LibraryLocalState, LibraryPackageMutation, LibraryPackageState,

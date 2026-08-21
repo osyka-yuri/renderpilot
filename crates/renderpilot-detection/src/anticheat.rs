@@ -35,6 +35,22 @@ pub enum AntiCheatEvidenceKind {
     Other,
 }
 
+/// Completeness of a bounded anti-cheat filesystem scan.
+///
+/// `Limited` is deliberately conservative: it is returned when traversal hit
+/// the configured entry bound or when any directory/entry could not be read.
+/// An empty engine list is therefore never interpreted as proof that a game is
+/// safe to modify.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AntiCheatScanCompleteness {
+    /// Every visited directory and entry was observed within the configured bound.
+    #[default]
+    Complete,
+    /// The scan could not fully observe the requested tree.
+    Limited,
+}
+
 /// One anti-cheat marker found in a game folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AntiCheatEvidence {
@@ -55,10 +71,24 @@ pub struct AntiCheatScanReport {
     pub engines: Vec<AntiCheatEngine>,
     /// Evidence entries found during the scan.
     pub evidence: Vec<AntiCheatEvidence>,
-    /// Number of directory entries inspected.
+    /// Number of directory entries and iterator error records inspected.
     pub scanned_entry_count: usize,
     /// Whether the scan stopped because [`AntiCheatScanOptions::max_entries`] was reached.
     pub truncated: bool,
+    /// Directories whose contents could not be enumerated.
+    #[serde(default)]
+    pub unreadable_directories: Vec<PathBuf>,
+    /// Parent directories for directory entries whose metadata could not be read.
+    /// Paths are sorted and deduplicated so they are stable fingerprint inputs.
+    #[serde(default)]
+    pub unreadable_entries: Vec<PathBuf>,
+    /// Number of unreadable directory-entry records observed. This preserves
+    /// multiplicity even when several iterator errors share one parent path.
+    #[serde(default)]
+    pub unreadable_entry_count: usize,
+    /// Explicit conservative completeness classification.
+    #[serde(default)]
+    pub completeness: AntiCheatScanCompleteness,
 }
 
 impl AntiCheatScanReport {
@@ -68,6 +98,27 @@ impl AntiCheatScanReport {
             evidence: Vec::new(),
             scanned_entry_count: 0,
             truncated: false,
+            unreadable_directories: Vec::new(),
+            unreadable_entries: Vec::new(),
+            unreadable_entry_count: 0,
+            completeness: AntiCheatScanCompleteness::Complete,
+        }
+    }
+
+    fn mark_limited(&mut self) {
+        self.completeness = AntiCheatScanCompleteness::Limited;
+    }
+
+    fn finish(&mut self) {
+        self.unreadable_directories.sort();
+        self.unreadable_directories.dedup();
+        self.unreadable_entries.sort();
+        self.unreadable_entries.dedup();
+        if self.truncated
+            || !self.unreadable_directories.is_empty()
+            || !self.unreadable_entries.is_empty()
+        {
+            self.completeness = AntiCheatScanCompleteness::Limited;
         }
     }
 
@@ -82,7 +133,8 @@ impl AntiCheatScanReport {
 /// Runtime options for anti-cheat filesystem detection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AntiCheatScanOptions {
-    /// Maximum number of directory entries to inspect before stopping.
+    /// Maximum number of directory entry records (including iterator errors)
+    /// to inspect before stopping.
     pub max_entries: usize,
 }
 
@@ -122,8 +174,9 @@ pub fn scan_anticheat(game_dir: &Path) -> AntiCheatScanReport {
 /// Scans `game_dir` for known anti-cheat artifacts.
 ///
 /// The walk is breadth-first and bounded by [`AntiCheatScanOptions::max_entries`].
-/// Unreadable folders and entries are skipped. Symlinks/reparse-like entries are
-/// not followed, so a scan cannot wander out of the game install tree.
+/// Unreadable folders and entries are recorded and make the result limited.
+/// Symlinks/reparse-like entries are not followed, so a scan cannot wander out
+/// of the game install tree.
 #[must_use]
 pub fn scan_anticheat_with_options(
     game_dir: &Path,
@@ -134,20 +187,61 @@ pub fn scan_anticheat_with_options(
     queue.push_back(game_dir.to_path_buf());
 
     while let Some(dir) = queue.pop_front() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
+        if report.scanned_entry_count >= options.max_entries {
+            report.truncated = true;
+            report.mark_limited();
+            report.finish();
+            return report;
+        }
+
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => {
+                report.unreadable_directories.push(dir);
+                report.mark_limited();
+                continue;
+            }
         };
-        let mut entries = entries.flatten().collect::<Vec<_>>();
-        entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_ascii_lowercase());
+        let mut entries_within_bound = Vec::new();
+        let mut hit_entry_bound = false;
         for entry in entries {
             if report.scanned_entry_count >= options.max_entries {
                 report.truncated = true;
-                return report;
+                report.mark_limited();
+                hit_entry_bound = true;
+                break;
             }
-            report.scanned_entry_count += 1;
 
-            let Some(scanned) = scan_entry(&entry) else {
-                continue;
+            report.scanned_entry_count += 1;
+            match entry {
+                Ok(entry) => entries_within_bound.push(entry),
+                Err(_) => {
+                    report.unreadable_entries.push(dir.clone());
+                    report.unreadable_entry_count += 1;
+                    report.mark_limited();
+                }
+            }
+        }
+        entries_within_bound.sort_by(|left, right| {
+            left.file_name()
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .cmp(&right.file_name().to_string_lossy().to_ascii_lowercase())
+                .then_with(|| {
+                    left.file_name()
+                        .to_string_lossy()
+                        .cmp(&right.file_name().to_string_lossy())
+                })
+        });
+        for entry in entries_within_bound {
+            let scanned = match scan_entry(&entry) {
+                Ok(scanned) => scanned,
+                Err(_) => {
+                    report.unreadable_entries.push(dir.clone());
+                    report.unreadable_entry_count += 1;
+                    report.mark_limited();
+                    continue;
+                }
             };
             if let Some(evidence) = scanned.evidence {
                 report.push_evidence(evidence);
@@ -156,8 +250,14 @@ pub fn scan_anticheat_with_options(
                 queue.push_back(scanned.path);
             }
         }
+
+        if hit_entry_bound {
+            report.finish();
+            return report;
+        }
     }
 
+    report.finish();
     report
 }
 
@@ -167,12 +267,16 @@ struct ScannedEntry {
     descend: bool,
 }
 
-fn scan_entry(entry: &DirEntry) -> Option<ScannedEntry> {
+fn scan_entry(entry: &DirEntry) -> std::io::Result<ScannedEntry> {
     let path = entry.path();
-    let metadata = fs::symlink_metadata(&path).ok()?;
+    let metadata = fs::symlink_metadata(&path)?;
     let file_type = metadata.file_type();
     if file_type.is_symlink() {
-        return None;
+        return Ok(ScannedEntry {
+            path,
+            evidence: None,
+            descend: false,
+        });
     }
 
     let kind = if file_type.is_dir() {
@@ -191,7 +295,7 @@ fn scan_entry(entry: &DirEntry) -> Option<ScannedEntry> {
         kind,
     });
 
-    Some(ScannedEntry {
+    Ok(ScannedEntry {
         path,
         evidence,
         descend: file_type.is_dir(),
@@ -278,6 +382,9 @@ mod tests {
         assert!(report.engines.is_empty());
         assert!(report.evidence.is_empty());
         assert!(!report.truncated);
+        assert_eq!(report.completeness, AntiCheatScanCompleteness::Complete);
+        assert!(report.unreadable_directories.is_empty());
+        assert!(report.unreadable_entries.is_empty());
     }
 
     #[test]
@@ -291,6 +398,53 @@ mod tests {
 
         assert_eq!(report.scanned_entry_count, 1);
         assert!(report.truncated);
+        assert_eq!(report.completeness, AntiCheatScanCompleteness::Limited);
+    }
+
+    #[test]
+    fn zero_entry_bound_is_limited_without_reading_entries() {
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("EasyAntiCheat_x64.dll"), b"stub").expect("write");
+
+        let report =
+            scan_anticheat_with_options(dir.path(), AntiCheatScanOptions { max_entries: 0 });
+
+        assert_eq!(report.scanned_entry_count, 0);
+        assert!(report.truncated);
+        assert_eq!(report.completeness, AntiCheatScanCompleteness::Limited);
+        assert!(report.evidence.is_empty());
+    }
+
+    #[test]
+    fn wide_directory_is_bounded_while_reading_and_remains_deterministic() {
+        let dir = tempdir().expect("tempdir");
+        for index in 0..4096 {
+            fs::write(dir.path().join(format!("entry_{index:04}.bin")), b"stub").expect("write");
+        }
+
+        let options = AntiCheatScanOptions { max_entries: 8 };
+        let first = scan_anticheat_with_options(dir.path(), options);
+        let second = scan_anticheat_with_options(dir.path(), options);
+
+        assert_eq!(first, second);
+        assert_eq!(first.scanned_entry_count, options.max_entries);
+        assert!(first.truncated);
+        assert_eq!(first.completeness, AntiCheatScanCompleteness::Limited);
+        assert!(first.evidence.is_empty());
+    }
+
+    #[test]
+    fn missing_root_is_an_explicit_limited_observation() {
+        let dir = tempdir().expect("tempdir");
+        let missing = dir.path().join("missing");
+
+        let report = scan_anticheat(&missing);
+
+        assert_eq!(report.engines, Vec::<AntiCheatEngine>::new());
+        assert_eq!(report.completeness, AntiCheatScanCompleteness::Limited);
+        assert_eq!(report.unreadable_directories, vec![missing]);
+        assert!(report.unreadable_entries.is_empty());
+        assert_eq!(report.unreadable_entry_count, 0);
     }
 
     #[test]

@@ -34,7 +34,7 @@ use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
 enum ChannelSwitchPhase1 {
-    Healed(RenoDxInstallState),
+    Healed(InstalledAddon),
     SharedVulkan { record: InstalledAddon },
     Proxy(ProxyChannelSwitchSnapshot),
 }
@@ -45,38 +45,94 @@ struct ProxyChannelSwitchSnapshot {
     target_channel: ReshadeChannel,
 }
 
+/// Complete request for a RenoDX ReShade channel switch.
+pub struct SwitchChannelRequest<'a> {
+    /// Application services and storage.
+    pub context: &'a Context,
+    /// RenoDX manifest used to resolve the current host.
+    pub manifest: &'a RenoDxManifest,
+    /// ReShade sources containing the requested channel.
+    pub reshade_sources: &'a ReshadeSourceCatalog,
+    /// Game whose ReShade channel is being changed.
+    pub game_id: &'a GameId,
+    /// ReShade release channel to install.
+    pub target_channel: ReshadeChannel,
+    /// Fresh permits for every mutation scope the resolved host may require.
+    pub safety: crate::GameMutationSafetyPermits,
+    /// Optional download progress observer.
+    pub progress: Option<&'a ProgressObserver<'a>>,
+}
+
 /// Switches the recorded ReShade host binary artifact between stable and nightly.
 pub async fn switch_reshade_channel(
-    context: &Context,
-    manifest: &RenoDxManifest,
-    reshade_sources: &ReshadeSourceCatalog,
-    game_id: &GameId,
-    target_channel: ReshadeChannel,
-    progress: Option<&ProgressObserver<'_>>,
+    request: SwitchChannelRequest<'_>,
 ) -> Result<RenoDxInstallState, ServiceError> {
+    let SwitchChannelRequest {
+        context,
+        manifest,
+        reshade_sources,
+        game_id,
+        target_channel,
+        safety,
+        progress,
+    } = request;
     ensure_target_channel(reshade_sources, target_channel)?;
 
-    // Phase 1: snapshot / heal under the per-game lock.
-    let phase1 = {
-        let _guard =
-            game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
-        resolve_channel_switch_phase1(context, manifest, reshade_sources, game_id, target_channel)?
-    };
+    // Phase 1: resolve under the per-game lock. A same-channel metadata heal
+    // has no unlocked prepare phase, so it crosses the safety barrier while
+    // this guard is still held.
+    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let phase1 =
+        resolve_channel_switch_phase1(context, manifest, reshade_sources, game_id, target_channel)?;
 
     match phase1 {
-        ChannelSwitchPhase1::Healed(state) => Ok(state),
-        ChannelSwitchPhase1::SharedVulkan { record } => {
-            // Shared Vulkan layer update is system-wide; no per-game durable FS tx.
-            switch_vulkan_reshade_channel(
+        ChannelSwitchPhase1::Healed(healed) => crate::FileSafetyAuthority::new()
+            .authorize_game_commit(
                 context,
+                crate::addons::mutation_features::RENODX_SWITCH_RESHADE_CHANNEL,
+                &guard,
+                safety.game(),
+                || {
+                    context.storage().upsert_installed_addon(&healed)?;
+                    Ok(tracking::install_state_from_record(&healed))
+                },
+            ),
+        ChannelSwitchPhase1::SharedVulkan { record } => {
+            drop(guard);
+            let prepared = crate::addons::renodx::use_cases::commands::update_reshade::PreparedReShadeUpdate::prepare(
                 reshade_sources,
-                record,
                 target_channel,
                 progress,
             )
-            .await
+            .await?;
+            let guards =
+                game_mutation_lock::enter_game_shared_mutation_boundary_async(context, game_id)
+                    .await?;
+            let current = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
+                .ok_or_else(errors::not_installed)?;
+            if current != record
+                || !matches!(
+                    current.host_kind(),
+                    Some(InstalledAddonHostKind::SharedVulkanLayer)
+                )
+            {
+                return Err(errors::state_changed_retry_update());
+            }
+            crate::FileSafetyAuthority::new().authorize_game_shared_commit(
+                context,
+                crate::addons::mutation_features::RENODX_SWITCH_RESHADE_CHANNEL,
+                &guards,
+                &safety,
+                || {
+                    prepared.commit(context)?;
+                    let updated = current.with_reshade_channel(target_channel.as_str());
+                    context.storage().upsert_installed_addon(&updated)?;
+                    Ok(tracking::install_state_from_record(&updated))
+                },
+            )
         }
         ChannelSwitchPhase1::Proxy(snapshot) => {
+            drop(guard);
             // Phase 2: download only — no game-folder mutation.
             let download =
                 fetch_reshade_from_source(&snapshot.target.source, snapshot.target.arch, progress)
@@ -103,68 +159,79 @@ pub async fn switch_reshade_channel(
             );
 
             emit_tool_finalizing(progress, AddonKind::RenoDx);
-            crate::addons::durable::run_targets_mutation(
-                crate::addons::durable::TargetsMutation {
-                    context,
-                    guard: &guard,
-                    targets,
-                    feature: crate::addons::mutation_features::RENODX_SWITCH_RESHADE_CHANNEL,
-                    game_id,
-                },
-                |mutation_id| -> Result<RenoDxInstallState, ServiceError> {
-                    let originals = apply_replacements(vec![Replacement {
-                        path: current.target.target_path.clone(),
-                        bytes: download.bytes,
-                        mtime: None,
-                    }])?;
-
-                    let new_source = host_binary_source(
-                        current.target.source.url.clone(),
-                        download.etag,
-                        download.digest,
-                        download.last_modified,
-                        Some(target_channel),
-                    );
-                    // The record may not have tracked this exact path before (a legacy record
-                    // adopted without host provenance, or the active slot changed) — carry it
-                    // through as a receipt so the rebuild below adds it to `created_files`.
-                    let receipt = InstallReceipt {
-                        created_files: vec![current.target.target_path.clone()],
-                        backed_up_files: Vec::new(),
-                    };
-                    let updated = match rebuild_proxy_switch_record(
-                        &current.record,
-                        new_source,
-                        Some(&receipt),
-                        target_channel,
-                    ) {
-                        Ok(updated) => updated,
-                        Err(error) => {
-                            restore_originals_best_effort(&originals);
-                            return Err(error);
-                        }
-                    };
-                    if let Err(error) = context.storage().commit_game_mutation(
-                        renderpilot_storage_sqlite::GameMutationCommit {
+            crate::FileSafetyAuthority::new().authorize_game_commit(
+                context,
+                crate::addons::mutation_features::RENODX_SWITCH_RESHADE_CHANNEL,
+                &guard,
+                safety.game(),
+                || {
+                    crate::addons::durable::run_targets_mutation(
+                        crate::addons::durable::TargetsMutation {
+                            context,
+                            guard: &guard,
+                            targets,
+                            feature:
+                                crate::addons::mutation_features::RENODX_SWITCH_RESHADE_CHANNEL,
                             game_id,
-                            component_set: None,
-                            baseline_mutations: &[],
-                            addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(
-                                &updated,
-                            ),
-                            mutation_id: Some(mutation_id),
                         },
-                    ) {
-                        let restore_result = restore_originals(&originals);
-                        return Err(persistence_failure_error(
-                            error.into(),
-                            std::slice::from_ref(&restore_result),
-                        ));
-                    }
-                    Ok(tracking::install_state_from_record(&updated))
+                        |mutation_id| -> Result<RenoDxInstallState, ServiceError> {
+                            let originals = apply_replacements(vec![Replacement {
+                                path: current.target.target_path.clone(),
+                                bytes: download.bytes,
+                                mtime: None,
+                            }])?;
+
+                            let new_source = host_binary_source(
+                                current.target.source.url.clone(),
+                                download.etag,
+                                download.digest,
+                                download.last_modified,
+                                Some(target_channel),
+                            );
+                            // The record may not have tracked this exact path before (a legacy
+                            // record adopted without host provenance, or the active slot changed)
+                            // — carry it through as a receipt so the rebuild below adds it to
+                            // `created_files`.
+                            let receipt = InstallReceipt {
+                                created_files: vec![current.target.target_path.clone()],
+                                backed_up_files: Vec::new(),
+                            };
+                            let updated = match rebuild_proxy_switch_record(
+                                &current.record,
+                                new_source,
+                                Some(&receipt),
+                                target_channel,
+                            ) {
+                                Ok(updated) => updated,
+                                Err(error) => {
+                                    restore_originals_best_effort(&originals);
+                                    return Err(error);
+                                }
+                            };
+                            if let Err(error) = context.storage().commit_game_mutation(
+                                renderpilot_storage_sqlite::GameMutationCommit {
+                                    game_id,
+                                    component_set: None,
+                                    baseline_mutations: &[],
+                                    addon:
+                                        renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(
+                                            &updated,
+                                        ),
+                                    mutation_id: Some(mutation_id),
+                                },
+                            ) {
+                                let restore_result = restore_originals(&originals);
+                                return Err(persistence_failure_error(
+                                    error.into(),
+                                    std::slice::from_ref(&restore_result),
+                                ));
+                            }
+                            Ok(tracking::install_state_from_record(&updated))
+                        },
+                        |_| {},
+                        || {},
+                    )
                 },
-                |_| {},
-                || {},
             )
         }
     }
@@ -191,7 +258,8 @@ fn resolve_channel_switch_phase1(
     let current = recorded_reshade_channel(&record);
 
     if current == Some(target_channel) {
-        // Same-channel metadata heal is intentional non-durable (no FS mutation).
+        // Resolve the metadata repair without writing it. The caller persists
+        // it only after the final guard-bound safety validation.
         let healed = if let Some(host_source) = host_source {
             let healed_source = channel::with_host_channel(host_source, target_channel);
             tracking::replace_host_source(&record, &healed_source)?
@@ -199,10 +267,7 @@ fn resolve_channel_switch_phase1(
             record.with_reshade_channel(target_channel.as_str())
         }
         .with_reshade_channel(target_channel.as_str());
-        context.storage().upsert_installed_addon(&healed)?;
-        return Ok(ChannelSwitchPhase1::Healed(
-            tracking::install_state_from_record(&healed),
-        ));
+        return Ok(ChannelSwitchPhase1::Healed(healed));
     }
 
     // `resolve_host_update_target` also returns `None` for a recognized custom
@@ -277,27 +342,6 @@ fn rebuild_proxy_switch_record(
     .map(|updated| updated.with_reshade_channel(target_channel.as_str()))
 }
 
-async fn switch_vulkan_reshade_channel(
-    context: &Context,
-    reshade_sources: &ReshadeSourceCatalog,
-    record: InstalledAddon,
-    target_channel: ReshadeChannel,
-    progress: Option<&ProgressObserver<'_>>,
-) -> Result<RenoDxInstallState, ServiceError> {
-    crate::addons::renodx::use_cases::commands::update_reshade::UpdateReShadeCommand {
-        context,
-        reshade_sources,
-        channel: target_channel,
-        progress,
-    }
-    .execute()
-    .await?;
-
-    let updated = record.with_reshade_channel(target_channel.as_str());
-    context.storage().upsert_installed_addon(&updated)?;
-    Ok(tracking::install_state_from_record(&updated))
-}
-
 fn ensure_target_channel(
     reshade_sources: &ReshadeSourceCatalog,
     target_channel: ReshadeChannel,
@@ -311,7 +355,13 @@ fn ensure_target_channel(
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_domain::{AddonKind, GameId, PathRef};
+    use std::fs;
+
+    use renderpilot_application::{GameRepository, InstalledAddonRepository};
+    use renderpilot_domain::{
+        AddonKind, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+    };
+    use tempfile::{TempDir, tempdir};
 
     use super::*;
 
@@ -331,6 +381,86 @@ mod tests {
 
     fn source(role: TrackedSourceRole, url: &str, digest: &str) -> TrackedSource {
         TrackedSource::new(role, url, None, digest)
+    }
+
+    struct SameChannelFixture {
+        _db_root: TempDir,
+        game_root: TempDir,
+        context: Context,
+        game_id: GameId,
+        before_record: InstalledAddon,
+    }
+
+    fn same_channel_fixture(suffix: &str) -> SameChannelFixture {
+        let db_root = tempdir().expect("db root");
+        let game_root = tempdir().expect("game root");
+        let context = Context::open_at(db_root.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new(format!("manual:channel-safety-{suffix}")).expect("game id");
+        let game = GameInstallation::new(
+            GameIdentity::new(game_id.clone(), "Channel Safety Test", Launcher::Manual)
+                .expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(game_root.path().to_string_lossy()).expect("game path"),
+        );
+        context.storage().upsert_game(&game).expect("game");
+
+        let addon_path = game_root.path().join("renodx-game.addon64");
+        fs::write(&addon_path, b"addon").expect("add-on");
+        let record = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::RenoDx,
+            PathRef::new(addon_path.to_string_lossy()).expect("add-on path"),
+        )
+        .with_tracked_source(source(
+            TrackedSourceRole::HostBinary,
+            "https://reshade.me/downloads/ReShade_Setup.exe",
+            "host-digest",
+        ))
+        .with_reshade_channel("stable");
+        context
+            .storage()
+            .upsert_installed_addon(&record)
+            .expect("record");
+        let before_record = records::record_of_kind(&context, &game_id, AddonKind::RenoDx)
+            .expect("record query")
+            .expect("record remains");
+
+        SameChannelFixture {
+            _db_root: db_root,
+            game_root,
+            context,
+            game_id,
+            before_record,
+        }
+    }
+
+    async fn switch_same_channel(
+        fixture: &SameChannelFixture,
+        safety: crate::GameMutationSafetyPermits,
+    ) -> Result<RenoDxInstallState, ServiceError> {
+        let manifest = crate::addons::renodx::test_support::manifest(Vec::new());
+        let reshade_sources = crate::addons::renodx::test_support::reshade_sources();
+        switch_reshade_channel(SwitchChannelRequest {
+            context: &fixture.context,
+            manifest: &manifest,
+            reshade_sources: &reshade_sources,
+            game_id: &fixture.game_id,
+            target_channel: ReshadeChannel::Stable,
+            safety,
+            progress: None,
+        })
+        .await
+    }
+
+    fn assert_record_unchanged(fixture: &SameChannelFixture) {
+        assert_eq!(
+            records::record_of_kind(&fixture.context, &fixture.game_id, AddonKind::RenoDx)
+                .expect("record query")
+                .expect("record remains"),
+            fixture.before_record,
+            "safety rejection must precede the metadata heal"
+        );
     }
 
     #[test]
@@ -411,6 +541,70 @@ mod tests {
             recorded_reshade_channel(&updated),
             Some(ReshadeChannel::Nightly)
         );
+    }
+
+    #[tokio::test]
+    async fn same_channel_heal_rejects_stale_safety_before_persisting_metadata() {
+        let fixture = same_channel_fixture("stale");
+        let authority = crate::FileSafetyAuthority::new();
+        let assessment = authority
+            .issue_game_assessment(&fixture.context, &fixture.game_id)
+            .expect("assessment");
+        let safety = authority
+            .game_mutation_permits(
+                fixture.game_id.clone(),
+                Some(&assessment.context_token),
+                None,
+            )
+            .expect("permits");
+        fs::create_dir(fixture.game_root.path().join("EasyAntiCheat")).expect("anti-cheat marker");
+
+        let error = switch_same_channel(&fixture, safety)
+            .await
+            .expect_err("stale context must reject the metadata heal");
+
+        assert!(matches!(error, ServiceError::SafetyContextStale { .. }));
+        assert_record_unchanged(&fixture);
+    }
+
+    #[tokio::test]
+    async fn same_channel_heal_rejects_another_game_scope_before_persisting_metadata() {
+        let fixture = same_channel_fixture("scope");
+        let other_root = tempdir().expect("other game root");
+        let other_game_id = GameId::new("manual:channel-safety-other").expect("other game id");
+        let other_game = GameInstallation::new(
+            GameIdentity::new(other_game_id.clone(), "Other Game", Launcher::Manual)
+                .expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(other_root.path().to_string_lossy()).expect("game path"),
+        );
+        fixture
+            .context
+            .storage()
+            .upsert_game(&other_game)
+            .expect("other game");
+        let authority = crate::FileSafetyAuthority::new();
+        let assessment = authority
+            .issue_game_assessment(&fixture.context, &other_game_id)
+            .expect("assessment");
+        let safety = authority
+            .game_mutation_permits(
+                fixture.game_id.clone(),
+                Some(&assessment.context_token),
+                None,
+            )
+            .expect("well-formed permits");
+
+        let error = switch_same_channel(&fixture, safety)
+            .await
+            .expect_err("another game scope must reject the metadata heal");
+
+        assert!(matches!(
+            error,
+            ServiceError::SafetyContextScopeMismatch { .. }
+        ));
+        assert_record_unchanged(&fixture);
     }
 
     #[test]

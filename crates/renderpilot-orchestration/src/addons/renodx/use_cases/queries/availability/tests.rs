@@ -48,12 +48,10 @@ fn full_reshade_host_bytes() -> Vec<u8> {
 
 #[test]
 fn manual_install_is_not_offered_for_unmatched_games() {
-    let dir = tempdir().expect("tempdir");
     let report = manual_file_install(
         &manifest(Vec::new()),
         &directx_facts(),
         &RenoDxResolution::NoMatch,
-        dir.path(),
     );
 
     assert!(report.is_none());
@@ -61,14 +59,12 @@ fn manual_install_is_not_offered_for_unmatched_games() {
 
 #[test]
 fn manual_install_can_be_offered_for_matched_incompatible_directx_games() {
-    let dir = tempdir().expect("tempdir");
     let report = manual_file_install(
         &manifest(Vec::new()),
         &directx_facts(),
         &RenoDxResolution::Incompatible {
             reason: IncompatibilityReason::ArchUnknown,
         },
-        dir.path(),
     );
 
     assert!(report.is_some());

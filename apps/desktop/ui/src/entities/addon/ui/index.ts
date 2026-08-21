@@ -6,6 +6,5 @@ export { default as AddonConfidenceBadge } from './AddonConfidenceBadge.svelte';
 export { default as AddonFieldLabel } from './AddonFieldLabel.svelte';
 export { default as AddonInstallableView } from './AddonInstallableView.svelte';
 export { default as AddonInstalledPanel } from './AddonInstalledPanel.svelte';
-export { default as AddonRiskConfirmDialog } from './AddonRiskConfirmDialog.svelte';
 export { default as AddonStateMessage } from './AddonStateMessage.svelte';
 export { default as AddonToolStatusBadge } from './AddonToolStatusBadge.svelte';

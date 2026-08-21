@@ -22,7 +22,7 @@ use renderpilot_platform_windows::DeveloperModeStatus;
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::Context;
-use crate::catalog::execute::{apply_swap, rollback_component};
+use crate::catalog::execute::rollback_component;
 
 use super::fs_ops::{perform_apply_fs, revert_to_baseline_fs};
 use super::planning::{fsr_members_to_remove, planned_target_files};
@@ -51,6 +51,52 @@ fn planned_copy(source: &Path, target: &Path) -> PlannedFile {
         source: source.to_path_buf(),
         file: comp_file(target),
     }
+}
+
+fn apply_swap_with_current_safety(
+    context: &Context,
+    game_id: &GameId,
+    component_id: &ComponentId,
+    artifact_id: &ArtifactId,
+) -> Result<super::types::SwapResult, crate::ServiceError> {
+    let assessment = crate::FileSafetyAuthority::new().issue_game_assessment(context, game_id)?;
+    apply_swap_confirmed(
+        context,
+        game_id,
+        component_id,
+        artifact_id,
+        None,
+        Some(&assessment.context_token),
+    )
+}
+
+fn apply_swap_confirmed(
+    context: &Context,
+    game_id: &GameId,
+    component_id: &ComponentId,
+    artifact_id: &ArtifactId,
+    executable_confirmation: Option<&str>,
+    context_token: Option<&str>,
+) -> Result<super::types::SwapResult, crate::ServiceError> {
+    let authority = crate::FileSafetyAuthority::new();
+    let current_assessment = context_token
+        .is_none()
+        .then(|| authority.issue_game_assessment(context, game_id))
+        .transpose()?;
+    let context_token = context_token.or_else(|| {
+        current_assessment
+            .as_ref()
+            .map(|assessment| assessment.context_token.as_str())
+    });
+    let safety = authority.game_permit(game_id.clone(), context_token)?;
+    crate::catalog::apply_swap(crate::catalog::ApplySwapRequest {
+        context,
+        game_id,
+        component_id,
+        artifact_id,
+        executable_confirmation,
+        safety: &safety,
+    })
 }
 
 /// Minimal FSR component placeholder; `component` is only read on the
@@ -799,7 +845,7 @@ fn standalone_dxc_apply_and_rollback_preserve_the_games_file_set() {
     storage.upsert_artifact(&artifact).expect("artifact");
     let context = Context::from_storage(storage);
 
-    let apply = apply_swap(&context, game.id(), &component_id, artifact.id())
+    let apply = apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
         .expect("standalone DXC apply");
     assert_eq!(apply.updated_file_count, 1);
     assert_eq!(
@@ -899,8 +945,9 @@ fn d3d12_missing_executable_facts_are_blocked_at_plan_and_apply_boundaries() {
             .expect("plan must fail without an unambiguous executable");
     assert!(matches!(plan_error, crate::ServiceError::InvalidInput(_)));
 
-    let apply_error = apply_swap(&context, game.id(), &component_id, artifact.id())
-        .expect_err("direct apply must enforce the same policy");
+    let apply_error =
+        apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
+            .expect_err("direct apply must enforce the same policy");
     assert!(matches!(apply_error, crate::ServiceError::InvalidInput(_)));
     assert_eq!(
         fs::read(&live).expect("live core"),
@@ -968,7 +1015,7 @@ fn patched_executable_backup_without_dll_backup_is_never_captured_as_a_mixed_bas
             .any(|blocker| blocker.as_str() == "d3d12_executable_repair_required")
     );
 
-    let error = apply_swap(&context, game.id(), &component_id, artifact.id())
+    let error = apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
         .expect_err("mixed baseline must be blocked");
     assert!(matches!(error, crate::ServiceError::InvalidInput(_)));
     assert_eq!(fs::read(&executable).expect("live EXE"), patched_executable);
@@ -1051,12 +1098,13 @@ fn confirmed_d3d12_apply_reports_token_mismatch_when_the_live_dll_changes() {
     .expect("token");
 
     write(&live_dll, b"externally-changed-runtime");
-    let error = crate::catalog::apply_swap_confirmed(
+    let error = apply_swap_confirmed(
         &context,
         game.id(),
         &component_id,
         artifact.id(),
         Some(&token),
+        None,
     )
     .expect_err("stale confirmation must fail");
 
@@ -1132,12 +1180,13 @@ fn d3d12_preview_apply_rechecks_developer_mode_after_a_successful_plan() {
     assert!(!token.is_empty());
 
     developer_mode_enabled.store(false, Ordering::SeqCst);
-    let error = crate::catalog::apply_swap_confirmed(
+    let error = apply_swap_confirmed(
         &context,
         game.id(),
         &component_id,
         artifact.id(),
         Some(&token),
+        None,
     )
     .expect_err("apply must recheck Developer Mode");
 
@@ -1208,12 +1257,13 @@ fn confirmed_first_d3d12_apply_reports_token_mismatch_when_the_executable_change
         &executable,
         &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(620),
     );
-    let error = crate::catalog::apply_swap_confirmed(
+    let error = apply_swap_confirmed(
         &context,
         game.id(),
         &component_id,
         artifact.id(),
         Some(&token),
+        None,
     )
     .expect_err("an incompatible executable change must reject the confirmation");
     assert!(matches!(
@@ -1228,12 +1278,13 @@ fn confirmed_first_d3d12_apply_reports_token_mismatch_when_the_executable_change
     assert!(!bak_of(&executable).exists());
 
     fs::remove_file(&executable).expect("remove executable after planning");
-    let error = crate::catalog::apply_swap_confirmed(
+    let error = apply_swap_confirmed(
         &context,
         game.id(),
         &component_id,
         artifact.id(),
         Some(&token),
+        None,
     )
     .expect_err("stale executable state must reject the confirmation");
 
@@ -1308,12 +1359,13 @@ fn every_d3d12_apply_stage_rolls_back_dll_exe_sidecars_and_database_together() {
         let token = plan.plan.confirmation_token().to_owned();
 
         let _failure = set_d3d12_apply_failure_point(failure_point);
-        crate::catalog::apply_swap_confirmed(
+        apply_swap_confirmed(
             &context,
             game.id(),
             &component_id,
             artifact.id(),
             Some(&token),
+            None,
         )
         .expect_err("injected failure must abort the entire durable mutation");
 
@@ -1639,7 +1691,7 @@ fn openvr_apply_reinspects_installed_dll_and_fails_before_mutation() {
         "preview must reject stale scan metadata"
     );
     assert!(
-        apply_swap(&context, game.id(), &component_id, artifact.id()).is_err(),
+        apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id()).is_err(),
         "apply must repeat the same fail-closed check"
     );
     assert_eq!(
@@ -1733,10 +1785,12 @@ fn reswap_keeps_one_immutable_classic_baseline() {
     fx.context.storage().upsert_artifact(&b).expect("b");
     fx.context.storage().upsert_artifact(&c).expect("c");
 
-    apply_swap(&fx.context, fx.game.id(), &fx.component_id, b.id()).expect("A to B");
+    apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, b.id())
+        .expect("A to B");
     let sidecar = bak_of(&fx.live);
     assert_eq!(fs::read(&sidecar).unwrap(), b"original-a");
-    apply_swap(&fx.context, fx.game.id(), &fx.component_id, c.id()).expect("B to C");
+    apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, c.id())
+        .expect("B to C");
 
     assert_eq!(fs::read(&sidecar).unwrap(), b"original-a");
     assert_eq!(sha_of(&sidecar), original_hash);
@@ -1763,7 +1817,8 @@ fn reswap_does_not_rebase_a_record_whose_classic_sidecar_was_removed() {
     fx.context.storage().upsert_artifact(&b).expect("b");
     fx.context.storage().upsert_artifact(&c).expect("c");
 
-    apply_swap(&fx.context, fx.game.id(), &fx.component_id, b.id()).expect("A to B");
+    apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, b.id())
+        .expect("A to B");
     let sidecar = bak_of(&fx.live);
     fs::remove_file(&sidecar).expect("manual backup removal");
 
@@ -1783,7 +1838,8 @@ fn reswap_does_not_rebase_a_record_whose_classic_sidecar_was_removed() {
     );
 
     assert!(
-        apply_swap(&fx.context, fx.game.id(), &fx.component_id, c.id()).is_err(),
+        apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, c.id())
+            .is_err(),
         "a missing immutable baseline must block the reswap"
     );
     assert!(
@@ -1823,14 +1879,176 @@ fn catalog_apply_rejects_external_or_missing_live_state_before_mutation() {
         .expect("artifact");
 
     write(&fx.live, b"external-replacement");
-    assert!(apply_swap(&fx.context, fx.game.id(), &fx.component_id, artifact.id()).is_err());
+    assert!(
+        apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, artifact.id())
+            .is_err()
+    );
     assert_eq!(fs::read(&fx.live).expect("live"), b"external-replacement");
     assert!(!bak_of(&fx.live).exists());
 
     fs::remove_file(&fx.live).expect("remove");
-    assert!(apply_swap(&fx.context, fx.game.id(), &fx.component_id, artifact.id()).is_err());
+    assert!(
+        apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, artifact.id())
+            .is_err()
+    );
     assert!(!fx.live.exists());
     assert!(!bak_of(&fx.live).exists());
+}
+
+#[test]
+fn catalog_apply_rejects_missing_safety_context_before_target_or_durable_write() {
+    let fx = fresh_dlss_fixture("missing-safety-context", b"original");
+    let source = write_library_dlss(&fx.library_dir, "lib", b"overlay");
+    let artifact = dlss_artifact(&source, "3.8.0.0");
+    fx.context
+        .storage()
+        .upsert_artifact(&artifact)
+        .expect("artifact");
+
+    let error = crate::FileSafetyAuthority::new()
+        .game_permit(fx.game.id().clone(), None)
+        .expect_err("missing game safety context must reject the apply");
+    assert!(matches!(
+        error,
+        crate::ServiceError::SafetyContextMissing { .. }
+    ));
+    assert_eq!(
+        fs::read(&fx.live).expect("target remains readable"),
+        b"original",
+        "safety rejection must precede the first target write"
+    );
+    assert!(!bak_of(&fx.live).exists(), "no backup may be created");
+    assert!(
+        fx.context
+            .storage()
+            .get_component_backup(&fx.component_id)
+            .expect("baseline query")
+            .is_none(),
+        "safety rejection must not create a durable baseline row"
+    );
+    assert!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "safety rejection must not prepare a durable mutation"
+    );
+}
+
+#[test]
+fn catalog_apply_rejects_stale_safety_context_before_target_or_durable_write() {
+    let fx = fresh_dlss_fixture("stale-safety-context", b"original");
+    let source = write_library_dlss(&fx.library_dir, "lib", b"overlay");
+    let artifact = dlss_artifact(&source, "3.8.0.0");
+    fx.context
+        .storage()
+        .upsert_artifact(&artifact)
+        .expect("artifact");
+    let assessment = crate::FileSafetyAuthority::new()
+        .issue_game_assessment(&fx.context, fx.game.id())
+        .expect("fresh game safety assessment");
+
+    // The marker changes the detector observation without changing the catalog
+    // target or source, so the apply reaches the safety boundary before any
+    // filesystem or durable mutation work.
+    write(
+        &fx.live.parent().expect("game root").join("EasyAntiCheat"),
+        b"detected marker",
+    );
+
+    let error = apply_swap_confirmed(
+        &fx.context,
+        fx.game.id(),
+        &fx.component_id,
+        artifact.id(),
+        None,
+        Some(&assessment.context_token),
+    )
+    .expect_err("stale game safety context must reject the apply");
+    assert!(matches!(
+        error,
+        crate::ServiceError::SafetyContextStale { .. }
+    ));
+    assert_eq!(
+        fs::read(&fx.live).expect("target remains readable"),
+        b"original",
+        "stale safety rejection must precede the first target write"
+    );
+    assert!(!bak_of(&fx.live).exists(), "no backup may be created");
+    assert!(
+        fx.context
+            .storage()
+            .get_component_backup(&fx.component_id)
+            .expect("baseline query")
+            .is_none(),
+        "stale safety rejection must not create a durable baseline row"
+    );
+    assert!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "stale safety rejection must not prepare a durable mutation"
+    );
+}
+
+#[test]
+fn catalog_apply_rejects_a_different_game_safety_context_before_target_or_durable_write() {
+    let fx = fresh_dlss_fixture("scope-mismatched-safety-context", b"original");
+    let source = write_library_dlss(&fx.library_dir, "lib", b"overlay");
+    let artifact = dlss_artifact(&source, "3.8.0.0");
+    fx.context
+        .storage()
+        .upsert_artifact(&artifact)
+        .expect("artifact");
+
+    let other_root = tempfile::tempdir().expect("other game root");
+    let other_game = sample_game_at(other_root.path());
+    fx.context
+        .storage()
+        .upsert_game(&other_game)
+        .expect("other game");
+    let assessment = crate::FileSafetyAuthority::new()
+        .issue_game_assessment(&fx.context, other_game.id())
+        .expect("other game safety assessment");
+
+    let error = apply_swap_confirmed(
+        &fx.context,
+        fx.game.id(),
+        &fx.component_id,
+        artifact.id(),
+        None,
+        Some(&assessment.context_token),
+    )
+    .expect_err("a permit for another game must reject the apply");
+    assert!(matches!(
+        error,
+        crate::ServiceError::SafetyContextScopeMismatch { .. }
+    ));
+    assert_eq!(
+        fs::read(&fx.live).expect("target remains readable"),
+        b"original",
+        "scope rejection must precede the first target write"
+    );
+    assert!(!bak_of(&fx.live).exists(), "no backup may be created");
+    assert!(
+        fx.context
+            .storage()
+            .get_component_backup(&fx.component_id)
+            .expect("baseline query")
+            .is_none(),
+        "scope rejection must not create a durable baseline row"
+    );
+    assert!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "scope rejection must not prepare a durable mutation"
+    );
 }
 
 #[test]
@@ -1842,7 +2060,8 @@ fn catalog_rollback_rejects_a_tampered_sidecar_without_changes() {
         .storage()
         .upsert_artifact(&artifact)
         .expect("artifact");
-    apply_swap(&fx.context, fx.game.id(), &fx.component_id, artifact.id()).expect("swap");
+    apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, artifact.id())
+        .expect("swap");
 
     write(&bak_of(&fx.live), b"tampered");
     assert!(rollback_component(&fx.context, fx.game.id(), &fx.component_id).is_err());
@@ -1897,7 +2116,8 @@ fn swap_over_luma_owned_dlss_adopts_its_original_sidecar_without_rewriting_it() 
     storage.upsert_installed_addon(&record).expect("record");
     let context = Context::from_storage(storage);
 
-    apply_swap(&context, game.id(), &component_id, artifact.id()).expect("swap");
+    apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
+        .expect("swap");
 
     assert_eq!(fs::read(&sidecar).unwrap(), b"exact-original");
     let baseline = context
@@ -1963,7 +2183,8 @@ fn swap_over_luma_owned_absent_dlss_does_not_promote_luma_bytes_to_baseline() {
     storage.upsert_installed_addon(&record).expect("record");
     let context = Context::from_storage(storage);
 
-    apply_swap(&context, game.id(), &component_id, artifact.id()).expect("swap");
+    apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
+        .expect("swap");
 
     assert_eq!(fs::read(&live).unwrap(), b"library-overlay");
     assert!(!bak_of(&live).exists());
@@ -2076,7 +2297,7 @@ fn streamline_package_apply_updates_all_installed_plugins_not_extras() {
     storage.upsert_artifact(&artifact).expect("store artifact");
 
     let context = Context::from_storage(storage);
-    let result = apply_swap(
+    let result = apply_swap_with_current_safety(
         &context,
         game.id(),
         &ComponentId::new("component:streamline").expect("id"),
@@ -2201,8 +2422,9 @@ fn preview_keeps_stale_artifact_but_apply_invalidates_it_at_mutation_boundary() 
         "read-only preview must preserve the stale catalog row"
     );
 
-    let apply_error = apply_swap(&context, game.id(), &component_id, &artifact_id)
-        .expect_err("apply must reject stale source");
+    let apply_error =
+        apply_swap_with_current_safety(&context, game.id(), &component_id, &artifact_id)
+            .expect_err("apply must reject stale source");
     assert!(matches!(
         apply_error,
         crate::ServiceError::StaleReplacementSource
@@ -2285,8 +2507,9 @@ fn source_change_between_preflight_and_copy_rolls_back_and_invalidates_atomicall
     let _hook_guard = super::set_before_copy_hook(move || {
         write(&raced_source, b"source-changed-after-preflight");
     });
-    let service_error = apply_swap(&fx.context, fx.game.id(), &fx.component_id, &artifact_id)
-        .expect_err("post-preflight source change must fail");
+    let service_error =
+        apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, &artifact_id)
+            .expect_err("post-preflight source change must fail");
     assert!(
         matches!(service_error, crate::ServiceError::StaleReplacementSource),
         "stable stale-source error expected, got {service_error:?}"
@@ -2364,12 +2587,20 @@ fn fsr_members_to_remove_reads_the_baseline_not_the_live_component() {
 
 #[test]
 fn public_catalog_apply_waits_at_the_game_mutation_boundary() {
-    let context = std::sync::Arc::new(crate::Context::from_storage(
-        SqliteStorage::in_memory().expect("storage"),
-    ));
-    let game_id = GameId::new(format!("manual:lock-{}", ulid::Ulid::generate())).expect("id");
+    let game_root = tempfile::tempdir().expect("game root");
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let game = sample_game_at(game_root.path());
+    storage.upsert_game(&game).expect("game");
+    let context = std::sync::Arc::new(crate::Context::from_storage(storage));
+    let game_id = game.id().clone();
     let component_id = ComponentId::new("component:lock-test").expect("component");
     let artifact_id = ArtifactId::new("artifact:lock-test").expect("artifact");
+    let assessment = crate::FileSafetyAuthority::new()
+        .issue_game_assessment(&context, &game_id)
+        .expect("assessment");
+    let safety = crate::FileSafetyAuthority::new()
+        .game_permit(game_id.clone(), Some(&assessment.context_token))
+        .expect("permit");
     let held = crate::game_mutation_lock::blocking_lock(&game_id);
     let (attempt_tx, attempt_rx) = std::sync::mpsc::channel();
     let (done_tx, done_rx) = std::sync::mpsc::channel();
@@ -2378,7 +2609,14 @@ fn public_catalog_apply_waits_at_the_game_mutation_boundary() {
     let worker_context = std::sync::Arc::clone(&context);
     let worker_game = game_id;
     let worker = std::thread::spawn(move || {
-        let result = super::apply_swap(&worker_context, &worker_game, &component_id, &artifact_id);
+        let result = super::apply_swap(super::ApplySwapRequest {
+            context: &worker_context,
+            game_id: &worker_game,
+            component_id: &component_id,
+            artifact_id: &artifact_id,
+            executable_confirmation: None,
+            safety: &safety,
+        });
         done_tx.send(result).expect("report result");
     });
 

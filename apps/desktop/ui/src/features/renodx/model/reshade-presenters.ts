@@ -5,7 +5,6 @@ import {
   type HostDetection,
   type HostFacts,
   type ReshadeChannel,
-  type RiskAssessment,
 } from '@entities/addon';
 
 import type {
@@ -46,15 +45,6 @@ export const VULKAN_LOADER_VISIBILITY_NOTE = {
 } satisfies Partial<Record<VulkanLoaderVisibility, MessageKeyWithoutParams>>;
 
 const presenters = createReshadePresenters('gameDetails.renodx', ADDON_DISPLAY_NAME.renodx);
-
-/**
- * Renders an install-risk message: the backend's own `message_key` when it's
- * in the catalog, else the severity-based fallback — either way interpolated
- * with RenoDX's display name (the risk copy is addon-agnostic).
- */
-export function riskMessage(risk: RiskAssessment): string {
-  return presenters.riskMessage(risk);
-}
 
 /** Structured host description → single i18n string (tool keys via factory). */
 export function describeReshadeHost(input: { detection: HostDetection; facts: HostFacts }): string {

@@ -30,7 +30,8 @@ pub async fn renodx_install(
     app: tauri::AppHandle,
     game_id: String,
     reshade_channel: String,
-    confirm_anticheat: bool,
+    game_context_token: Option<String>,
+    shared_vulkan_context_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::RenodxInstall);
@@ -44,7 +45,8 @@ pub async fn renodx_install(
                 &context,
                 game_id,
                 reshade_channel,
-                confirm_anticheat,
+                game_context_token,
+                shared_vulkan_context_token,
                 Some(&emit as &desktop::ProgressObserver<'_>),
             )
             .await
@@ -58,7 +60,8 @@ pub async fn renodx_install_from_file(
     game_id: String,
     file_path: String,
     reshade_channel: String,
-    confirm_anticheat: bool,
+    game_context_token: Option<String>,
+    shared_vulkan_context_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::RenodxInstallFromFile);
@@ -74,7 +77,8 @@ pub async fn renodx_install_from_file(
                 game_id,
                 file_path,
                 reshade_channel,
-                confirm_anticheat,
+                game_context_token,
+                shared_vulkan_context_token,
                 Some(&emit as &desktop::ProgressObserver<'_>),
             )
             .await
@@ -87,6 +91,8 @@ pub async fn renodx_switch_reshade_channel(
     app: tauri::AppHandle,
     game_id: String,
     reshade_channel: String,
+    game_context_token: Option<String>,
+    shared_vulkan_context_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::RenodxSwitchReshadeChannel);
@@ -100,6 +106,8 @@ pub async fn renodx_switch_reshade_channel(
                 &context,
                 game_id,
                 reshade_channel,
+                game_context_token,
+                shared_vulkan_context_token,
                 Some(&emit as &desktop::ProgressObserver<'_>),
             )
             .await
@@ -145,6 +153,7 @@ pub async fn renodx_vulkan_layer_management_status(
 pub async fn renodx_apply_vulkan_layer(
     app: tauri::AppHandle,
     reshade_channel: String,
+    shared_vulkan_context_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::RenodxApplyVulkanLayer);
@@ -157,6 +166,7 @@ pub async fn renodx_apply_vulkan_layer(
             desktop::renodx_apply_vulkan_layer(
                 &context,
                 reshade_channel,
+                shared_vulkan_context_token,
                 Some(&emit as &desktop::ProgressObserver<'_>),
             )
             .await
@@ -172,7 +182,7 @@ pub async fn renodx_remove_vulkan_layer(
     let context = Arc::clone(&context);
 
     boundary
-        .run(move || desktop::renodx_remove_vulkan_layer(&context))
+        .run_async(move || async move { desktop::renodx_remove_vulkan_layer(&context).await })
         .await
 }
 
@@ -193,6 +203,8 @@ pub async fn renodx_check_update(
 pub async fn renodx_update(
     app: tauri::AppHandle,
     game_id: String,
+    game_context_token: Option<String>,
+    shared_vulkan_context_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::RenodxUpdate);
@@ -204,6 +216,8 @@ pub async fn renodx_update(
             desktop::renodx_update(
                 &context,
                 game_id,
+                game_context_token,
+                shared_vulkan_context_token,
                 Some(&emit as &desktop::ProgressObserver<'_>),
             )
             .await
@@ -218,6 +232,7 @@ pub async fn renodx_install_dlss_fix(
     context: tauri::State<'_, Arc<Context>>,
     app: tauri::AppHandle,
     game_id: String,
+    game_context_token: Option<String>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::RenodxInstallDlssFix);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
@@ -225,7 +240,8 @@ pub async fn renodx_install_dlss_fix(
 
     boundary
         .run_async(move || async move {
-            desktop::renodx_install_dlss_fix(&context, game_id, Some(&progress)).await
+            desktop::renodx_install_dlss_fix(&context, game_id, game_context_token, Some(&progress))
+                .await
         })
         .await
 }
@@ -235,6 +251,7 @@ pub async fn renodx_update_dlss_fix(
     context: tauri::State<'_, Arc<Context>>,
     app: tauri::AppHandle,
     game_id: String,
+    game_context_token: Option<String>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::RenodxUpdateDlssFix);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
@@ -242,7 +259,8 @@ pub async fn renodx_update_dlss_fix(
 
     boundary
         .run_async(move || async move {
-            desktop::renodx_update_dlss_fix(&context, game_id, Some(&progress)).await
+            desktop::renodx_update_dlss_fix(&context, game_id, game_context_token, Some(&progress))
+                .await
         })
         .await
 }

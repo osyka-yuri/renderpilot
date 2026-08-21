@@ -14,7 +14,6 @@ import type {
   HostFacts,
   MatchConfidence,
   ReshadeChannel,
-  RiskAssessment,
   UpdateStatus,
 } from '@entities/addon';
 
@@ -194,7 +193,6 @@ export type AvailabilityOutcome =
       kind: 'installable';
       /** Honest confidence shown as a badge. */
       confidence: MatchConfidence;
-      risk: RiskAssessment;
       /** Present when this install comes from an engine-level generic profile. */
       generic_profile: RenoDxGenericProfile | null;
       /** Proxy DLL or the shared Vulkan layer. */
@@ -211,7 +209,6 @@ export type AvailabilityOutcome =
       message: CatalogMessage;
       file_install: {
         confidence: MatchConfidence;
-        risk: RiskAssessment;
         /** Proxy DLL or the shared Vulkan layer. */
         host_kind: HostKind;
         generic_profile: RenoDxGenericProfile | null;
@@ -226,7 +223,6 @@ export type AvailabilityOutcome =
  * when no automatic or curated-external path is available.
  */
 export type ManualFileInstall = {
-  risk: RiskAssessment;
   /** Proxy DLL or the shared Vulkan layer. */
   host_kind: HostKind;
   /** Catalogue add-on stem (`renodx-<slug>`) for a soft filename check, or null. */

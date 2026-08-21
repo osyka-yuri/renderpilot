@@ -67,8 +67,6 @@ describe('createRenoDxStore', () => {
 
     expect(store.loaded).toBe(true);
     expect(store.isInstallable).toBe(true);
-    expect(store.requiresConfirmation).toBe(false);
-    expect(store.risk?.severity).toBe('info');
   });
 
   it('preserves the complete generic catalogue profile', async () => {
@@ -84,10 +82,6 @@ describe('createRenoDxStore', () => {
       outcome: {
         kind: 'installable',
         confidence: 'verified',
-        risk: {
-          severity: 'info',
-          message_key: 'addon.risk.sp_safe',
-        },
         generic_profile: genericProfile,
         host_kind: 'proxy',
       },
@@ -122,7 +116,7 @@ describe('createRenoDxStore', () => {
 
     expect(store.reshadeStableSupported).toBe(false);
     expect(store.selectedReshadeChannel).toBe('stable');
-    expect(await store.install('steam:1091500', 'stable', false)).toBe('skipped');
+    expect(await store.install('steam:1091500', 'stable')).toBe('skipped');
   });
 
   it('applies the availability snapshot consistently on load', async () => {
@@ -231,16 +225,12 @@ describe('createRenoDxStore', () => {
     expect(store.selectedReshadeChannel).toBe('nightly');
   });
 
-  it('flags a warn-risk game as requiring confirmation', async () => {
+  it('loads an installable game without a duplicate risk confirmation flow', async () => {
     const warn: AvailabilityReport = availability({
       state: { status: 'not_installed' },
       outcome: {
         kind: 'installable',
         confidence: 'untested',
-        risk: {
-          severity: 'warn',
-          message_key: 'addon.risk.anticheat_detected',
-        },
         generic_profile: null,
         host_kind: 'proxy',
       },
@@ -251,6 +241,8 @@ describe('createRenoDxStore', () => {
     });
     await store.load('steam:42');
 
-    expect(store.requiresConfirmation).toBe(true);
+    expect(store.isInstallable).toBe(true);
+    expect(store.confidence).toBe('untested');
+    expect(store.safetyContextError).toBeNull();
   });
 });

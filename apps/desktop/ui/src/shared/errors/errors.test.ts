@@ -5,10 +5,18 @@ import {
   ClientError,
   DesktopCommandError,
   getErrorCode,
+  isFileSafetyContextError,
   normalizeDesktopCommandError,
 } from './index';
 
 describe('desktop error model and presenter', () => {
+  it('recognizes file-safety context errors only', () => {
+    expect(isFileSafetyContextError({ code: 'safety_context_missing' })).toBe(true);
+    expect(isFileSafetyContextError({ code: 'safety_context_stale' })).toBe(true);
+    expect(isFileSafetyContextError({ code: 'safety_context_scope_mismatch' })).toBe(true);
+    expect(isFileSafetyContextError({ code: 'validation_failed' })).toBe(false);
+  });
+
   it('presents known command codes entirely from the local contract', () => {
     const raw = {
       code: 'storage_failed',

@@ -36,8 +36,9 @@ export type {
   HostDetection,
   HostFacts,
   MatchConfidence,
+  MutationSafetyScope,
   ReshadeChannel,
-  RiskAssessment,
+  MutationSafetyTokens,
   UpdateStatus,
 } from './model/types';
 
@@ -50,7 +51,6 @@ export {
   AddonFieldLabel,
   AddonInstallableView,
   AddonInstalledPanel,
-  AddonRiskConfirmDialog,
   AddonStateMessage,
   AddonToolStatusBadge,
 } from './ui';

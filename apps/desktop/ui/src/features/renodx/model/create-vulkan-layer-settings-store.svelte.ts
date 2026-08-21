@@ -1,12 +1,13 @@
 import { formatPresentedError } from '@shared/error-presentation';
 import { t } from '@shared/i18n';
-import { publishPresentedErrorNotification } from '@shared/notifications';
-import { CATALOG_SETTING_KEYS, getCatalogSetting, setCatalogSetting } from '@entities/settings';
 import { clearDownloadProgress } from '@shared/lib';
+import { publishPresentedErrorNotification } from '@shared/notifications';
+import type { ReshadeChannel } from '@entities/addon';
+import { getSharedVulkanSafetyAssessment } from '@entities/game';
+import { CATALOG_SETTING_KEYS, getCatalogSetting, setCatalogSetting } from '@entities/settings';
 import { renodxApi, type RenoDxApi } from '../api/desktop';
 import { normalizeReshadeChannel } from './renodx-store-helpers';
 import type { VulkanLayerDisplayState } from './reshade-presenters';
-import type { ReshadeChannel } from '@entities/addon';
 
 import type { VulkanLayerManagementReport } from './types';
 
@@ -16,13 +17,18 @@ export type VulkanLayerPrimaryAction = 'install' | 'update' | 'switch_channel' |
 
 export type VulkanLayerSettingsStore = ReturnType<typeof createVulkanLayerSettingsStore>;
 
+const defaultSettingsApi = {
+  ...renodxApi,
+  getSharedVulkanSafetyAssessment,
+};
+
 type SettingsApi = Pick<
   RenoDxApi,
   'vulkanLayerManagementStatus' | 'applyVulkanLayer' | 'removeVulkanLayer'
->;
+> & { getSharedVulkanSafetyAssessment: typeof getSharedVulkanSafetyAssessment };
 
 export function createVulkanLayerSettingsStore(
-  api: SettingsApi = renodxApi,
+  api: SettingsApi = defaultSettingsApi,
   settings = { getCatalogSetting, setCatalogSetting },
 ) {
   let report = $state<VulkanLayerManagementReport | null>(null);
@@ -147,7 +153,8 @@ export function createVulkanLayerSettingsStore(
         CATALOG_SETTING_KEYS.RENODX_RESHADE_CHANNEL,
         selectedChannel,
       );
-      const next = await api.applyVulkanLayer(selectedChannel);
+      const safety = await api.getSharedVulkanSafetyAssessment();
+      const next = await api.applyVulkanLayer(selectedChannel, safety.context_token);
       applyReport(next, selectedChannel);
       return true;
     } catch (applyError) {

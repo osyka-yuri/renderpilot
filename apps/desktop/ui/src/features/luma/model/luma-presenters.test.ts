@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeReshadeHost, getReshadeDescription, riskMessage } from './luma-presenters';
+import { describeReshadeHost, getReshadeDescription } from './luma-presenters';
 import type { HostFacts } from '@entities/addon';
 
 const PRESENT_HOST_FACTS = {
@@ -163,17 +163,5 @@ describe('luma presenters', () => {
         },
       ],
     });
-  });
-
-  it('renders a catalogued risk message interpolated with the Luma display name', () => {
-    expect(riskMessage({ severity: 'info', message_key: 'addon.risk.sp_safe' })).toBe(
-      'No known anti-cheat signatures were found — installing Luma is likely safe, but not guaranteed.',
-    );
-  });
-
-  it('falls back to the severity default for an uncatalogued message key', () => {
-    expect(riskMessage({ severity: 'warn', message_key: 'does.not.exist' })).toBe(
-      'Anti-cheat detected — installing may risk a ban.',
-    );
   });
 });

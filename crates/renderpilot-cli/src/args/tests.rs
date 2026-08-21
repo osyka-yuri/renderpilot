@@ -223,6 +223,7 @@ fn apply_parses_all_identifiers() {
                 .expect("component id should parse"),
             artifact_id: ArtifactId::new("artifact:dlss-3.7").expect("artifact id should parse"),
             confirmation_token: None,
+            safety_context_token: None,
         }
     );
 }
@@ -247,6 +248,32 @@ fn apply_parses_executable_confirmation_token() {
             component_id: ComponentId::new("component:game-a:d3d12").expect("component id"),
             artifact_id: ArtifactId::new("artifact:d3d12-619").expect("artifact id"),
             confirmation_token: Some("fresh-preflight-fingerprint".to_owned()),
+            safety_context_token: None,
+        }
+    );
+}
+
+#[test]
+fn apply_parses_file_safety_context_token_separately() {
+    assert_eq!(
+        parse_args(args(&[
+            "apply",
+            "--game",
+            "manual:C:/Games/GameA",
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+            "--safety-context-token",
+            "fresh-file-safety-context",
+        ]))
+        .expect("valid args"),
+        Command::ApplyOperation {
+            game_id: GameId::new("manual:C:/Games/GameA").expect("game id"),
+            component_id: ComponentId::new("component:game-a:dlss").expect("component id"),
+            artifact_id: ArtifactId::new("artifact:dlss-3.7").expect("artifact id"),
+            confirmation_token: None,
+            safety_context_token: Some("fresh-file-safety-context".to_owned()),
         }
     );
 }
@@ -269,6 +296,7 @@ fn apply_operation_alias_parses_all_identifiers() {
             component_id: ComponentId::new("component:game-a:dlss")
                 .expect("component id should parse"),
             confirmation_token: None,
+            safety_context_token: None,
             artifact_id: ArtifactId::new("artifact:dlss-3.7").expect("artifact id should parse"),
         }
     );

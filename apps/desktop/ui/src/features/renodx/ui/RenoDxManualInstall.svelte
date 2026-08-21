@@ -5,8 +5,6 @@
 
   import { ADDON_EXTENSIONS, isAddonFile, validateAddonFile } from '../model/validate-addon';
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
-  import { riskMessage } from '../model/reshade-presenters';
-  import { AddonStateMessage } from '@entities/addon';
 
   import type { ReshadeChannel } from '@entities/addon';
 
@@ -27,13 +25,10 @@
   let dropEl = $state<HTMLElement | null>(null);
   let pendingPath = $state<string | null>(null);
 
-  const showFullAddonWarning = $derived(manual.risk.severity === 'warn');
   const showDxChannelControl = $derived(manual.host_kind === 'proxy');
   const expectedAddonName = $derived(manual.expected_addon_name ?? null);
 
   const canReview = $derived(!busy);
-
-  const riskText = $derived(riskMessage(manual.risk));
 
   const pendingValidation = $derived(
     pendingPath === null
@@ -117,7 +112,7 @@
     }
 
     pendingPath = null;
-    void store.installFromFile(gameId, path, store.selectedReshadeChannel, true);
+    void store.installFromFile(gameId, path, store.selectedReshadeChannel);
   }
 
   function cancelReview(): void {
@@ -166,14 +161,6 @@
         </p>
       {/if}
 
-      {#if showFullAddonWarning}
-        <AddonStateMessage
-          tone="warning"
-          icon="warning"
-          message={t('gameDetails.addon.fullAddonWarning')}
-        />
-      {/if}
-
       {#if pendingWarning}
         <p class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
           <TriangleAlertIcon class="size-3.5 shrink-0" aria-hidden="true" />
@@ -207,16 +194,6 @@
       <p class="text-sm text-muted-foreground">
         {t('gameDetails.renodx.fileInstall.expected', { name: expectedAddonName })}
       </p>
-    {/if}
-
-    <p class="text-sm text-muted-foreground">{riskText}</p>
-
-    {#if showFullAddonWarning}
-      <AddonStateMessage
-        tone="warning"
-        icon="warning"
-        message={t('gameDetails.addon.fullAddonWarning')}
-      />
     {/if}
 
     <div>

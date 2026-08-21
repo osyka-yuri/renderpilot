@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{AddonKind, Architecture, GameId, InstalledAddon};
 
-use crate::addons::anticheat::{RiskSeverity, assess_risk};
 use crate::addons::exclusivity;
 use crate::addons::game_analysis::install_target_dir;
 use crate::addons::install_guard;
@@ -78,8 +77,8 @@ pub struct InstallRequest<'a> {
     pub reshade_sources: &'a ReshadeSourceCatalog,
     /// The game to install Luma for.
     pub game_id: &'a GameId,
-    /// Must be `true` to proceed when the anti-cheat risk assessment requires confirmation.
-    pub confirm_anticheat: bool,
+    /// Typed authority for the final game-file commit.
+    pub safety: crate::GameSafetyPermit,
     /// Optional download progress observer.
     pub progress: Option<&'a ProgressObserver<'a>>,
 }
@@ -87,8 +86,8 @@ pub struct InstallRequest<'a> {
 /// Installs Luma into `game`, fetching the release asset + ReShade host (always
 /// nightly) from upstream and persisting the record needed to reverse it.
 ///
-/// `confirm_anticheat` must be `true` to proceed when the risk assessment
-/// requires it. Refuses outright when Luma is already installed for this game,
+/// `safety` must come from a fresh assessment for the target game. Refuses outright
+/// when Luma is already installed for this game,
 /// when RenoDX is installed (or unmanaged files belonging to it are on disk --
 /// see the shared add-on exclusivity policy), or when Luma-shaped files are present on
 /// disk with no tracked record (adoption is not implemented in v1).
@@ -100,7 +99,7 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
         manifest,
         reshade_sources,
         game_id,
-        confirm_anticheat,
+        safety,
         progress,
     } = request;
 
@@ -109,7 +108,7 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
     let (snapshot, plan, dgvoodoo_preparation_kind) = {
         let _guard =
             game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
-        let prepared = resolve_install_snapshot(context, manifest, game_id, confirm_anticheat)?;
+        let prepared = resolve_install_snapshot(context, manifest, game_id)?;
         (
             prepared.snapshot,
             prepared.plan,
@@ -134,7 +133,7 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
 
     // Phase 3: re-lock, revalidate, apply under exclusivity.
     let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
-    let revalidated = resolve_install_snapshot(context, manifest, game_id, confirm_anticheat)?;
+    let revalidated = resolve_install_snapshot(context, manifest, game_id)?;
     ensure_install_snapshot_still_matches(&snapshot, &revalidated.snapshot)?;
     // Adopted ownership paths were frozen during unlocked prepare -- rebuild them
     // from disk under the lock so config presence / stack membership match apply.
@@ -151,26 +150,34 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
         &prepared,
         &min_version,
     )?;
-    crate::addons::durable::run_install_mutation(
+    crate::FileSafetyAuthority::new().authorize_game_commit(
         context,
-        &guard,
-        targets,
         crate::addons::mutation_features::LUMA_INSTALL,
-        game_id,
+        &guard,
+        &safety,
         || {
-            let source_last_modified = prepared.source_last_modified.clone();
-            let (record, commit) = install_files(
+            crate::addons::durable::run_install_mutation(
                 context,
-                &revalidated.snapshot.target_dir,
-                prepared,
-                &min_version,
-            )?;
-            crate::fs::stamp_mtime_best_effort(
-                Path::new(record.addon_file().as_str()),
-                source_last_modified.as_deref(),
-                None,
-            );
-            Ok((record, commit))
+                &guard,
+                targets,
+                crate::addons::mutation_features::LUMA_INSTALL,
+                game_id,
+                || {
+                    let source_last_modified = prepared.source_last_modified.clone();
+                    let (record, commit) = install_files(
+                        context,
+                        &revalidated.snapshot.target_dir,
+                        prepared,
+                        &min_version,
+                    )?;
+                    crate::fs::stamp_mtime_best_effort(
+                        Path::new(record.addon_file().as_str()),
+                        source_last_modified.as_deref(),
+                        None,
+                    );
+                    Ok((record, commit))
+                },
+            )
         },
     )
 }
@@ -187,10 +194,8 @@ fn resolve_install_snapshot(
     context: &Context,
     manifest: &LumaManifest,
     game_id: &GameId,
-    confirm_anticheat: bool,
 ) -> Result<ResolvedInstallSnapshot, ServiceError> {
     let game = require_game(context, game_id)?;
-    let scan_dir = Path::new(game.install_path().as_str());
     let override_path = executable_override(context, game_id);
     let (analysis, resolution) = analyze_and_resolve(&game, manifest, override_path.as_deref());
     let target_dir = install_target_dir(&analysis)?;
@@ -224,9 +229,6 @@ fn resolve_install_snapshot(
             ));
         }
     };
-
-    let risk = assess_risk(scan_dir, RiskSeverity::Info);
-    crate::addons::anticheat::enforce_gate(&risk, confirm_anticheat)?;
 
     let min_version = manifest.min_reshade_version_parsed()?;
     let host = host_policy::assess_for_tool(
@@ -386,36 +388,8 @@ fn ensure_not_unmanaged(scan_dirs: &[&Path]) -> Result<(), ServiceError> {
 mod tests {
     #[cfg(windows)]
     use super::*;
-    use crate::addons::anticheat::{InstallGate, RiskAssessment, RiskSeverity, decide_gate};
     #[cfg(windows)]
     use crate::addons::engine;
-
-    fn risk(severity: RiskSeverity) -> RiskAssessment {
-        RiskAssessment {
-            severity,
-            message_key: "k".to_owned(),
-        }
-    }
-
-    #[test]
-    fn safe_risk_proceeds_without_confirmation() {
-        assert_eq!(
-            decide_gate(&risk(RiskSeverity::Info), false),
-            InstallGate::Proceed
-        );
-    }
-
-    #[test]
-    fn warn_risk_needs_confirmation_then_proceeds() {
-        assert_eq!(
-            decide_gate(&risk(RiskSeverity::Warn), false),
-            InstallGate::NeedsConfirmation
-        );
-        assert_eq!(
-            decide_gate(&risk(RiskSeverity::Warn), true),
-            InstallGate::Proceed
-        );
-    }
 
     // -----------------------------------------------------------------
     // E.19: DB/disk-level refusals happen before any network is touched --
@@ -473,6 +447,117 @@ mod tests {
         .expect("write exe");
     }
 
+    #[cfg(windows)]
+    fn game_safety(context: &Context, game_id: &GameId) -> crate::GameSafetyPermit {
+        let authority = crate::FileSafetyAuthority::new();
+        let assessment = authority
+            .issue_game_assessment(context, game_id)
+            .expect("assessment");
+        authority
+            .game_permit(game_id.clone(), Some(&assessment.context_token))
+            .expect("permit")
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn install_safety_boundary_rejects_missing_stale_and_scope_mismatched_permits_before_writes() {
+        let db_dir = tempdir().expect("db root");
+        let game_dir = tempdir().expect("game root");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("steam:luma-install-safety").expect("game id");
+        let exe_path = game_dir.path().join("Dishonored2.exe");
+        write_stub_exe(&exe_path);
+        seed_game(
+            &context,
+            &game_id,
+            "luma-install-safety",
+            game_dir.path(),
+            &exe_path,
+        );
+        let target = game_dir.path().join("Luma-Game.addon");
+
+        let authority = crate::FileSafetyAuthority::new();
+        let missing = authority
+            .game_permit(game_id.clone(), None)
+            .expect_err("missing permit must reject before install writes");
+        assert!(matches!(missing, ServiceError::SafetyContextMissing { .. }));
+        assert!(!target.exists());
+        assert!(
+            context
+                .storage()
+                .pending_file_mutations_for_game(&game_id)
+                .expect("pending rows")
+                .is_empty()
+        );
+        let assessment = authority
+            .issue_game_assessment(&context, &game_id)
+            .expect("assessment");
+        let permit = authority
+            .game_permit(game_id.clone(), Some(&assessment.context_token))
+            .expect("permit");
+        std::fs::write(game_dir.path().join("EasyAntiCheat"), b"detected marker").expect("marker");
+        let guard = game_mutation_lock::try_lock(&game_id).expect("lock");
+        let stale = authority
+            .authorize_game_commit(
+                &context,
+                crate::addons::mutation_features::LUMA_INSTALL,
+                &guard,
+                &permit,
+                || -> Result<(), ServiceError> { panic!("stale permit entered commit") },
+            )
+            .expect_err("stale permit must reject before install writes");
+        assert!(matches!(stale, ServiceError::SafetyContextStale { .. }));
+        assert!(!target.exists());
+        assert!(
+            context
+                .storage()
+                .pending_file_mutations_for_game(&game_id)
+                .expect("pending rows")
+                .is_empty()
+        );
+        drop(guard);
+
+        let other_db_game = tempdir().expect("other game root");
+        let other_id = GameId::new("steam:luma-install-other-safety").expect("other game id");
+        let other_exe = other_db_game.path().join("Dishonored2.exe");
+        write_stub_exe(&other_exe);
+        seed_game(
+            &context,
+            &other_id,
+            "luma-install-other-safety",
+            other_db_game.path(),
+            &other_exe,
+        );
+        let other_assessment = authority
+            .issue_game_assessment(&context, &other_id)
+            .expect("other assessment");
+        let mismatched = authority
+            .game_permit(game_id.clone(), Some(&other_assessment.context_token))
+            .expect("well-formed permit");
+        let guard = game_mutation_lock::try_lock(&game_id).expect("lock");
+        let scope = authority
+            .authorize_game_commit(
+                &context,
+                crate::addons::mutation_features::LUMA_INSTALL,
+                &guard,
+                &mismatched,
+                || -> Result<(), ServiceError> { panic!("mismatched permit entered commit") },
+            )
+            .expect_err("scope-mismatched permit must reject before install writes");
+        assert!(matches!(
+            scope,
+            ServiceError::SafetyContextScopeMismatch { .. }
+        ));
+        assert!(!target.exists());
+        assert!(
+            context
+                .storage()
+                .pending_file_mutations_for_game(&game_id)
+                .expect("pending rows")
+                .is_empty()
+        );
+    }
+
     #[tokio::test]
     #[cfg(windows)]
     async fn install_refuses_before_any_network_when_renodx_is_installed() {
@@ -506,7 +591,7 @@ mod tests {
             manifest: &manifest(Vec::new()),
             reshade_sources: &crate::addons::luma::test_support::reshade_sources(),
             game_id: &game_id,
-            confirm_anticheat: false,
+            safety: game_safety(&context, &game_id),
             progress: None,
         })
         .await
@@ -540,7 +625,7 @@ mod tests {
             manifest: &manifest(Vec::new()),
             reshade_sources: &crate::addons::luma::test_support::reshade_sources(),
             game_id: &game_id,
-            confirm_anticheat: false,
+            safety: game_safety(&context, &game_id),
             progress: None,
         })
         .await
@@ -583,7 +668,7 @@ mod tests {
             manifest: &manifest(Vec::new()),
             reshade_sources: &crate::addons::luma::test_support::reshade_sources(),
             game_id: &game_id,
-            confirm_anticheat: false,
+            safety: game_safety(&context, &game_id),
             progress: None,
         })
         .await
@@ -638,7 +723,7 @@ mod tests {
             manifest: &manifest(Vec::new()),
             reshade_sources: &crate::addons::luma::test_support::reshade_sources(),
             game_id: &game_id,
-            confirm_anticheat: false,
+            safety: game_safety(&context, &game_id),
             progress: None,
         })
         .await

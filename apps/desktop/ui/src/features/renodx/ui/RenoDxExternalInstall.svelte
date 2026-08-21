@@ -2,8 +2,6 @@
   import {
     AddonAttribution,
     AddonConfidenceBadge,
-    AddonRiskConfirmDialog,
-    AddonStateMessage,
     createConfidenceLabelKeys,
   } from '@entities/addon';
   import { openExternal } from '@shared/api';
@@ -16,7 +14,6 @@
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import { RENODX_ATTRIBUTION } from '../model/attribution';
-  import { riskMessage } from '../model/reshade-presenters';
   import type { ReshadeChannel } from '@entities/addon';
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
   import { ADDON_EXTENSIONS, isAddonFile } from '../model/validate-addon';
@@ -34,7 +31,6 @@
   const CONFIDENCE_LABEL_KEY = createConfidenceLabelKeys('gameDetails.renodx');
 
   let externalDropEl = $state<HTMLElement | null>(null);
-  let pendingFilePath = $state<string | null>(null);
 
   const drop = createAddonDrop(() => externalDropEl, handleDroppedPaths);
 
@@ -59,15 +55,11 @@
       : t('gameDetails.renodx.actionOpenExternal'),
   );
 
-  const externalRiskText = $derived(store.externalRisk ? riskMessage(store.externalRisk) : null);
-
   const showHostChannelControl = $derived(
     store.externalFileInstallable &&
       store.outcome?.kind === 'external' &&
       store.outcome.file_install?.host_kind === 'proxy',
   );
-
-  const confirmOpen = $derived(pendingFilePath !== null);
 
   function reportError(title: string, error: unknown): void {
     publishPresentedErrorNotification(title, error);
@@ -131,37 +123,11 @@
       return;
     }
 
-    if (store.externalRequiresConfirmation) {
-      pendingFilePath = filePath;
-      return;
-    }
-
-    void installFile(filePath, false);
+    void installFile(filePath);
   }
 
-  async function installFile(filePath: string, confirmedRisk: boolean): Promise<void> {
-    await store.installFromFile(gameId, filePath, store.selectedReshadeChannel, confirmedRisk);
-  }
-
-  function confirmFileInstall(): void {
-    const filePath = pendingFilePath;
-
-    if (!filePath || isActionBusy) {
-      return;
-    }
-
-    pendingFilePath = null;
-    void installFile(filePath, true);
-  }
-
-  function cancelFileInstall(): void {
-    pendingFilePath = null;
-  }
-
-  function setFileConfirmOpen(next: boolean): void {
-    if (!next) {
-      cancelFileInstall();
-    }
+  async function installFile(filePath: string): Promise<void> {
+    await store.installFromFile(gameId, filePath, store.selectedReshadeChannel);
   }
 
   function setChannel(channel: ReshadeChannel): void {
@@ -184,18 +150,6 @@
       confidence={store.externalConfidence}
       fieldLabel={t('gameDetails.renodx.confidenceLabel')}
       confidenceLabel={t(CONFIDENCE_LABEL_KEY[store.externalConfidence])}
-    />
-  {/if}
-
-  {#if externalRiskText}
-    <p class="text-sm text-muted-foreground">{externalRiskText}</p>
-  {/if}
-
-  {#if store.externalRequiresConfirmation}
-    <AddonStateMessage
-      tone="warning"
-      icon="warning"
-      message={t('gameDetails.addon.fullAddonWarning')}
     />
   {/if}
 
@@ -228,14 +182,3 @@
     </div>
   </div>
 </div>
-
-<AddonRiskConfirmDialog
-  open={confirmOpen}
-  busy={isActionBusy}
-  riskText={externalRiskText ?? ''}
-  titleKey="gameDetails.renodx.confirmTitle"
-  bodyKey="gameDetails.addon.confirmBody"
-  acceptKey="gameDetails.addon.confirmAccept"
-  onOpenChange={setFileConfirmOpen}
-  onConfirm={confirmFileInstall}
-/>

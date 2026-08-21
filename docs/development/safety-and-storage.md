@@ -8,6 +8,14 @@ A plan records the selected game, component, targets, observed hashes and metada
 
 Locks cover all mutation paths that can overlap, including libraries, coordinated D3D12 files, and managed add-on artifacts. New mutation features must declare their targets before work begins and must not introduce an uncoordinated write path.
 
+## File-safety contexts
+
+Risk-increasing game-file operations require a fresh assessment acquired separately from the cached Game Details query. The game token is bound to the catalog game identity, canonical installation root, bounded anti-cheat scan observation, and safety-token version. The assessment exposes only the closed anti-cheat engine list and scan completeness needed by the interface; evidence paths and detector diagnostics stay in the backend. Target-file identity remains the responsibility of the operation plan and its independent apply-time revalidation.
+
+Transport tokens are parsed once at the API-to-orchestration boundary; mutation commands receive only typed permits. The final mutation boundary validates a permit only when presented with the concrete guard for its resource. Validation and commit are joined by a synchronous closure, so no asynchronous work can be inserted between the freshness check and backup creation, durable mutation state, or the first forward write. A missing token, a token for another scope, or an observation that became stale is rejected with a structured safety-context error. Operations that download first complete all asynchronous preparation, reacquire their locks, and re-resolve their plans before entering this commit barrier. No safety check occurs after the first forward write. Rollback, uninstall, removal, recovery, and reconciliation deliberately remain available without a token.
+
+A shared-resource token protects operations that actually mutate the shared Vulkan layer. Combined RenoDX commits acquire the game lock before the shared-layer lock, validate both permits, and only then begin one synchronous commit. The shared observation is independent from a game assessment and is not evidence that the layer is active for every game. The user-facing anti-cheat notice remains game-scoped.
+
 ## Baselines and rollback
 
 The first managed change captures the original file as a `.bak` baseline. That first baseline is not replaced by later updates or downgrades. Its SHA-256 identity is checked before restoration. Rollback has its own preflight and enumerates every affected path, including coordinated files such as a D3D12 library and executable state.
@@ -43,6 +51,9 @@ Portable startup derives the data root beside the raw supervisor and passes the 
 ## Sources of truth
 
 - [Catalog execution](../../crates/renderpilot-orchestration/src/catalog/execute/mod.rs)
+- [File-safety authority](../../crates/renderpilot-orchestration/src/file_safety.rs)
+- [Anti-cheat detection](../../crates/renderpilot-detection/src/anticheat.rs)
+- [Mutation safety policy](../../crates/renderpilot-domain/src/mutation_features.rs)
 - [Game mutation lock](../../crates/renderpilot-orchestration/src/game_mutation_lock.rs)
 - [Baseline handling](../../crates/renderpilot-orchestration/src/coordinated_files/baseline.rs)
 - [Portable runtime release contract](../../data/contracts/portable-runtime-release.json)

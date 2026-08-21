@@ -13,7 +13,7 @@ describe('createLumaStore', () => {
     const api = fakeApi({ getAvailability: vi.fn(() => Promise.resolve(INSTALLED)) });
     const store = createLumaStore({ api, onExclusivityChange });
 
-    const installOk = await store.install('steam:403640', false);
+    const installOk = await store.install('steam:403640');
     expect(installOk).toBe('ok');
     expect(onExclusivityChange).toHaveBeenCalledWith('steam:403640');
 

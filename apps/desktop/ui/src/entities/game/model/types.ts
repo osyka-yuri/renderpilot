@@ -26,6 +26,19 @@ export type GameOperationSummary = {
 
 export type GameId = string;
 
+/** Fresh backend assessment used to authorize risk-increasing file mutations. */
+export type GameFileSafetyAssessment = {
+  game_id: GameId;
+  context_token: string;
+  detected_engines: string[];
+  scan_completeness: 'complete' | 'limited';
+};
+
+/** Fresh assessment for mutations of the shared Vulkan layer. */
+export type SharedVulkanSafetyAssessment = {
+  context_token: string;
+};
+
 export type GameRiskLevel = 'safe' | 'low' | 'medium' | 'high' | 'blocked' | 'unknown';
 
 export type Launcher = string;

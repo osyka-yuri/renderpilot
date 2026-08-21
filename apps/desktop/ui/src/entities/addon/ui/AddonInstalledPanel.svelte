@@ -29,8 +29,6 @@
     | 'addonDated'
     | 'installedAt'
     | 'lastCheckedAt'
-    | 'requiresConfirmation'
-    | 'hostFacts'
     | 'hostActions'
     | 'hostUpdate'
     | 'addonUpdate'
@@ -109,11 +107,6 @@
 
   const primaryHostDisabledMessage = $derived(updateDisabledMessage ?? repairDisabledMessage);
 
-  const showFullAddonWarning = $derived(
-    store.requiresConfirmation &&
-      (store.hostFacts.addon_support === 'full' || updateAction !== undefined),
-  );
-
   function handleCheckForUpdates(): void {
     if (checkUpdatesDisabled) {
       return;
@@ -171,10 +164,6 @@
   </div>
 
   {@render topWarnings?.()}
-
-  {#if showFullAddonWarning}
-    <AddonStateMessage tone="warning" icon="warning" message={t(labels.fullAddonWarning)} />
-  {/if}
 
   {@render afterDateCallouts?.()}
 

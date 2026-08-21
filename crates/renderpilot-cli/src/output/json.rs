@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
-use renderpilot_orchestration::application::{ComponentReplacementCandidates, OperationPlan};
+use renderpilot_orchestration::application::ComponentReplacementCandidates;
 use renderpilot_orchestration::domain::{GameId, LibraryArtifact};
 use serde::Serialize;
 
 use crate::catalog::OperationListCatalogResult;
 use renderpilot_orchestration::catalog::output::{
-    ComponentCandidateOutput, RollbackPlanOutput, SwapPlanOutput, component_candidate_outputs,
+    ComponentCandidateOutput, RollbackPlanOutput, component_candidate_outputs,
     operation_summary_outputs,
 };
 
@@ -31,10 +31,6 @@ pub(crate) fn render_list_operations_output(
     result: &OperationListCatalogResult,
 ) -> JsonResult<String> {
     render_pretty_json(OperationListOutput::from(result))
-}
-
-pub(crate) fn render_plan_swap_output(plan: &OperationPlan) -> JsonResult<String> {
-    render_pretty_json(SwapPlanOutput::from(plan))
 }
 
 pub(crate) fn render_plan_rollback_output(

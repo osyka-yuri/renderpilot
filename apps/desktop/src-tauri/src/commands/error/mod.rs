@@ -256,6 +256,18 @@ mod tests {
                 },
                 "rollback_also_failed",
             ),
+            (
+                ServiceError::safety_context_missing(
+                    renderpilot_orchestration::SafetyScope::SharedVulkan,
+                ),
+                "safety_context_missing",
+            ),
+            (
+                ServiceError::safety_context_stale(
+                    renderpilot_orchestration::SafetyScope::SharedVulkan,
+                ),
+                "safety_context_stale",
+            ),
         ];
 
         for (service_error, expected_code) in cases {

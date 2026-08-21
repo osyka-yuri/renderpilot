@@ -6,8 +6,10 @@ import type {
   GameCardsQuery,
   GameCardsResult,
   GameDetails,
+  GameFileSafetyAssessment,
   GamesCatalogBootstrap,
   RemoveGameFromCatalogResult,
+  SharedVulkanSafetyAssessment,
 } from '../model/types';
 
 export async function bootstrapGamesCatalog(limit = 120): Promise<GamesCatalogBootstrap> {
@@ -46,6 +48,20 @@ export async function getGameDetails(gameId: string): Promise<GameDetails> {
   return invokeDesktop('get_game_details', {
     gameId: requireNonBlankString(gameId, 'gameId'),
   });
+}
+
+/** Fetches a fresh file-safety assessment outside the cached Game Details query. */
+export async function getGameFileSafetyAssessment(
+  gameId: string,
+): Promise<GameFileSafetyAssessment> {
+  return invokeDesktop<GameFileSafetyAssessment>('get_game_file_safety_assessment', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+/** Fetches a fresh assessment for changes to the shared Vulkan layer. */
+export async function getSharedVulkanSafetyAssessment(): Promise<SharedVulkanSafetyAssessment> {
+  return invokeDesktop<SharedVulkanSafetyAssessment>('get_shared_vulkan_safety_assessment');
 }
 
 export async function setGameFavorite(

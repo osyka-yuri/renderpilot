@@ -16,6 +16,7 @@ pub mod covers;
 pub mod dlss;
 mod error;
 mod file_mutation;
+pub mod file_safety;
 mod fs;
 pub mod game_executable;
 mod game_mutation_lock;
@@ -30,6 +31,10 @@ pub mod storage;
 mod util;
 
 pub use context::Context;
+pub use file_safety::{
+    FileSafetyAuthority, GameFileSafetyAssessment, GameMutationSafetyPermits, GameSafetyPermit,
+    SafetyScope, SharedVulkanSafetyAssessment, SharedVulkanSafetyPermit,
+};
 
 pub(crate) use error::failed;
 pub use error::{InvalidInstallRootReason, ServiceError};

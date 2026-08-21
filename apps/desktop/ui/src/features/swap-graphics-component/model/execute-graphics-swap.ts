@@ -9,6 +9,7 @@ export type ExecuteGraphicsSwapInput = {
   /** Whether the artifact is already downloaded locally; if not, it is fetched first. */
   isDownloaded: boolean;
   confirmationToken?: string | null;
+  gameContextToken?: string;
   signal?: AbortSignal;
 };
 
@@ -33,15 +34,26 @@ export async function executeGraphicsSwap(
   }
 
   if (input.confirmationToken) {
-    return resolvedDeps.applySwap(
-      input.gameId,
-      input.componentId,
-      artifactId,
-      input.confirmationToken,
-    );
+    return input.gameContextToken === undefined
+      ? resolvedDeps.applySwap(input.gameId, input.componentId, artifactId, input.confirmationToken)
+      : resolvedDeps.applySwap(
+          input.gameId,
+          input.componentId,
+          artifactId,
+          input.confirmationToken,
+          input.gameContextToken,
+        );
   }
 
-  return resolvedDeps.applySwap(input.gameId, input.componentId, artifactId);
+  return input.gameContextToken === undefined
+    ? resolvedDeps.applySwap(input.gameId, input.componentId, artifactId)
+    : resolvedDeps.applySwap(
+        input.gameId,
+        input.componentId,
+        artifactId,
+        undefined,
+        input.gameContextToken,
+      );
 }
 
 /**

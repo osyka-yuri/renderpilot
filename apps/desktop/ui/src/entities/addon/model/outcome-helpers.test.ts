@@ -15,8 +15,6 @@ describe('deriveCommonOutcomeFields', () => {
       otherAddonUnmanaged: false,
       confidence: null,
       blacklistMessage: null,
-      risk: null,
-      requiresConfirmation: false,
     });
   });
 
@@ -24,19 +22,16 @@ describe('deriveCommonOutcomeFields', () => {
     const fields = deriveCommonOutcomeFields({
       kind: 'installable',
       confidence: 'verified',
-      risk: { severity: 'warn', message_key: 'addon.risk.anticheat_detected' },
     });
 
     expect(fields.isInstallable).toBe(true);
     expect(fields.confidence).toBe('verified');
-    expect(fields.requiresConfirmation).toBe(true);
   });
 
   it('accepts tool-specific installable extras without requiring shared notes', () => {
     const lumaOutcome = {
       kind: 'installable',
       confidence: 'verified',
-      risk: { severity: 'info', message_key: 'addon.risk.none' },
       features: { dlss_fsr: 'supported', hdr: 'unknown' },
       guidance: [],
       launch_args: ['-dx11'],
@@ -45,8 +40,6 @@ describe('deriveCommonOutcomeFields', () => {
 
     expect(fields.isInstallable).toBe(true);
     expect(fields.confidence).toBe('verified');
-    expect(fields.requiresConfirmation).toBe(false);
-    expect(fields.risk).toEqual({ severity: 'info', message_key: 'addon.risk.none' });
   });
 
   it('maps blocked_by_other_addon outcomes', () => {

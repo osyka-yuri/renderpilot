@@ -46,7 +46,6 @@
 //! * `progress` — sequential stages + finalizing phase
 //! * `game_analysis` / `game_context` / `matching` — facts + match rules
 //! * `reshade` — shared host subsystem (scan, policy, report, fetch, types)
-//! * `anticheat` — risk gate
 //! * [`capabilities`] — catalog profile snapshot
 //! * [`renodx`] / [`luma`] — thin tools (types → matcher → fetch → install → tracking → use_cases)
 //!
@@ -76,7 +75,6 @@
 //! * **RenoDX-only surface** — install-from-file, ReShade channel switch, shared
 //!   Vulkan layer, DLSS-Fix UI/settings.
 
-pub(crate) mod anticheat;
 pub(crate) mod availability_pipeline;
 pub mod capabilities;
 mod catalog_message;

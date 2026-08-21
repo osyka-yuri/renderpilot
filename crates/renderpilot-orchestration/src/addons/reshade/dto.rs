@@ -82,8 +82,6 @@ pub struct HostFacts {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActionConfirmationScope {
-    /// Anti-cheat risk confirmation.
-    Anticheat,
     /// Action affects all Vulkan RenoDX games.
     AllVulkanRenoDxGames,
 }

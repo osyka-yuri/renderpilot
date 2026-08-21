@@ -26,13 +26,13 @@ export type AddonStoreView = {
   isBlacklisted: boolean;
   isUnsupported: boolean;
   isIncompatible: boolean;
-  requiresConfirmation: boolean;
   confidence: MatchConfidence | null;
   freshness: Freshness;
   addonDated: number | null;
   installedAt: number | null;
   lastCheckedAt: number | null;
   updateAvailable: boolean;
+  safetyContextError: unknown;
   hostUpdate: UpdateStatus | null;
   addonUpdate: UpdateStatus | null;
   hostDetection: HostDetection;

@@ -26,6 +26,58 @@ use crate::game_mutation_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
+/// Complete request for a generic RenoDX update.
+pub struct UpdateRequest<'a> {
+    /// Application services and storage.
+    pub context: &'a Context,
+    /// RenoDX manifest used to resolve the update.
+    pub manifest: &'a RenoDxManifest,
+    /// ReShade sources used when the host must be updated.
+    pub reshade_sources: &'a ReshadeSourceCatalog,
+    /// Game whose RenoDX installation is being updated.
+    pub game_id: &'a GameId,
+    /// Fresh permits for every mutation scope the resolved update may require.
+    pub safety: crate::GameMutationSafetyPermits,
+    /// Optional download progress observer.
+    pub progress: Option<&'a ProgressObserver<'a>>,
+}
+
+fn authorize_update_commit<T>(
+    context: &Context,
+    guards: crate::game_mutation_lock::GameMutationBoundary,
+    safety: &crate::GameMutationSafetyPermits,
+    shared_update: Option<
+        crate::addons::renodx::use_cases::commands::update_reshade::PreparedReShadeUpdate,
+    >,
+    game_commit: impl FnOnce(&crate::game_mutation_lock::GameMutationGuard) -> Result<T, ServiceError>,
+) -> Result<T, ServiceError> {
+    let feature = crate::addons::mutation_features::RENODX_UPDATE;
+    let authority = crate::FileSafetyAuthority::new();
+    match guards {
+        crate::game_mutation_lock::GameMutationBoundary::Game(guard) => {
+            if shared_update.is_some() {
+                return Err(ServiceError::command_failed(
+                    "a prepared shared Vulkan update requires the combined mutation boundary",
+                ));
+            }
+            authority.authorize_game_commit(context, feature, &guard, safety.game(), || {
+                game_commit(&guard)
+            })
+        }
+        crate::game_mutation_lock::GameMutationBoundary::GameShared(guards) => {
+            let shared_update = shared_update.ok_or_else(|| {
+                ServiceError::command_failed(
+                    "the combined mutation boundary has no prepared shared Vulkan update",
+                )
+            })?;
+            authority.authorize_game_shared_commit(context, feature, &guards, safety, || {
+                shared_update.commit(context)?;
+                game_commit(guards.game())
+            })
+        }
+    }
+}
+
 /// Applies an update to the main RenoDX add-on and host artifacts only.
 /// DLSS-Fix has an independent update/repair command and its source/path
 /// projection is copied byte-for-byte through this generic transaction.
@@ -33,13 +85,15 @@ use crate::{Context, ServiceError};
 /// Network prepare for per-game artifacts runs **outside** the per-game lock
 /// (same 3-phase contract as Luma update). Shared Vulkan layer updates still
 /// apply under the lock in phase 3 (system-wide mutation).
-pub async fn update(
-    context: &Context,
-    manifest: &RenoDxManifest,
-    reshade_sources: &ReshadeSourceCatalog,
-    game_id: &GameId,
-    progress: Option<&ProgressObserver<'_>>,
-) -> Result<(), ServiceError> {
+pub async fn update(request: UpdateRequest<'_>) -> Result<(), ServiceError> {
+    let UpdateRequest {
+        context,
+        manifest,
+        reshade_sources,
+        game_id,
+        safety,
+        progress,
+    } = request;
     // Phase 1: snapshot under the per-game lock.
     let snapshot = {
         let _guard =
@@ -49,25 +103,30 @@ pub async fn update(
 
     // Phase 2: downloads only for per-game sources (no disk apply).
     let prepared = prepare_update_artifacts(&snapshot, progress).await?;
+    let shared_update = match snapshot.shared_vulkan_channel {
+        Some(channel) => Some(
+            crate::addons::renodx::use_cases::commands::update_reshade::PreparedReShadeUpdate::prepare(
+                reshade_sources,
+                channel,
+                progress,
+            )
+            .await?,
+        ),
+        None => None,
+    };
 
     // Phase 3: re-lock, revalidate, shared Vulkan (if any), apply.
     // Peer exclusivity is not re-checked here: one installed-addon row per game
     // plus our own record already blocks foreign tools for the duration of prepare.
-    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let guards = game_mutation_lock::enter_mutation_boundary_async(
+        context,
+        game_id,
+        shared_update.is_some(),
+    )
+    .await?;
     let revalidated = resolve_update_snapshot(context, manifest, reshade_sources, game_id)?;
     ensure_update_snapshot_matches(&snapshot, &revalidated)?;
     let current = &revalidated.record;
-
-    if let Some(channel) = revalidated.shared_vulkan_channel {
-        crate::addons::renodx::use_cases::commands::update_reshade::UpdateReShadeCommand {
-            context,
-            reshade_sources,
-            channel,
-            progress,
-        }
-        .execute()
-        .await?;
-    }
 
     emit_tool_finalizing(progress, AddonKind::RenoDx);
     let replacement_paths: Vec<PathBuf> = prepared
@@ -90,58 +149,62 @@ pub async fn update(
         host_install,
     } = prepared;
 
-    crate::addons::durable::run_targets_mutation(
-        crate::addons::durable::TargetsMutation {
-            context,
-            guard: &guard,
-            targets,
-            feature: crate::addons::mutation_features::RENODX_UPDATE,
-            game_id,
-        },
-        |mutation_id| -> Result<(), ServiceError> {
-            let mut originals = apply_replacements(replacements)?;
-            let host_receipt = match host_install {
-                Some(install) => match apply_host_install(install, &mut originals) {
-                    Ok(receipt) => Some(receipt),
+    authorize_update_commit(context, guards, &safety, shared_update, |guard| {
+        crate::addons::durable::run_targets_mutation(
+            crate::addons::durable::TargetsMutation {
+                context,
+                guard,
+                targets,
+                feature: crate::addons::mutation_features::RENODX_UPDATE,
+                game_id,
+            },
+            |mutation_id| -> Result<(), ServiceError> {
+                let mut originals = apply_replacements(replacements)?;
+                let host_receipt = match host_install {
+                    Some(install) => match apply_host_install(install, &mut originals) {
+                        Ok(receipt) => Some(receipt),
+                        Err(error) => {
+                            restore_originals_best_effort(&originals);
+                            return Err(error);
+                        }
+                    },
+                    None => None,
+                };
+                let refreshed = match tracking::rebuild_with_sources_and_receipt(
+                    current,
+                    refreshed_sources,
+                    host_receipt.as_ref(),
+                    "RenoDX update rebuild",
+                ) {
+                    Ok(refreshed) => refreshed,
                     Err(error) => {
                         restore_originals_best_effort(&originals);
                         return Err(error);
                     }
-                },
-                None => None,
-            };
-            let refreshed = match tracking::rebuild_with_sources_and_receipt(
-                current,
-                refreshed_sources,
-                host_receipt.as_ref(),
-                "RenoDX update rebuild",
-            ) {
-                Ok(refreshed) => refreshed,
-                Err(error) => {
-                    restore_originals_best_effort(&originals);
-                    return Err(error);
+                };
+                if let Err(error) = context.storage().commit_game_mutation(
+                    renderpilot_storage_sqlite::GameMutationCommit {
+                        game_id,
+                        component_set: None,
+                        baseline_mutations: &[],
+                        addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(
+                            &refreshed,
+                        ),
+                        mutation_id: Some(mutation_id),
+                    },
+                ) {
+                    let restore_result = restore_originals(&originals);
+                    return Err(persistence_failure_error(
+                        error.into(),
+                        std::slice::from_ref(&restore_result),
+                    ));
                 }
-            };
-            if let Err(error) = context.storage().commit_game_mutation(
-                renderpilot_storage_sqlite::GameMutationCommit {
-                    game_id,
-                    component_set: None,
-                    baseline_mutations: &[],
-                    addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(&refreshed),
-                    mutation_id: Some(mutation_id),
-                },
-            ) {
-                let restore_result = restore_originals(&originals);
-                return Err(persistence_failure_error(
-                    error.into(),
-                    std::slice::from_ref(&restore_result),
-                ));
-            }
-            Ok(())
-        },
-        |_| {},
-        || {},
-    )
+                Ok(())
+            },
+            |_| {},
+            || {},
+        )
+    })
 }
 
 struct UpdateSnapshot {
@@ -453,7 +516,13 @@ fn apply_host_install(
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_domain::PathRef;
+    use std::fs;
+
+    use renderpilot_application::GameRepository;
+    use renderpilot_domain::{
+        GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+    };
+    use tempfile::{TempDir, tempdir};
 
     use super::*;
     use crate::addons::reshade::types::ReshadeChannel;
@@ -477,6 +546,66 @@ mod tests {
         }
     }
 
+    struct SafetyFixture {
+        _db_dir: TempDir,
+        game_dir: TempDir,
+        context: Context,
+        game_id: GameId,
+    }
+
+    fn safety_fixture(suffix: &str) -> SafetyFixture {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new(format!("manual:update-safety-{suffix}")).expect("game id");
+        let game = GameInstallation::new(
+            GameIdentity::new(game_id.clone(), "Update Safety Test", Launcher::Manual)
+                .expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(game_dir.path().to_string_lossy()).expect("game path"),
+        );
+        context.storage().upsert_game(&game).expect("game");
+
+        SafetyFixture {
+            _db_dir: db_dir,
+            game_dir,
+            context,
+            game_id,
+        }
+    }
+
+    async fn assert_update_barrier_rejects(
+        fixture: &SafetyFixture,
+        safety: crate::GameMutationSafetyPermits,
+        expected: fn(&ServiceError) -> bool,
+    ) {
+        let guards = game_mutation_lock::enter_mutation_boundary_async(
+            &fixture.context,
+            &fixture.game_id,
+            false,
+        )
+        .await
+        .expect("game boundary");
+        let mut commit_called = false;
+        let error = authorize_update_commit(&fixture.context, guards, &safety, None, |_| {
+            commit_called = true;
+            Ok(())
+        })
+        .expect_err("invalid safety must reject the update commit");
+
+        assert!(expected(&error), "unexpected error: {error:?}");
+        assert!(!commit_called, "safety rejection must precede first write");
+        assert!(
+            fixture
+                .context
+                .storage()
+                .pending_file_mutations_for_game(&fixture.game_id)
+                .expect("pending mutations")
+                .is_empty()
+        );
+    }
+
     #[test]
     fn update_snapshot_rejects_any_install_record_drift() {
         let prepared = snapshot(record(), None);
@@ -491,6 +620,61 @@ mod tests {
         let current = snapshot(record(), Some(ReshadeChannel::Nightly));
 
         assert!(ensure_update_snapshot_matches(&prepared, &current).is_err());
+    }
+
+    #[tokio::test]
+    async fn update_commit_barrier_rejects_stale_game_context_before_first_write() {
+        let fixture = safety_fixture("stale");
+        let authority = crate::FileSafetyAuthority::new();
+        let assessment = authority
+            .issue_game_assessment(&fixture.context, &fixture.game_id)
+            .expect("assessment");
+        let safety = authority
+            .game_mutation_permits(
+                fixture.game_id.clone(),
+                Some(&assessment.context_token),
+                None,
+            )
+            .expect("permits");
+        fs::create_dir(fixture.game_dir.path().join("EasyAntiCheat")).expect("anti-cheat marker");
+
+        assert_update_barrier_rejects(&fixture, safety, |error| {
+            matches!(error, ServiceError::SafetyContextStale { .. })
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn update_commit_barrier_rejects_another_game_scope_before_first_write() {
+        let fixture = safety_fixture("scope");
+        let other = safety_fixture("other");
+        fixture
+            .context
+            .storage()
+            .upsert_game(
+                &other
+                    .context
+                    .storage()
+                    .require_game(&other.game_id)
+                    .expect("other game"),
+            )
+            .expect("copy other game");
+        let authority = crate::FileSafetyAuthority::new();
+        let assessment = authority
+            .issue_game_assessment(&fixture.context, &other.game_id)
+            .expect("assessment");
+        let safety = authority
+            .game_mutation_permits(
+                fixture.game_id.clone(),
+                Some(&assessment.context_token),
+                None,
+            )
+            .expect("well-formed permits");
+
+        assert_update_barrier_rejects(&fixture, safety, |error| {
+            matches!(error, ServiceError::SafetyContextScopeMismatch { .. })
+        })
+        .await;
     }
 
     #[tokio::test]

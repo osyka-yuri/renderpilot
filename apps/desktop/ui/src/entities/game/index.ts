@@ -51,6 +51,8 @@ export type {
   GamesCatalogBootstrap,
   GameSelectionHandler,
   GameDetails,
+  GameFileSafetyAssessment,
+  SharedVulkanSafetyAssessment,
   GameLibraryComponent,
   GameCandidateGroup,
   GameCandidate,
@@ -60,6 +62,14 @@ export type {
 } from './model/types';
 
 export { formatPartialScanWarning } from './model/scan-presenters';
+export {
+  fileSafetyMessageKey,
+  formatDetectedEngines,
+  presentDetectedEngine,
+  presentDetectedEngines,
+  presentFileSafetyMessage,
+} from './model/file-safety-presenters';
+export { default as GameFileSafetyRow } from './ui/GameFileSafetyRow.svelte';
 
 export {
   normalizeSelectableGameId,
@@ -82,6 +92,8 @@ export {
   clearGameCover,
   setGameCover,
   getGameDetails,
+  getGameFileSafetyAssessment,
+  getSharedVulkanSafetyAssessment,
   setGameFavorite,
   setGameHidden,
   removeGameFromCatalog,

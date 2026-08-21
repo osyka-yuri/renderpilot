@@ -262,6 +262,27 @@ export const DESKTOP_COMMAND_ERROR_CONTRACT = {
       reasonCodes: [],
       recoveryBundlePath: false,
     },
+    safety_context_missing: {
+      messageKey: 'user_message.safety_context_missing',
+      severity: 'warning',
+      actions: ['reload_file_safety'],
+      reasonCodes: [],
+      recoveryBundlePath: false,
+    },
+    safety_context_scope_mismatch: {
+      messageKey: 'user_message.safety_context_scope_mismatch',
+      severity: 'warning',
+      actions: ['reload_file_safety'],
+      reasonCodes: [],
+      recoveryBundlePath: false,
+    },
+    safety_context_stale: {
+      messageKey: 'user_message.safety_context_stale',
+      severity: 'warning',
+      actions: ['reload_file_safety'],
+      reasonCodes: [],
+      recoveryBundlePath: false,
+    },
     serialization_failed: {
       messageKey: 'user_message.response_serialization_failed',
       severity: 'error',
@@ -323,6 +344,9 @@ export const DESKTOP_COMMAND_ERROR_CONTRACT = {
     },
     refresh_or_scan_game_folder: {
       messageKey: 'suggested_action.refresh_or_scan_game_folder',
+    },
+    reload_file_safety: {
+      messageKey: 'suggested_action.reload_file_safety',
     },
     reload_game_details: {
       messageKey: 'suggested_action.reload_game_details',

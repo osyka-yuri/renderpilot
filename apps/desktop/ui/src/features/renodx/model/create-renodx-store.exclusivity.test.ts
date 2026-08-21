@@ -18,7 +18,7 @@ describe('createRenoDxStore', () => {
       onGameDetailsInvalidate,
     });
 
-    const installOk = await store.install('steam:1091500', 'stable', false);
+    const installOk = await store.install('steam:1091500', 'stable');
     expect(installOk).toBe('ok');
     expect(onExclusivityChange).toHaveBeenCalledWith('steam:1091500');
 
@@ -27,7 +27,6 @@ describe('createRenoDxStore', () => {
       'steam:1091500',
       'C:\\dl\\renodx-x.addon64',
       'nightly',
-      false,
     );
     expect(fileInstallOk).toBe('ok');
     expect(onExclusivityChange).toHaveBeenCalledWith('steam:1091500');
@@ -73,7 +72,7 @@ describe('createRenoDxStore', () => {
       onGameDetailsInvalidate,
     });
 
-    expect(await store.install('steam:1091500', 'stable', false)).toBe('failed');
+    expect(await store.install('steam:1091500', 'stable')).toBe('failed');
     expect(onGameDetailsInvalidate).not.toHaveBeenCalled();
   });
 
@@ -89,7 +88,7 @@ describe('createRenoDxStore', () => {
     });
 
     await store.load('steam:1091500');
-    expect(await store.install('steam:1091500', 'stable', false)).toBe('skipped');
+    expect(await store.install('steam:1091500', 'stable')).toBe('skipped');
     expect(onGameDetailsInvalidate).not.toHaveBeenCalled();
   });
 
@@ -99,6 +98,6 @@ describe('createRenoDxStore', () => {
       onGameDetailsInvalidate: () => Promise.reject(new Error('refresh failed')),
     });
 
-    expect(await store.install('steam:1091500', 'stable', false)).toBe('ok');
+    expect(await store.install('steam:1091500', 'stable')).toBe('ok');
   });
 });

@@ -622,8 +622,8 @@ pub use add_game::{
 };
 pub use cards::{CatalogCardRiskLevel, CatalogRevision, CatalogSnapshot, GameCardData};
 pub use execute::{
-    D3d12ExecutableActionResult, D3d12ExecutableActionResultKind, RollbackPlan, apply_swap,
-    apply_swap_confirmed, build_rollback_plan, rollback_component,
+    ApplySwapRequest, D3d12ExecutableActionResult, D3d12ExecutableActionResultKind, RollbackPlan,
+    apply_swap, build_rollback_plan, rollback_component,
 };
 pub use operations::list_operations;
 pub use read_service::CatalogReadService;

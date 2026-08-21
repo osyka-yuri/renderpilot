@@ -71,6 +71,32 @@ impl CatalogFixture {
     where
         I: IntoIterator<Item = OsString>,
     {
+        let mut args: Vec<OsString> = args.into_iter().collect();
+        let is_apply = matches!(
+            args.first().and_then(|argument| argument.to_str()),
+            Some("apply" | "apply-operation")
+        );
+        if is_apply
+            && !args.iter().any(|argument| {
+                argument
+                    .to_str()
+                    .is_some_and(|argument| argument == "--safety-context-token")
+            })
+        {
+            let game_id = args
+                .windows(2)
+                .find(|pair| pair[0].to_str() == Some("--game"))
+                .and_then(|pair| pair[1].to_str())
+                .and_then(|value| renderpilot_orchestration::domain::GameId::new(value).ok());
+            if let Some(game_id) = game_id {
+                let context = self.open_context()?;
+                let assessment = renderpilot_orchestration::FileSafetyAuthority::new()
+                    .issue_game_assessment(&context, &game_id)
+                    .map_err(crate::CliError::from)?;
+                args.push(OsString::from("--safety-context-token"));
+                args.push(OsString::from(assessment.context_token));
+            }
+        }
         crate::run_with_context(args, || self.open_context())
     }
 

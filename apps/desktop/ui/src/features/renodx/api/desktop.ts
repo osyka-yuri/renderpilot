@@ -27,12 +27,16 @@ export async function getRenoDxAvailability(gameId: string): Promise<Availabilit
 export async function installRenoDx(
   gameId: string,
   reshadeChannel: ReshadeChannel,
-  confirmAnticheat: boolean,
+  gameContextToken?: string,
+  sharedVulkanContextToken?: string | null,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     reshadeChannel,
-    confirmAnticheat,
+    ...(gameContextToken === undefined ? {} : { gameContextToken }),
+    ...(sharedVulkanContextToken === undefined
+      ? {}
+      : { sharedVulkanContextToken: sharedVulkanContextToken ?? null }),
   });
 }
 
@@ -45,13 +49,17 @@ export async function installRenoDxFromFile(
   gameId: string,
   filePath: string,
   reshadeChannel: ReshadeChannel,
-  confirmAnticheat: boolean,
+  gameContextToken?: string,
+  sharedVulkanContextToken?: string | null,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install_from_file', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     filePath: requireNonBlankString(filePath, 'filePath'),
     reshadeChannel,
-    confirmAnticheat,
+    ...(gameContextToken === undefined ? {} : { gameContextToken }),
+    ...(sharedVulkanContextToken === undefined
+      ? {}
+      : { sharedVulkanContextToken: sharedVulkanContextToken ?? null }),
   });
 }
 
@@ -76,9 +84,17 @@ export async function checkRenoDxUpdate(gameId: string): Promise<RenoDxUpdateRep
  * Applies an available RenoDX add-on update for a game (re-fetch + atomic
  * in-place replace) and returns the resulting install state.
  */
-export async function updateRenoDx(gameId: string): Promise<RenoDxInstallState> {
+export async function updateRenoDx(
+  gameId: string,
+  gameContextToken?: string,
+  sharedVulkanContextToken?: string | null,
+): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_update', {
     gameId: requireNonBlankString(gameId, 'gameId'),
+    ...(gameContextToken === undefined ? {} : { gameContextToken }),
+    ...(sharedVulkanContextToken === undefined
+      ? {}
+      : { sharedVulkanContextToken: sharedVulkanContextToken ?? null }),
   });
 }
 
@@ -86,10 +102,16 @@ export async function updateRenoDx(gameId: string): Promise<RenoDxInstallState> 
 export async function switchRenoDxReshadeChannel(
   gameId: string,
   reshadeChannel: ReshadeChannel,
+  gameContextToken?: string,
+  sharedVulkanContextToken?: string | null,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_switch_reshade_channel', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     reshadeChannel,
+    ...(gameContextToken === undefined ? {} : { gameContextToken }),
+    ...(sharedVulkanContextToken === undefined
+      ? {}
+      : { sharedVulkanContextToken: sharedVulkanContextToken ?? null }),
   });
 }
 
@@ -97,9 +119,13 @@ export async function switchRenoDxReshadeChannel(
  * Installs the DLSS-Fix companion add-on for a game that already has RenoDX.
  * Reports download progress via `download-progress` events keyed by the game id.
  */
-export async function installRenoDxDlssFix(gameId: string): Promise<RenoDxInstallState> {
+export async function installRenoDxDlssFix(
+  gameId: string,
+  gameContextToken?: string,
+): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install_dlss_fix', {
     gameId: requireNonBlankString(gameId, 'gameId'),
+    ...(gameContextToken === undefined ? {} : { gameContextToken }),
   });
 }
 
@@ -111,9 +137,13 @@ export async function uninstallRenoDxDlssFix(gameId: string): Promise<RenoDxInst
 }
 
 /** Updates or payload-repairs DLSS-Fix without running generic RenoDX update policy. */
-export async function updateRenoDxDlssFix(gameId: string): Promise<RenoDxInstallState> {
+export async function updateRenoDxDlssFix(
+  gameId: string,
+  gameContextToken?: string,
+): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_update_dlss_fix', {
     gameId: requireNonBlankString(gameId, 'gameId'),
+    ...(gameContextToken === undefined ? {} : { gameContextToken }),
   });
 }
 
@@ -147,9 +177,11 @@ export async function getVulkanLayerManagementStatus(): Promise<VulkanLayerManag
 /** Applies the shared ReShade Vulkan layer for the selected settings channel. */
 export async function applyVulkanLayer(
   reshadeChannel: ReshadeChannel,
+  sharedVulkanContextToken?: string,
 ): Promise<VulkanLayerManagementReport> {
   return invokeDesktop<VulkanLayerManagementReport>('renodx_apply_vulkan_layer', {
     reshadeChannel,
+    ...(sharedVulkanContextToken === undefined ? {} : { sharedVulkanContextToken }),
   });
 }
 

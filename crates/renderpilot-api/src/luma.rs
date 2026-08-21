@@ -1,6 +1,6 @@
 //! Desktop UI facade for installing the Luma Framework add-on.
 //!
-//! All work (manifest fetch, matching, risk assessment, download, install) lives
+//! All work (manifest fetch, matching, file-safety validation, download, install) lives
 //! in `renderpilot-orchestration::addons::luma`. This module parses GUI string
 //! ids, loads/caches the manifest, and wraps the typed results in
 //! `serde_json::Value` for the command layer. Unlike RenoDX, there is no
@@ -20,7 +20,7 @@ use renderpilot_orchestration::net::ProgressObserver;
 
 use crate::utils::{JsonResult, parse_game_id, to_json};
 
-/// Previews whether Luma can be installed for a game, with risk and a match
+/// Previews whether Luma can be installed for a game, with match
 /// explanation. Loads (and caches) the manifest as needed.
 pub async fn luma_availability(context: &Context, game_id: impl Into<String>) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
@@ -37,22 +37,24 @@ pub async fn luma_availability(context: &Context, game_id: impl Into<String>) ->
 }
 
 /// Installs Luma into a game, reporting download progress, and returns the
-/// resulting install state. `confirm_anticheat` must be `true` to proceed when
-/// the risk assessment requires confirmation.
+/// resulting install state. `game_context_token` must come from a fresh file
+/// safety assessment.
 pub async fn luma_install(
     context: &Context,
     game_id: impl Into<String>,
-    confirm_anticheat: bool,
+    game_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new()
+        .game_permit(game_id.clone(), game_context_token.as_deref())?;
     let bundle = luma::manifest_store::get_or_fetch_bundle().await?;
     luma::use_cases::commands::install::install(InstallRequest {
         context,
         manifest: &bundle.tool,
         reshade_sources: &bundle.reshade.sources,
         game_id: &game_id,
-        confirm_anticheat,
+        safety,
         progress,
     })
     .await?;
@@ -123,18 +125,22 @@ pub async fn luma_update(
     context: &Context,
     game_id: impl Into<String>,
     force_full: bool,
+    game_context_token: Option<String>,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new()
+        .game_permit(game_id.clone(), game_context_token.as_deref())?;
     let bundle = luma::manifest_store::get_or_fetch_bundle().await?;
-    luma::use_cases::commands::update::update(
+    luma::use_cases::commands::update::update(luma::use_cases::commands::update::UpdateRequest {
         context,
-        &bundle.tool,
-        &bundle.reshade.sources,
-        &game_id,
+        manifest: &bundle.tool,
+        reshade_sources: &bundle.reshade.sources,
+        game_id: &game_id,
         force_full,
+        safety,
         progress,
-    )
+    })
     .await?;
     to_json(luma::use_cases::queries::status::status(
         context,

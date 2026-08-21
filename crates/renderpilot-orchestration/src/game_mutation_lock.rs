@@ -27,6 +27,30 @@ pub(crate) struct GameMutationGuardSet {
     _guards: Vec<GameMutationGuard>,
 }
 
+/// Proof that the caller owns both mutation boundaries used by a combined
+/// per-game/shared-Vulkan commit. Construction fixes the global lock order to
+/// game first, shared Vulkan second.
+pub(crate) struct GameSharedMutationGuards {
+    game: GameMutationGuard,
+    shared_vulkan: crate::addons::vulkan_lock::SharedVulkanMutationGuard,
+}
+
+/// Final guard set chosen from a freshly resolved operation plan.
+pub(crate) enum GameMutationBoundary {
+    Game(GameMutationGuard),
+    GameShared(GameSharedMutationGuards),
+}
+
+impl GameSharedMutationGuards {
+    pub(crate) fn game(&self) -> &GameMutationGuard {
+        &self.game
+    }
+
+    pub(crate) fn shared_vulkan(&self) -> &crate::addons::vulkan_lock::SharedVulkanMutationGuard {
+        &self.shared_vulkan
+    }
+}
+
 impl GameMutationGuardSet {
     /// Protected identities in deterministic lock order.
     #[cfg(test)]
@@ -125,6 +149,38 @@ pub(crate) async fn enter_game_mutation_boundary_async(
     crate::file_mutation::recover_pending(context, &guard)?;
     crate::addons::reconcile_legacy_managed_files_locked(context, &guard, game_id)?;
     Ok(guard)
+}
+
+/// Acquires the combined game/shared-Vulkan boundary in the only supported
+/// order and runs the normal per-game recovery preamble before the shared lock.
+pub(crate) async fn enter_game_shared_mutation_boundary_async(
+    context: &crate::Context,
+    game_id: &GameId,
+) -> Result<GameSharedMutationGuards, crate::ServiceError> {
+    let game = enter_game_mutation_boundary_async(context, game_id).await?;
+    let shared_vulkan = crate::addons::vulkan_lock::shared_vulkan_lock().await;
+    Ok(GameSharedMutationGuards {
+        game,
+        shared_vulkan,
+    })
+}
+
+/// Selects the final game-only or combined boundary without duplicating lock
+/// ordering across RenoDX operations.
+pub(crate) async fn enter_mutation_boundary_async(
+    context: &crate::Context,
+    game_id: &GameId,
+    include_shared_vulkan: bool,
+) -> Result<GameMutationBoundary, crate::ServiceError> {
+    if include_shared_vulkan {
+        Ok(GameMutationBoundary::GameShared(
+            enter_game_shared_mutation_boundary_async(context, game_id).await?,
+        ))
+    } else {
+        Ok(GameMutationBoundary::Game(
+            enter_game_mutation_boundary_async(context, game_id).await?,
+        ))
+    }
 }
 
 #[cfg(test)]

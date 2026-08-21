@@ -27,7 +27,7 @@ import {
   type AddonInstallStateBase,
   type FreshnessSource,
 } from './store-helpers';
-import type { UpdateStatus } from './types';
+import type { MutationSafetyScope, UpdateStatus } from './types';
 
 export type AddonStoreApi<
   TState extends AddonInstallStateBase,
@@ -80,6 +80,7 @@ export type CreateAddonStoreConfig<
    * mutation flow; Luma uses this for cascade library invalidation.
    */
   onMutationSideEffect?: (gameId: string, token: number) => void | Promise<void>;
+  onMutationError?: (error: unknown, scope: MutationSafetyScope) => void;
 };
 
 export type AddonStoreCore<
@@ -114,11 +115,13 @@ export function createAddonStore<
     coalesceUpdateReport,
     postMutationProbe = 'never',
     onMutationSideEffect,
+    onMutationError,
   } = config;
 
   // `$state.raw`: whole-snapshot replace only (immutable reducers). Avoids deep
   // proxy tracking on a structure we never mutate in place.
   let core = $state.raw(createInitialAddonCoreSnapshot<TState, TUpdateReport>());
+  let safetyContextError = $state.raw<unknown>(null);
 
   const isInstalled = $derived(core.state?.status === 'installed');
   const updateAvailable = $derived(
@@ -274,6 +277,10 @@ export function createAddonStore<
     notifyExclusivityChange,
     postMutationProbe,
     onMutationSideEffect,
+    onMutationError: (error, scope) => {
+      safetyContextError = error;
+      onMutationError?.(error, scope);
+    },
   };
 
   async function runBusyMutation(
@@ -281,6 +288,7 @@ export function createAddonStore<
     fn: () => Promise<TState>,
     options: BusyMutationOptions,
   ) {
+    safetyContextError = null;
     return runBusyMutationImpl(mutationCtx, gameId, fn, options);
   }
 
@@ -338,6 +346,9 @@ export function createAddonStore<
     },
     get requestToken() {
       return core.requestId;
+    },
+    get safetyContextError() {
+      return safetyContextError;
     },
     load,
     deactivate,

@@ -9,6 +9,7 @@ export {
   getErrorCode,
   getErrorContractStatus,
   getErrorSeverity,
+  isFileSafetyContextError,
   isCommandErrorCode,
   normalizeDesktopCommandError,
   type CodedError,

@@ -48,6 +48,8 @@ export type DesktopCommandPayloadMap = {
   bootstrap_games_catalog: { limit: number };
   start_background_refresh: undefined;
   get_game_details: { gameId: string };
+  get_game_file_safety_assessment: { gameId: string };
+  get_shared_vulkan_safety_assessment: undefined;
   list_game_executable_candidates: { gameId: string };
   resolve_game_executable: { gameId: string };
   set_game_executable_override: { gameId: string; absolutePath: string };
@@ -66,6 +68,7 @@ export type DesktopCommandPayloadMap = {
     componentId: string;
     artifactId: string;
     confirmationToken?: string | null;
+    gameContextToken?: string;
   };
   plan_rollback: { gameId: string; componentId: string };
   rollback_component: { gameId: string; componentId: string };
@@ -76,18 +79,24 @@ export type DesktopCommandPayloadMap = {
   // Luma — preview stubs (see commands/addon-tools.ts)
   luma_availability: { gameId: string };
   luma_check_update: { gameId: string; deep?: boolean };
-  luma_install: { gameId: string; confirmAnticheat: boolean };
+  luma_install: { gameId: string; gameContextToken?: string };
   luma_uninstall: { gameId: string };
   luma_update: { gameId: string; forceFull?: boolean };
   // RenoDX — preview stubs
   renodx_availability: { gameId: string };
   renodx_check_update: { gameId: string };
-  renodx_install: { gameId: string; reshadeChannel: string; confirmAnticheat: boolean };
+  renodx_install: {
+    gameId: string;
+    reshadeChannel: string;
+    gameContextToken?: string;
+    sharedVulkanContextToken?: string | null;
+  };
   renodx_install_from_file: {
     gameId: string;
     filePath: string;
     reshadeChannel: string;
-    confirmAnticheat: boolean;
+    gameContextToken?: string;
+    sharedVulkanContextToken?: string | null;
   };
   renodx_uninstall: { gameId: string };
   renodx_update: { gameId: string };
@@ -114,6 +123,8 @@ export type DesktopCommandResultMap = {
   bootstrap_games_catalog: GamesCatalogBootstrap;
   start_background_refresh: { started: boolean; partialFailureCount: number };
   get_game_details: GameDetails;
+  get_game_file_safety_assessment: unknown;
+  get_shared_vulkan_safety_assessment: unknown;
   list_game_executable_candidates: ExecutableCandidate[];
   resolve_game_executable: EffectiveExecutable | null;
   set_game_executable_override: undefined;
@@ -174,6 +185,8 @@ const ALL_DESKTOP_COMMANDS = [
   'bootstrap_games_catalog',
   'start_background_refresh',
   'get_game_details',
+  'get_game_file_safety_assessment',
+  'get_shared_vulkan_safety_assessment',
   'list_game_executable_candidates',
   'resolve_game_executable',
   'set_game_executable_override',

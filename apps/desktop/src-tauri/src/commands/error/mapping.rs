@@ -31,6 +31,18 @@ impl CommandError {
     pub(crate) fn from_service_error(error: ServiceError) -> Self {
         match error {
             ServiceError::ConfirmationTokenMismatch => Self::new(Kind::ConfirmationTokenMismatch),
+            ServiceError::SafetyContextMissing { scope } => Self::with_diagnostic(
+                Kind::SafetyContextMissing,
+                format_args!("safety context is missing for {scope}"),
+            ),
+            ServiceError::SafetyContextStale { scope } => Self::with_diagnostic(
+                Kind::SafetyContextStale,
+                format_args!("safety context is stale for {scope}"),
+            ),
+            ServiceError::SafetyContextScopeMismatch { expected, actual } => Self::with_diagnostic(
+                Kind::SafetyContextScopeMismatch,
+                format_args!("safety context scope mismatch: expected {expected}, got {actual}"),
+            ),
             ServiceError::GameNotFound(game_id) => {
                 Self::with_diagnostic(Kind::GameNotFound, format_args!("game not found: {game_id}"))
             }

@@ -150,6 +150,24 @@ pub enum ServiceError {
     /// A DLL-dependent NVAPI mutation requires a completed catalog scan, but
     /// the game's current projection has never completed or was invalidated.
     NvapiCatalogNotReady,
+    /// A mutation requiring a fresh safety context was called without one.
+    SafetyContextMissing {
+        /// Scope for which the caller must acquire a context.
+        scope: crate::file_safety::SafetyScope,
+    },
+    /// A previously acquired safety context no longer matches the live
+    /// filesystem/loader observation.
+    SafetyContextStale {
+        /// Scope whose observation changed.
+        scope: crate::file_safety::SafetyScope,
+    },
+    /// A context for a different game/resource scope was supplied.
+    SafetyContextScopeMismatch {
+        /// Scope required by the mutation.
+        expected: crate::file_safety::SafetyScope,
+        /// Scope represented by the supplied permit.
+        actual: crate::file_safety::SafetyScope,
+    },
 }
 
 impl fmt::Display for ServiceError {
@@ -250,6 +268,16 @@ impl fmt::Display for ServiceError {
             Self::NvapiCatalogNotReady => formatter.write_str(
                 "the game catalog is not ready; rescan the game before changing DLL-dependent NVIDIA settings",
             ),
+            Self::SafetyContextMissing { scope } => {
+                write!(formatter, "safety context is required for {scope}")
+            }
+            Self::SafetyContextStale { scope } => {
+                write!(formatter, "safety context is stale for {scope}")
+            }
+            Self::SafetyContextScopeMismatch { expected, actual } => write!(
+                formatter,
+                "safety context scope mismatch: expected {expected}, got {actual}"
+            ),
         }
     }
 }
@@ -300,6 +328,27 @@ impl ServiceError {
     #[must_use]
     pub fn is_rollback_also_failed(&self) -> bool {
         matches!(self, Self::RollbackAlsoFailed { .. })
+    }
+
+    /// Constructs a missing safety-context error for one typed scope.
+    #[must_use]
+    pub fn safety_context_missing(scope: crate::file_safety::SafetyScope) -> Self {
+        Self::SafetyContextMissing { scope }
+    }
+
+    /// Constructs a stale safety-context error for one typed scope.
+    #[must_use]
+    pub fn safety_context_stale(scope: crate::file_safety::SafetyScope) -> Self {
+        Self::SafetyContextStale { scope }
+    }
+
+    /// Constructs a scope-mismatch error without exposing the opaque token.
+    #[must_use]
+    pub fn safety_context_scope_mismatch(
+        expected: crate::file_safety::SafetyScope,
+        actual: crate::file_safety::SafetyScope,
+    ) -> Self {
+        Self::SafetyContextScopeMismatch { expected, actual }
     }
 }
 

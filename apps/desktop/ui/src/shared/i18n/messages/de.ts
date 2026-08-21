@@ -649,6 +649,12 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Zugriff verweigert. Überprüfen Sie Ihre Berechtigungen und versuchen Sie es erneut.',
   'user_message.nvapi_catalog_not_ready':
     'Scannen Sie das Spiel erneut, bevor Sie DLL-abhängige NVIDIA-Einstellungen ändern.',
+  'user_message.safety_context_missing':
+    'Die Dateisicherheitsprüfung ist noch nicht bereit. Aktualisieren Sie die Bewertung und versuchen Sie es erneut.',
+  'user_message.safety_context_stale':
+    'Die Dateisicherheitsbewertung ist veraltet. Aktualisieren Sie sie und versuchen Sie es erneut.',
+  'user_message.safety_context_scope_mismatch':
+    'Die Dateisicherheitsbewertung gehört zu einer anderen Ressource. Aktualisieren Sie sie und versuchen Sie es erneut.',
 
   'suggested_action.refresh_games':
     'Aktualisieren Sie die Spieleliste und versuchen Sie es erneut.',
@@ -666,6 +672,8 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'suggested_action.rebuild_operation_plan': 'Bitte starten Sie die Aktion neu.',
   'suggested_action.refresh_or_scan_game_folder':
     'Aktualisieren Sie die Liste oder scannen Sie den Ordner erneut.',
+  'suggested_action.reload_file_safety':
+    'Aktualisieren Sie die Dateisicherheitsbewertung und versuchen Sie es erneut.',
 
   'settings.about.title': 'Updates',
   'settings.about.description': 'Nach Updates für die Anwendung suchen.',
@@ -736,7 +744,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Dies entfernt das RenoDX-Add-on und stellt nur ReShade-Dateien wieder her, die während der RenoDX-Einrichtung geändert wurden.',
   'gameDetails.renodx.uninstallConfirmAction': 'Entfernen',
   'gameDetails.renodx.installing': 'Installation…',
-  'gameDetails.renodx.confirmTitle': 'RenoDX trotz Anti-Cheat-Risiko installieren?',
   'gameDetails.renodx.cancel': 'Abbrechen',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
@@ -879,18 +886,13 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.renodx.attribution': 'RenoDX von clshortfuse.',
   'gameDetails.renodx.attributionLink': 'Projekt ansehen',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
-  'gameDetails.addon.riskSafe': 'Kein Anti-Cheat erkannt — Installation ist sicher.',
-  'gameDetails.addon.riskWarn':
-    'Anti-Cheat erkannt — die Installation kann zu einer Sperre führen.',
-  'addon.risk.sp_safe':
-    'Keine bekannten Anti-Cheat-Signaturen gefunden — die Installation von {addonName} ist wahrscheinlich sicher, aber nicht garantiert.',
-  'addon.risk.anticheat_detected':
-    'Anti-Cheat-Signaturen erkannt — die Installation von {addonName} kann zu einer Sperre führen.',
-  'gameDetails.addon.confirmAccept': 'Trotzdem installieren',
-  'gameDetails.addon.confirmBody':
-    'Dieses Spiel verwendet Anti-Cheat. Das ReShade-Add-on könnte es auslösen und zu einer Sperre führen. Fahren Sie auf eigenes Risiko fort.',
-  'gameDetails.addon.fullAddonWarning':
-    'Volle ReShade-Add-on-Unterstützung kann bei Mehrspieler- oder Anti-Cheat-geschützten Spielen unsicher sein.',
+  'gameDetails.fileSafety.generic':
+    'Änderungen an Dateien von Mehrspieler-Spielen können zu Kontobeschränkungen oder einer Sperre führen.',
+  'gameDetails.fileSafety.detectedOne':
+    '{engine} erkannt. Änderungen an Spieldateien können zu Kontobeschränkungen oder einer Sperre führen.',
+  'gameDetails.fileSafety.detectedMany':
+    'Anti-Cheat erkannt: {engines}. Änderungen an Spieldateien können zu Kontobeschränkungen oder einer Sperre führen.',
+  'gameDetails.fileSafety.loadError': 'Risiken von Dateiänderungen konnten nicht geprüft werden',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     '{installedAddon} ist für dieses Spiel installiert — deinstallieren Sie es, bevor Sie {blockedAddon} installieren.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
@@ -930,7 +932,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.luma.uninstallConfirmBody':
     'Luma wird entfernt. Wenn Luma die DLSS-DLL verwaltet, wird der Library Swap zurückgesetzt und der exakte Zustand vor Luma wiederhergestellt. Wiederverwendete DLLs und unabhängige Swaps bleiben unverändert.',
   'gameDetails.luma.uninstallConfirmAction': 'Entfernen',
-  'gameDetails.luma.confirmTitle': 'Luma trotz Anti-Cheat-Risiko installieren?',
   'gameDetails.luma.vcredistWarning':
     'Ein aktuelles Visual C++ Redistributable scheint auf diesem System zu fehlen. Wenn Luma nicht lädt, installieren Sie das Redistributable.',
   'gameDetails.luma.vcredistLink': 'Redistributable herunterladen',

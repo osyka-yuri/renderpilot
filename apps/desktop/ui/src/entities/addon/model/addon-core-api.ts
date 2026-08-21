@@ -60,6 +60,9 @@ export function addonCoreApi<
     get updateAvailable() {
       return core.updateAvailable;
     },
+    get safetyContextError() {
+      return core.safetyContextError;
+    },
     get requestToken() {
       return core.requestToken;
     },

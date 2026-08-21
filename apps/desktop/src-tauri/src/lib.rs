@@ -226,6 +226,8 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::query_game_cards,
         commands::bootstrap_games_catalog,
         commands::get_game_details,
+        commands::get_game_file_safety_assessment,
+        commands::get_shared_vulkan_safety_assessment,
         commands::fetch_game_cover,
         commands::clear_game_cover,
         commands::set_game_cover,

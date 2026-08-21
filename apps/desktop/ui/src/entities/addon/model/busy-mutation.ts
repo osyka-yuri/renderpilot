@@ -1,7 +1,8 @@
-import { reportClientError } from '@shared/errors';
+import { isFileSafetyContextError, reportClientError } from '@shared/errors';
 import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 import { publishPresentedErrorNotification } from '@shared/notifications';
 import { clearDownloadProgress } from '@shared/lib';
+import type { MutationSafetyScope } from './types';
 
 import {
   withBusy,
@@ -40,6 +41,8 @@ export function isMutationSuccess(result: AddonMutationResult): boolean {
 
 export type BusyMutationOptions = {
   errorKey: MessageKeyWithoutParams;
+  /** Resource scopes whose assessment should refresh after a safety rejection. */
+  safetyScope?: MutationSafetyScope;
   clearDownloadProgress?: boolean;
   requireUpdateAvailable?: boolean;
   afterCommit?: (token: number) => void | Promise<void>;
@@ -70,6 +73,7 @@ export type BusyMutationContext<
   notifyExclusivityChange: (gameId: string) => void;
   postMutationProbe: PostMutationProbe;
   onMutationSideEffect?: (gameId: string, token: number) => void | Promise<void>;
+  onMutationError?: (error: unknown, scope: MutationSafetyScope) => void;
 };
 
 /** Pure gate: busy or not eligible for an update-gated mutation. */
@@ -129,6 +133,9 @@ export async function runBusyMutation<
       }
 
       publishPresentedErrorNotification(t(options.errorKey), error);
+      if (isFileSafetyContextError(error)) {
+        ctx.onMutationError?.(error, options.safetyScope ?? 'game');
+      }
       return 'failed';
     }
     backendCommitted = true;

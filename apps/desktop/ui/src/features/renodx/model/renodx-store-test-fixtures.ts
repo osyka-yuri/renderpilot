@@ -117,10 +117,6 @@ export const NOT_INSTALLED_SAFE: AvailabilityReport = availability({
   outcome: {
     kind: 'installable',
     confidence: 'verified',
-    risk: {
-      severity: 'info',
-      message_key: 'addon.risk.sp_safe',
-    },
     generic_profile: null,
     host_kind: 'proxy',
   },

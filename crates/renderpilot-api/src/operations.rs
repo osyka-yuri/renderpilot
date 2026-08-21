@@ -26,14 +26,21 @@ pub fn apply_swap(
     component_id: impl Into<String>,
     artifact_id: impl Into<String>,
     confirmation_token: Option<&str>,
+    safety_context_token: Option<&str>,
 ) -> JsonResult {
-    let result = catalog::apply_swap_confirmed(
+    let game_id = parse_game_id(game_id.into())?;
+    let component_id = parse_component_id(component_id.into())?;
+    let artifact_id = parse_artifact_id(artifact_id.into())?;
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new()
+        .game_permit(game_id.clone(), safety_context_token)?;
+    let result = catalog::apply_swap(catalog::ApplySwapRequest {
         context,
-        &parse_game_id(game_id.into())?,
-        &parse_component_id(component_id.into())?,
-        &parse_artifact_id(artifact_id.into())?,
-        confirmation_token,
-    )?;
+        game_id: &game_id,
+        component_id: &component_id,
+        artifact_id: &artifact_id,
+        executable_confirmation: confirmation_token,
+        safety: &safety,
+    })?;
     serde_json::to_value(result).map_err(Into::into)
 }
 

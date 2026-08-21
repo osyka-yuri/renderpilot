@@ -618,6 +618,12 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'user_message.access_denied': 'アクセスが拒否されました。権限を確認して再試行してください。',
   'user_message.nvapi_catalog_not_ready':
     'DLL に依存する NVIDIA 設定を変更する前にゲームを再スキャンしてください。',
+  'user_message.safety_context_missing':
+    'ファイル安全性の確認がまだ準備できていません。評価を更新して再試行してください。',
+  'user_message.safety_context_stale':
+    'ファイル安全性の評価が古くなっています。更新して再試行してください。',
+  'user_message.safety_context_scope_mismatch':
+    'ファイル安全性の評価が別のリソースに属しています。更新して再試行してください。',
 
   'suggested_action.refresh_games': 'ゲームリストを更新して再試行してください。',
   'suggested_action.reload_game_details': 'ゲームの詳細を更新して再試行してください。',
@@ -629,6 +635,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'suggested_action.rebuild_operation_plan': 'アクションをやり直してください。',
   'suggested_action.refresh_or_scan_game_folder':
     'リストを更新するか、フォルダを再スキャンしてください。',
+  'suggested_action.reload_file_safety': 'ファイル安全性の評価を更新して再試行してください。',
 
   'settings.about.title': 'アップデート',
   'settings.about.description': 'アプリケーションのアップデートを確認します。',
@@ -698,8 +705,6 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
     'RenoDX アドオンを削除し、RenoDX セットアップ中に変更された ReShade ファイルだけを復元します。',
   'gameDetails.renodx.uninstallConfirmAction': '削除',
   'gameDetails.renodx.installing': 'インストール中…',
-  'gameDetails.renodx.confirmTitle':
-    'アンチチートのリスクがあっても RenoDX をインストールしますか？',
   'gameDetails.renodx.cancel': 'キャンセル',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
@@ -841,18 +846,13 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.renodx.attribution': 'RenoDX by clshortfuse。',
   'gameDetails.renodx.attributionLink': 'プロジェクトを見る',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
-  'gameDetails.addon.riskSafe': 'アンチチートは検出されていません — 安全にインストールできます。',
-  'gameDetails.addon.riskWarn':
-    'アンチチートが検出されました — インストールするとBANされる可能性があります。',
-  'addon.risk.sp_safe':
-    '既知のアンチチートシグネチャは検出されませんでした — {addonName} のインストールはおそらく安全ですが、保証はされません。',
-  'addon.risk.anticheat_detected':
-    'アンチチートシグネチャが検出されました — {addonName} をインストールするとBANの恐れがあります。',
-  'gameDetails.addon.confirmAccept': 'それでもインストールする',
-  'gameDetails.addon.confirmBody':
-    'このゲームはアンチチートを使用しています。ReShade アドオンがこれを誘発し、BANされる可能性があります。自己責任で続行してください。',
-  'gameDetails.addon.fullAddonWarning':
-    'ReShade のフルアドオン対応は、マルチプレイヤーやアンチチート保護されたゲームでは安全でない場合があります。',
+  'gameDetails.fileSafety.generic':
+    'マルチプレイヤーゲームのファイル変更は、アカウントの制限や停止につながる可能性があります。',
+  'gameDetails.fileSafety.detectedOne':
+    '{engine}を検出しました。ゲームファイルの変更は、アカウントの制限や停止につながる可能性があります。',
+  'gameDetails.fileSafety.detectedMany':
+    'アンチチートを検出しました: {engines}。ゲームファイルの変更は、アカウントの制限や停止につながる可能性があります。',
+  'gameDetails.fileSafety.loadError': 'ファイル変更のリスクを確認できませんでした',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     'このゲームには {installedAddon} がインストールされています — {blockedAddon} をインストールする前にアンインストールしてください。',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
@@ -891,7 +891,6 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.luma.uninstallConfirmBody':
     'Luma を削除します。Luma が DLSS DLL を管理している場合、その Library Swap を元に戻し、Luma 導入前の状態を正確に復元します。再利用された DLL と独立した Swap は変更しません。',
   'gameDetails.luma.uninstallConfirmAction': '削除',
-  'gameDetails.luma.confirmTitle': 'アンチチートのリスクを承知の上で Luma をインストールしますか？',
   'gameDetails.luma.vcredistWarning':
     'このシステムに最新の Visual C++ Redistributable がない可能性があります。Luma が読み込まれない場合は Redistributable をインストールしてください。',
   'gameDetails.luma.vcredistLink': 'Redistributable をダウンロード',

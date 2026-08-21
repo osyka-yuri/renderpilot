@@ -1,17 +1,10 @@
-import type {
-  AddonKind,
-  CatalogMessage,
-  IncompatibilityReason,
-  MatchConfidence,
-  RiskAssessment,
-} from './types';
+import type { AddonKind, CatalogMessage, IncompatibilityReason, MatchConfidence } from './types';
 
 /** Outcome kinds shared by every add-on tool's availability preview. */
 export type CommonAvailabilityOutcome =
   | {
       kind: 'installable';
       confidence: MatchConfidence;
-      risk: RiskAssessment;
     }
   | { kind: 'incompatible'; reason: IncompatibilityReason }
   | { kind: 'blacklisted'; message: CatalogMessage }
@@ -30,8 +23,6 @@ export type CommonOutcomeFields = {
   otherAddonUnmanaged: boolean;
   confidence: MatchConfidence | null;
   blacklistMessage: CatalogMessage | null;
-  risk: RiskAssessment | null;
-  requiresConfirmation: boolean;
 };
 
 const EMPTY_COMMON_OUTCOME: CommonOutcomeFields = {
@@ -45,8 +36,6 @@ const EMPTY_COMMON_OUTCOME: CommonOutcomeFields = {
   otherAddonUnmanaged: false,
   confidence: null,
   blacklistMessage: null,
-  risk: null,
-  requiresConfirmation: false,
 };
 
 /** Whether a tool-specific union member uses the shared outcome contract. */
@@ -76,13 +65,10 @@ export function deriveCommonOutcomeFields(
 
   switch (outcome.kind) {
     case 'installable': {
-      const risk = outcome.risk;
       return {
         ...EMPTY_COMMON_OUTCOME,
         isInstallable: true,
         confidence: outcome.confidence,
-        risk,
-        requiresConfirmation: risk.severity === 'warn',
       };
     }
     case 'incompatible':

@@ -6,6 +6,7 @@ import {
 import { publishCommandErrorNotification, publishErrorNotification } from '@shared/notifications';
 import { t, type MessageKeyForParams, type MessageKeyWithoutParams } from '@shared/i18n';
 import { executeGraphicsSwap } from '@features/swap-graphics-component';
+import { isFileSafetyContextError } from '@shared/errors';
 import { clearDownloadProgress } from '@shared/lib';
 
 import type { SwapRequest } from './swap-request';
@@ -73,6 +74,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
           artifactId: request.artifactId,
           isDownloaded: request.isDownloaded,
           confirmationToken: request.confirmationToken,
+          gameContextToken: request.gameContextToken,
           signal,
         });
       } finally {
@@ -118,6 +120,9 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
         } catch (error) {
           failedItems += 1;
           firstFailure ??= { error };
+          if (isFileSafetyContextError(error)) {
+            break;
+          }
         }
       }
 
@@ -162,6 +167,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
         artifactId: item.artifactId,
         isDownloaded: item.isDownloaded,
         confirmationToken: item.confirmationToken,
+        gameContextToken: item.gameContextToken,
         signal,
       });
       return appliedOperation?.updated_file_count ?? null;
@@ -173,6 +179,10 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
 
     if (outcome.successfulItems > 0) {
       publishApplyCompletedNotification(outcome.completedFileCount);
+    }
+
+    if (outcome.firstFailure && isFileSafetyContextError(outcome.firstFailure.error)) {
+      throw outcome.firstFailure.error;
     }
 
     publishBatchFailures(outcome, items.length, {

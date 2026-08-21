@@ -1,9 +1,4 @@
-import {
-  t,
-  translateExternalMessage,
-  type MessageKeyForParams,
-  type MessageKeyWithoutParams,
-} from '@shared/i18n';
+import { t, type MessageKeyForParams, type MessageKeyWithoutParams } from '@shared/i18n';
 
 import type {
   ActionDescriptor,
@@ -11,8 +6,6 @@ import type {
   HostDetection,
   HostFacts,
   HostUpdateStatus,
-  RiskAssessment,
-  RiskSeverity,
 } from './types';
 import { toolMessageKey as toolKey, type ToolI18nPrefix } from './tool-message-key';
 
@@ -26,10 +19,6 @@ export type AddonInstallableLabels = {
   confidenceLabel: MessageKeyWithoutParams;
   hostCustomBuild: MessageKeyWithoutParams;
   hostConflictBlocksInstall: MessageKeyWithoutParams;
-  fullAddonWarning: MessageKeyWithoutParams;
-  confirmTitle: MessageKeyWithoutParams;
-  confirmBody: MessageKeyWithoutParams;
-  confirmAccept: MessageKeyWithoutParams;
 };
 
 export type AddonInstalledLabels = {
@@ -40,7 +29,6 @@ export type AddonInstalledLabels = {
   installedOn: DateMessageKey;
   lastChecked: TimeMessageKey;
   lastCheckedNever: MessageKeyWithoutParams;
-  fullAddonWarning: MessageKeyWithoutParams;
   componentReshade: MessageKeyWithoutParams;
   componentAddon: MessageKeyWithoutParams;
   checking: MessageKeyWithoutParams;
@@ -120,21 +108,6 @@ export function actionDisabledMessage(action: ActionDescriptor | undefined): str
     : undefined;
 }
 
-/** Severity-based fallback keys when the backend risk `message_key` is missing. */
-type RiskFallbackKeys = {
-  warn: MessageKeyWithoutParams;
-  safe: MessageKeyWithoutParams;
-};
-
-function riskFallbackKey(severity: RiskSeverity, keys: RiskFallbackKeys): MessageKeyWithoutParams {
-  switch (severity) {
-    case 'warn':
-      return keys.warn;
-    default:
-      return keys.safe;
-  }
-}
-
 /**
  * Humanizes an action disabled-reason key when it is not in the catalog: drops
  * the dotted namespace and turns underscores into spaces (`a.b.foo_bar` → `foo bar`).
@@ -153,7 +126,6 @@ function createHostLabelMaps(prefix: ToolI18nPrefix): {
     'update_available' | 'repair_available' | 'unknown_needs_validation' | 'channel_mismatch',
     MessageKeyWithoutParams
   >;
-  riskFallback: RiskFallbackKeys;
   descriptionKeys: Pick<
     HostDescriptionKeys,
     'versionKey' | 'versionUnknownKey' | 'conflictKey' | 'customBuildKey'
@@ -169,10 +141,6 @@ function createHostLabelMaps(prefix: ToolI18nPrefix): {
       repair_available: toolKey(prefix, 'host.action.repair_host'),
       unknown_needs_validation: toolKey(prefix, 'fresh.validationRequired'),
       channel_mismatch: toolKey(prefix, 'fresh.channelMismatch'),
-    },
-    riskFallback: {
-      warn: 'gameDetails.addon.riskWarn',
-      safe: 'gameDetails.addon.riskSafe',
     },
     descriptionKeys: {
       versionKey: toolKey(prefix, 'host.version'),
@@ -202,17 +170,14 @@ export function formatHostDescription(description: HostDescription): string {
 /**
  * Everything a ReShade-hosted tool's presenter module derives from its
  * `gameDetails.<tool>` prefix and display name: the structured host description,
- * a composed string form of that description, and the install-risk message
- * (backend `message_key`, or the severity-based fallback — either way
- * interpolated with `addonName`, since the risk copy is addon-agnostic).
+ * a composed string form of that description.
  */
 export function createReshadePresenters(
   prefix: ToolI18nPrefix,
-  addonName: string,
+  _addonName: string,
 ): {
   getReshadeDescription: (input: { detection: HostDetection; facts: HostFacts }) => HostDescription;
   describeHost: (input: { detection: HostDetection; facts: HostFacts }) => string;
-  riskMessage: (risk: RiskAssessment) => string;
 } {
   const hostLabels = createHostLabelMaps(prefix);
 
@@ -233,19 +198,9 @@ export function createReshadePresenters(
   const describeHost = (input: { detection: HostDetection; facts: HostFacts }): string =>
     formatHostDescription(getReshadeDescription(input));
 
-  const riskMessage = (risk: RiskAssessment): string => {
-    const fallback = riskFallbackKey(risk.severity, hostLabels.riskFallback);
-    return translateExternalMessage({
-      key: risk.message_key,
-      fallback: t(fallback),
-      params: { addonName },
-    });
-  };
-
   return {
     getReshadeDescription,
     describeHost,
-    riskMessage,
   };
 }
 
@@ -262,7 +217,6 @@ export function createInstalledLabels(prefix: ToolI18nPrefix): AddonInstalledLab
     installedOn: toolKey(prefix, 'installedOn'),
     lastChecked: toolKey(prefix, 'lastChecked'),
     lastCheckedNever: toolKey(prefix, 'lastCheckedNever'),
-    fullAddonWarning: 'gameDetails.addon.fullAddonWarning',
     componentReshade: toolKey(prefix, 'component.reshade'),
     componentAddon: toolKey(prefix, 'component.addon'),
     checking: toolKey(prefix, 'fresh.checking'),
@@ -288,10 +242,6 @@ export function createInstallableLabels(prefix: ToolI18nPrefix): AddonInstallabl
     confidenceLabel: toolKey(prefix, 'confidenceLabel'),
     hostCustomBuild: toolKey(prefix, 'host.customBuild'),
     hostConflictBlocksInstall: toolKey(prefix, 'host.conflictBlocksInstall'),
-    fullAddonWarning: 'gameDetails.addon.fullAddonWarning',
-    confirmTitle: toolKey(prefix, 'confirmTitle'),
-    confirmBody: 'gameDetails.addon.confirmBody',
-    confirmAccept: 'gameDetails.addon.confirmAccept',
   };
 }
 

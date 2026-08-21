@@ -27,7 +27,7 @@
   import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import { t } from '@shared/i18n';
-  import { reportClientError } from '@shared/errors';
+  import { DesktopCommandError, isFileSafetyContextError, reportClientError } from '@shared/errors';
   import { sumDownloadFractions } from '@shared/lib';
   import { publishPresentedErrorNotification } from '@shared/notifications';
   import type { SettingFamily } from '@features/nvapi-settings';
@@ -42,9 +42,13 @@
   import { buildUpdateAllToLatestPlan } from '../model/update-all-to-latest';
   import { UpdateAllError } from '../model/run-update-all';
   import { createGameAddonsContext } from '../model/create-game-addons-context.svelte';
+  import { createFileSafetyContext } from '../model/create-file-safety-context.svelte';
+  import type { FileSafetyScope } from '../model/create-file-safety-context.svelte';
   import { createUpdateAllWorkflow } from '../model/create-update-all-workflow.svelte';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createGameExecutableContext } from '../model/create-game-executable-context.svelte';
+  import type { MutationSafetyTokens } from '@entities/addon';
+  import type { SwapRequest } from '../model/swap-request';
   import { resolveExecutableLockReason } from '../model/game-executable-lock';
   import GameExecutablePopover from './GameExecutablePopover.svelte';
   import NvidiaProfileCard from './NvidiaProfileCard.svelte';
@@ -53,6 +57,7 @@
   import D3d12ExecutableConfirmDialog from './D3d12ExecutableConfirmDialog.svelte';
   import DeveloperModeRequirementDialog from './DeveloperModeRequirementDialog.svelte';
   import VendorComponentCard from './VendorComponentCard.svelte';
+  import { areSameGameIds, GameFileSafetyRow } from '@entities/game';
   import { onDestroy, untrack } from 'svelte';
 
   type Props = {
@@ -90,10 +95,32 @@
   // The game's launcher, for Luma's launcher-aware launch-args callout.
   const launcher = $derived(details?.game.identity.launcher ?? '');
 
+  const fileSafety = createFileSafetyContext({ getGameId: () => gameId });
+  // Update All deliberately keeps one captured assessment for every step. A
+  // refreshed context is used by the next user action, while this run stops on
+  // the stale token instead of silently switching authorization mid-batch.
+  let updateAllSafetyTokens = $state<MutationSafetyTokens | null | undefined>(undefined);
+  let capturingUpdateAllSafety = $state(false);
+
+  async function requirePageSafetyTokens(
+    requestedGameId: string,
+    scope: FileSafetyScope,
+  ): Promise<MutationSafetyTokens> {
+    if (!gameId || !areSameGameIds(requestedGameId, gameId)) {
+      throw DesktopCommandError.fromDto({ code: 'safety_context_scope_mismatch' });
+    }
+    if (updateAllSafetyTokens) {
+      return updateAllSafetyTokens;
+    }
+    return fileSafety.requireTokens(scope);
+  }
+
   const gameAddons = createGameAddonsContext({
     getGameId: () => gameId,
     getCapabilities: () => tabs.addonsTab?.capabilities ?? [],
     onGameDetailsInvalidate: (id) => onGameDetailsInvalidate(id),
+    requireSafetyTokens: (id, scope) => requirePageSafetyTokens(id, scope),
+    onSafetyContextError: (error, scope) => fileSafety.refreshForMutationError(error, scope),
   });
   const { renodx, luma } = gameAddons.stores;
 
@@ -110,7 +137,7 @@
     getAddonUpdates: () => gameAddons.addonUpdates,
     hasUpdates: () => !nothingToUpdate,
     isBusy: () => busy || gameAddons.busy,
-    onBulkSwap: (items) => onBulkSwap(items),
+    onBulkSwap: (items) => handleBulkSwapWithSafety(items),
     onError: reportUpdateAllError,
   });
   const updatingAll = $derived(updateAllWorkflow.updating);
@@ -137,6 +164,7 @@
   onDestroy(() => {
     updateAllWorkflow.destroy();
     gameAddons.destroy();
+    fileSafety.destroy();
   });
   // Shared exclusive gate for Luma/RenoDX cards (peer mutations + Update-all).
   const exclusiveBusy = $derived(busy || gameAddons.busy || updatingAll || planningUpdateAll);
@@ -144,18 +172,97 @@
   const downloadCount = $derived(pendingDownloadIds.length);
   const downloadValue = $derived(showProgress ? sumDownloadFractions(pendingDownloadIds) : 0);
 
-  function handleUpdateAll(): void {
-    void updateAllWorkflow.start();
+  function updateAllSafetyScope(): FileSafetyScope {
+    const includesRenoDx = gameAddons.addonUpdates.some(({ step }) => step === 'renodx');
+    if (!includesRenoDx) {
+      return 'game';
+    }
+    return renodx.state?.status === 'installed' && renodx.state.host_kind === 'proxy'
+      ? 'game'
+      : 'game_and_shared';
   }
 
-  function reportUpdateAllError(error: unknown): void {
+  async function handleUpdateAll(): Promise<void> {
+    if (
+      !gameId ||
+      capturingUpdateAllSafety ||
+      updatingAll ||
+      planningUpdateAll ||
+      gameAddons.busy ||
+      busy ||
+      nothingToUpdate
+    ) {
+      return;
+    }
+    capturingUpdateAllSafety = true;
+    try {
+      // Capture one context for the complete batch. Individual steps reuse it,
+      // so a stale token stops the batch instead of switching authorization
+      // halfway through Update All.
+      updateAllSafetyTokens = await fileSafety.requireTokens(updateAllSafetyScope());
+      await updateAllWorkflow.start();
+    } catch (error) {
+      reportUpdateAllError(error, true);
+    } finally {
+      capturingUpdateAllSafety = false;
+    }
+  }
+
+  $effect(() => {
+    const workflowActive =
+      updatingAll ||
+      planningUpdateAll ||
+      updateConfirmOpen ||
+      updateAllWorkflow.developerModeOpen ||
+      updateAllWorkflow.developerModeRetrying;
+    if (!workflowActive && updateAllSafetyTokens !== undefined) {
+      untrack(() => {
+        updateAllSafetyTokens = undefined;
+      });
+    }
+  });
+
+  async function handleSwapWithSafety(request: Parameters<SwapHandler>[0]): Promise<void> {
+    try {
+      if (!gameId) {
+        throw DesktopCommandError.fromDto({ code: 'safety_context_missing' });
+      }
+      const tokens = await requirePageSafetyTokens(gameId, 'game');
+      await onSwap({ ...request, gameContextToken: tokens.gameContextToken });
+    } catch (error) {
+      await fileSafety.refreshForMutationError(error, 'game');
+      throw error;
+    }
+  }
+
+  async function handleBulkSwapWithSafety(items: readonly SwapRequest[]): Promise<void> {
+    try {
+      if (!gameId) {
+        throw DesktopCommandError.fromDto({ code: 'safety_context_missing' });
+      }
+      const tokens = await requirePageSafetyTokens(gameId, 'game');
+      await onBulkSwap(
+        items.map((item) => ({
+          ...item,
+          gameContextToken: tokens.gameContextToken,
+        })),
+      );
+    } catch (error) {
+      await fileSafety.refreshForMutationError(error, 'game');
+      throw error;
+    }
+  }
+
+  function reportUpdateAllError(error: unknown, notifySafety = false): void {
     const failureCount = error instanceof UpdateAllError ? error.failures.length : 1;
     const primaryError =
       error instanceof UpdateAllError ? (error.failures[0]?.error ?? error) : error;
-    publishPresentedErrorNotification(
-      t('gameDetails.updateAll.partialFailure', { count: failureCount }),
-      primaryError,
-    );
+    if (notifySafety || !isFileSafetyContextError(primaryError)) {
+      publishPresentedErrorNotification(
+        t('gameDetails.updateAll.partialFailure', { count: failureCount }),
+        primaryError,
+      );
+    }
     reportClientError('update_all_workflow', primaryError);
   }
 
@@ -268,7 +375,7 @@
       </CardContent>
     </Card>
   {:else if gameId}
-    <!-- Match Settings/Libraries: sticky tab chrome, scroll only inside TabsContent. -->
+    <!-- Keep tab controls visible while the notice and active tab content share one viewport. -->
     <Tabs bind:value={selectedTab} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
         {#if tabs.values.length > 0}
@@ -300,11 +407,12 @@
                   variant="default"
                   size="sm"
                   disabled={updatingAll ||
+                    capturingUpdateAllSafety ||
                     planningUpdateAll ||
                     busy ||
                     gameAddons.busy ||
                     nothingToUpdate}
-                  aria-busy={updatingAll || planningUpdateAll}
+                  aria-busy={capturingUpdateAllSafety || updatingAll || planningUpdateAll}
                   onclick={handleUpdateAll}
                 >
                   {#if updatingAll || planningUpdateAll}
@@ -342,83 +450,97 @@
         </div>
       </div>
 
-      {#each vendorTabs as tab (tab.key)}
-        <TabsContent value={tab.key} class="min-h-0 flex-1 overflow-hidden">
-          <ScrollArea class="h-full">
-            <div class="grid gap-3 p-1">
-              {#if tab.key === 'nvidia'}
-                {#if gameId && nvidia.nvapiAvailable}
-                  <NvidiaProfileCard nvapi={nvidia} />
-                {/if}
+      <ScrollArea class="min-h-0 flex-1">
+        <div class="grid gap-4 p-1">
+          <GameFileSafetyRow assessment={fileSafety.assessment} />
 
-                {@const nonStreamline = tab.components.filter((c) => !isStreamline(c))}
-                {@const streamline = tab.components.filter(isStreamline)}
+          {#each vendorTabs as tab (tab.key)}
+            <TabsContent value={tab.key} class="mt-0">
+              <div class="grid gap-3">
+                {#if tab.key === 'nvidia'}
+                  {#if gameId && nvidia.nvapiAvailable}
+                    <NvidiaProfileCard nvapi={nvidia} />
+                  {/if}
 
-                {#each nonStreamline as component (component.id)}
-                  {@const group = getCandidateGroup(component.id)}
-                  {@const dlssCard = dlssFamilyCard(component)}
-                  {#if dlssCard && gameId}
-                    <DlssComponentCard
-                      {gameId}
+                  {@const nonStreamline = tab.components.filter((c) => !isStreamline(c))}
+                  {@const streamline = tab.components.filter(isStreamline)}
+
+                  {#each nonStreamline as component (component.id)}
+                    {@const group = getCandidateGroup(component.id)}
+                    {@const dlssCard = dlssFamilyCard(component)}
+                    {#if dlssCard && gameId}
+                      <DlssComponentCard
+                        {gameId}
+                        {component}
+                        {group}
+                        family={dlssCard.family}
+                        title={dlssCard.title}
+                        {nvidia}
+                        nvapiAvailable={nvidia.nvapiAvailable}
+                        {busy}
+                        onSwap={handleSwapWithSafety}
+                        {onRollback}
+                      />
+                    {:else}
+                      <VendorComponentCard
+                        {component}
+                        {group}
+                        {busy}
+                        onSwap={handleSwapWithSafety}
+                        {onRollback}
+                      />
+                    {/if}
+                  {/each}
+
+                  {#if streamline.length > 0}
+                    {@const groupsById = Object.fromEntries(
+                      streamline.map((c) => [c.id, getCandidateGroup(c.id)] as const),
+                    )}
+                    <StreamlineComponentCard
+                      components={streamline}
+                      {groupsById}
+                      coordinatedOptions={details?.streamline_candidate_options ?? []}
+                      {busy}
+                      onBulkSwap={handleBulkSwapWithSafety}
+                      {onBulkRollback}
+                    />
+                  {/if}
+                {:else}
+                  {#each tab.components as component (component.id)}
+                    {@const group = getCandidateGroup(component.id)}
+                    <VendorComponentCard
                       {component}
                       {group}
-                      family={dlssCard.family}
-                      title={dlssCard.title}
-                      {nvidia}
-                      nvapiAvailable={nvidia.nvapiAvailable}
                       {busy}
-                      {onSwap}
+                      onSwap={handleSwapWithSafety}
                       {onRollback}
                     />
-                  {:else}
-                    <VendorComponentCard {component} {group} {busy} {onSwap} {onRollback} />
-                  {/if}
-                {/each}
+                  {/each}
+                {/if}
+              </div>
+            </TabsContent>
+          {/each}
 
-                {#if streamline.length > 0}
-                  {@const groupsById = Object.fromEntries(
-                    streamline.map((c) => [c.id, getCandidateGroup(c.id)] as const),
-                  )}
-                  <StreamlineComponentCard
-                    components={streamline}
-                    {groupsById}
-                    coordinatedOptions={details?.streamline_candidate_options ?? []}
-                    {busy}
-                    {onBulkSwap}
-                    {onBulkRollback}
+          {#if tabs.addonsTab}
+            <TabsContent value={ADDONS_TAB_VALUE} class="mt-0">
+              <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,50rem),1fr))] gap-3">
+                {#if gameAddons.isEnabled('renodx')}
+                  <RenoDxCard
+                    {gameId}
+                    busy={exclusiveBusy}
+                    store={renodx}
+                    {onOpenRenoDxSettings}
+                    {onPreloadRenoDxSettings}
                   />
                 {/if}
-              {:else}
-                {#each tab.components as component (component.id)}
-                  {@const group = getCandidateGroup(component.id)}
-                  <VendorComponentCard {component} {group} {busy} {onSwap} {onRollback} />
-                {/each}
-              {/if}
-            </div>
-          </ScrollArea>
-        </TabsContent>
-      {/each}
-
-      {#if tabs.addonsTab}
-        <TabsContent value={ADDONS_TAB_VALUE} class="min-h-0 flex-1 overflow-hidden">
-          <ScrollArea class="h-full">
-            <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,50rem),1fr))] gap-3 p-1">
-              {#if gameAddons.isEnabled('renodx')}
-                <RenoDxCard
-                  {gameId}
-                  busy={exclusiveBusy}
-                  store={renodx}
-                  {onOpenRenoDxSettings}
-                  {onPreloadRenoDxSettings}
-                />
-              {/if}
-              {#if gameAddons.isEnabled('luma')}
-                <LumaCard {gameId} busy={exclusiveBusy} {launcher} store={luma} />
-              {/if}
-            </div>
-          </ScrollArea>
-        </TabsContent>
-      {/if}
+                {#if gameAddons.isEnabled('luma')}
+                  <LumaCard {gameId} busy={exclusiveBusy} {launcher} store={luma} />
+                {/if}
+              </div>
+            </TabsContent>
+          {/if}
+        </div>
+      </ScrollArea>
     </Tabs>
   {/if}
 </section>

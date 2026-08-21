@@ -10,6 +10,8 @@ import {
 } from '@entities/game';
 import { createLumaStore } from '@features/luma';
 import { createRenoDxStore } from '@features/renodx';
+import type { MutationSafetyTokens } from '@entities/addon';
+import type { FileSafetyScope } from './create-file-safety-context.svelte';
 
 import type { RunUpdateAllOptions } from './run-update-all';
 
@@ -17,6 +19,8 @@ type CreateGameAddonsContextOptions = {
   getGameId: () => string | null;
   getCapabilities: () => readonly AddonCapability[];
   onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
+  requireSafetyTokens?: (gameId: string, scope: FileSafetyScope) => Promise<MutationSafetyTokens>;
+  onSafetyContextError?: (error: unknown, scope: FileSafetyScope) => void | Promise<void>;
 };
 
 function normalizeOptionalGameId(gameId: string | null): string | null {
@@ -39,11 +43,15 @@ export function createGameAddonsContext(options: CreateGameAddonsContextOptions)
         createRenoDxStore({
           onExclusivityChange,
           onGameDetailsInvalidate: options.onGameDetailsInvalidate,
+          requireSafetyTokens: options.requireSafetyTokens,
+          onSafetyContextError: options.onSafetyContextError,
         }),
       luma: ({ onExclusivityChange }) =>
         createLumaStore({
           onExclusivityChange,
           onGameDetailsInvalidate: options.onGameDetailsInvalidate,
+          requireSafetyTokens: options.requireSafetyTokens,
+          onSafetyContextError: (error) => options.onSafetyContextError?.(error, 'game'),
         }),
     },
     {

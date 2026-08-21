@@ -14,23 +14,28 @@ use crate::addons::reshade::types::{ReshadeChannel, ReshadeSourceCatalog};
 use crate::addons::update::UpdateStatus;
 use crate::net::ProgressObserver;
 
-/// Command to update the ReShade Vulkan layer.
-pub struct UpdateReShadeCommand<'a> {
-    /// The application context.
-    pub context: &'a Context,
-    /// Independently resolved ReShade sources.
-    pub reshade_sources: &'a ReshadeSourceCatalog,
-    /// The ReShade release channel to fetch from.
-    pub channel: ReshadeChannel,
-    /// Optional progress observer for the download.
-    pub progress: Option<&'a ProgressObserver<'a>>,
+/// Downloaded, validated ReShade payload. Preparing it performs no shared-layer
+/// or storage writes; callers commit it synchronously under the shared guard.
+pub struct PreparedReShadeUpdate {
+    source: crate::addons::reshade::source::ReshadeSource,
+    download: crate::addons::reshade::fetch::Download,
 }
 
-impl<'a> UpdateReShadeCommand<'a> {
-    /// Executes the update command.
-    pub async fn execute(self) -> Result<UpdateStatus, ServiceError> {
-        let _guard = crate::addons::vulkan_lock::shared_vulkan_lock().await;
+impl PreparedReShadeUpdate {
+    /// Downloads and validates a ReShade payload without mutating shared state.
+    pub async fn prepare(
+        reshade_sources: &ReshadeSourceCatalog,
+        channel: ReshadeChannel,
+        progress: Option<&ProgressObserver<'_>>,
+    ) -> Result<Self, ServiceError> {
+        let source = require_reshade_source(reshade_sources, channel, Architecture::X64)?;
+        let download = fetch_reshade_from_source(&source, Architecture::X64, progress).await?;
+        Ok(Self { source, download })
+    }
 
+    /// Applies the prepared payload. The caller must invoke this only from an
+    /// authority commit closure that holds the shared Vulkan guard.
+    pub fn commit(self, context: &Context) -> Result<UpdateStatus, ServiceError> {
         let report = vulkan::layer_report();
         match layer_mutation_gate(&report) {
             LayerMutationGate::ExternalReadOnly => {
@@ -46,13 +51,10 @@ impl<'a> UpdateReShadeCommand<'a> {
             LayerMutationGate::Proceed => {}
         }
 
-        let source = require_reshade_source(self.reshade_sources, self.channel, Architecture::X64)?;
-
-        let download = fetch_reshade_from_source(&source, Architecture::X64, self.progress).await?;
-        let upstream_digest = download.digest.as_str();
+        let upstream_digest = self.download.digest.as_str();
 
         let actual_digest = vulkan::current_layer_digest();
-        let db_digest = vulkan::stored_layer_digest(self.context.storage());
+        let db_digest = vulkan::stored_layer_digest(context.storage());
         let verdict = resolve_digest_verdict(
             actual_digest.as_deref(),
             db_digest.as_deref(),
@@ -67,13 +69,13 @@ impl<'a> UpdateReShadeCommand<'a> {
         let changed = needs_layer_write || verdict.status != UpdateStatus::Current;
 
         if changed {
-            vulkan::install_layer(&download.bytes)?;
+            vulkan::install_layer(&self.download.bytes)?;
         }
 
         vulkan::record_downloaded_layer(
-            self.context.storage(),
-            &source,
-            &download,
+            context.storage(),
+            &self.source,
+            &self.download,
             renderpilot_domain::SharedArtifactOrigin::RenderPilotCreated,
         )?;
 

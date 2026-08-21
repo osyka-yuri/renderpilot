@@ -7,6 +7,7 @@ pub(crate) mod addon_catalog;
 mod app_update;
 mod background_catalog_refresh;
 mod error;
+mod file_safety;
 mod luma;
 mod nvapi;
 mod query_game_cards;
@@ -15,6 +16,7 @@ mod validation;
 
 pub use app_update::*;
 pub use error::CommandError;
+pub use file_safety::*;
 pub use luma::*;
 pub use nvapi::*;
 pub use renodx::*;
@@ -486,6 +488,7 @@ pub async fn apply_swap(
     component_id: String,
     artifact_id: String,
     confirmation_token: Option<String>,
+    game_context_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::ApplySwap);
@@ -501,6 +504,7 @@ pub async fn apply_swap(
                 component_id,
                 artifact_id,
                 confirmation_token.as_deref(),
+                game_context_token.as_deref(),
             )
         })
         .await

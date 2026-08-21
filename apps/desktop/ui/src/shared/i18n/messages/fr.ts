@@ -660,6 +660,12 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'user_message.access_denied': 'L’accès a été refusé. Vérifiez vos autorisations et réessayez.',
   'user_message.nvapi_catalog_not_ready':
     'Analysez de nouveau le jeu avant de modifier les paramètres NVIDIA dépendants des DLL.',
+  'user_message.safety_context_missing':
+    'La vérification de sécurité des fichiers n’est pas prête. Actualisez l’évaluation puis réessayez.',
+  'user_message.safety_context_stale':
+    'L’évaluation de sécurité des fichiers est obsolète. Actualisez-la puis réessayez.',
+  'user_message.safety_context_scope_mismatch':
+    'L’évaluation de sécurité concerne une autre ressource. Actualisez-la puis réessayez.',
 
   'suggested_action.refresh_games': 'Actualisez la liste des jeux et réessayez.',
   'suggested_action.reload_game_details': 'Actualisez les détails du jeu et réessayez.',
@@ -672,6 +678,8 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'suggested_action.rebuild_operation_plan': 'Veuillez recommencer l’action.',
   'suggested_action.refresh_or_scan_game_folder':
     'Actualisez la liste ou analysez à nouveau le dossier.',
+  'suggested_action.reload_file_safety':
+    'Actualisez l’évaluation de sécurité des fichiers puis réessayez.',
 
   'settings.about.title': 'Mises à jour',
   'settings.about.description': 'Rechercher des mises à jour.',
@@ -742,7 +750,6 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
     'Cela supprime l’add-on RenoDX et restaure uniquement les fichiers ReShade modifiés pendant la configuration de RenoDX.',
   'gameDetails.renodx.uninstallConfirmAction': 'Supprimer',
   'gameDetails.renodx.installing': 'Installation…',
-  'gameDetails.renodx.confirmTitle': 'Installer RenoDX malgré le risque anti-triche ?',
   'gameDetails.renodx.cancel': 'Annuler',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
@@ -887,18 +894,13 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'gameDetails.renodx.attribution': 'RenoDX par clshortfuse.',
   'gameDetails.renodx.attributionLink': 'Voir le projet',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
-  'gameDetails.addon.riskSafe': 'Aucun anti-triche détecté — installation sûre.',
-  'gameDetails.addon.riskWarn':
-    'Anti-triche détecté — l’installation peut entraîner un bannissement.',
-  'addon.risk.sp_safe':
-    'Aucune signature anti-triche connue détectée — l’installation de {addonName} est probablement sûre, mais pas garantie.',
-  'addon.risk.anticheat_detected':
-    'Signatures anti-triche détectées — l’installation de {addonName} peut entraîner un bannissement.',
-  'gameDetails.addon.confirmAccept': 'Installer quand même',
-  'gameDetails.addon.confirmBody':
-    'Ce jeu utilise un anti-triche. L’add-on ReShade pourrait le déclencher et entraîner un bannissement. Continuez à vos risques et périls.',
-  'gameDetails.addon.fullAddonWarning':
-    'La prise en charge complète des add-ons ReShade peut être risquée pour les jeux multijoueurs ou protégés par anti-triche.',
+  'gameDetails.fileSafety.generic':
+    'Modifier les fichiers de jeux multijoueurs peut entraîner des restrictions ou le blocage du compte.',
+  'gameDetails.fileSafety.detectedOne':
+    '{engine} détecté. Modifier les fichiers du jeu peut entraîner des restrictions ou le blocage du compte.',
+  'gameDetails.fileSafety.detectedMany':
+    'Anti-triche détecté : {engines}. Modifier les fichiers du jeu peut entraîner des restrictions ou le blocage du compte.',
+  'gameDetails.fileSafety.loadError': 'Impossible de vérifier les risques liés aux fichiers',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     '{installedAddon} est installé pour ce jeu — désinstallez-le avant d’installer {blockedAddon}.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
@@ -938,7 +940,6 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'gameDetails.luma.uninstallConfirmBody':
     'Cela supprime Luma. Si Luma gère la DLL DLSS, son Library Swap est annulé et l’état exact antérieur à Luma est restauré. Les DLL réutilisées et les swaps indépendants restent inchangés.',
   'gameDetails.luma.uninstallConfirmAction': 'Supprimer',
-  'gameDetails.luma.confirmTitle': 'Installer Luma malgré le risque lié à l’anti-triche ?',
   'gameDetails.luma.vcredistWarning':
     'Un Visual C++ Redistributable récent semble manquer sur ce système. Si Luma ne se charge pas, installez le redistribuable.',
   'gameDetails.luma.vcredistLink': 'Télécharger le redistribuable',

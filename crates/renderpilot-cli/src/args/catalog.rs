@@ -108,6 +108,7 @@ pub(super) fn parse_apply_command(args: &mut ArgCursor) -> Result<Command, CliEr
     let mut component_id = None;
     let mut artifact_id = None;
     let mut confirmation_token = None;
+    let mut safety_context_token = None;
 
     while let Some(argument) = args.next_keyword()? {
         match argument.as_str() {
@@ -135,6 +136,9 @@ pub(super) fn parse_apply_command(args: &mut ArgCursor) -> Result<Command, CliEr
             "--confirmation-token" => {
                 confirmation_token = Some(args.next_required_keyword("<confirmation_token>")?);
             }
+            "--safety-context-token" => {
+                safety_context_token = Some(args.next_required_keyword("<safety_context_token>")?);
+            }
             _ => return Err(CliError::UnexpectedArgument(argument)),
         }
     }
@@ -144,6 +148,7 @@ pub(super) fn parse_apply_command(args: &mut ArgCursor) -> Result<Command, CliEr
         component_id: component_id.ok_or(CliError::MissingArgument("<component_id>"))?,
         artifact_id: artifact_id.ok_or(CliError::MissingArgument("<artifact_id>"))?,
         confirmation_token,
+        safety_context_token,
     })
 }
 

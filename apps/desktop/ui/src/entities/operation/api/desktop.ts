@@ -12,12 +12,14 @@ export async function applySwap(
   componentId: string,
   artifactId: string,
   confirmationToken?: string | null,
+  gameContextToken?: string,
 ): Promise<ApplySwapResult> {
   return invokeDesktop<ApplySwapResult>('apply_swap', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     componentId: requireNonBlankString(componentId, 'componentId'),
     artifactId: requireNonBlankString(artifactId, 'artifactId'),
     confirmationToken: confirmationToken ?? null,
+    ...(gameContextToken === undefined ? {} : { gameContextToken }),
   });
 }
 

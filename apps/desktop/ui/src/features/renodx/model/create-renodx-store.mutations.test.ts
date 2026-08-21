@@ -28,7 +28,47 @@ import {
 } from './renodx-store-test-fixtures';
 
 describe('createRenoDxStore', () => {
-  it('install() passes the confirmation flag and refreshes state', async () => {
+  it('waits for one in-flight safety context and forwards both tokens', async () => {
+    const safety = Promise.withResolvers<{
+      gameContextToken: string;
+      sharedVulkanContextToken: string;
+    }>();
+    const requireSafetyTokens = vi.fn(() => safety.promise);
+    const api = fakeApi();
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+
+    const mutation = store.install('steam:1091500', 'stable');
+    expect(api.install).not.toHaveBeenCalled();
+
+    safety.resolve({
+      gameContextToken: 'game-token',
+      sharedVulkanContextToken: 'shared-token',
+    });
+    await expect(mutation).resolves.toBe('ok');
+
+    expect(requireSafetyTokens).toHaveBeenCalledOnce();
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:1091500', 'game_and_shared');
+    expect(api.install).toHaveBeenCalledWith(
+      'steam:1091500',
+      'stable',
+      'game-token',
+      'shared-token',
+    );
+  });
+
+  it('requests only game safety for a resolved proxy install', async () => {
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'game-token' }));
+    const api = fakeApi();
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+    await store.load('steam:1091500');
+
+    await expect(store.install('steam:1091500', 'stable')).resolves.toBe('ok');
+
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:1091500', 'game');
+    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'stable', 'game-token', undefined);
+  });
+
+  it('install() refreshes state after the mutation', async () => {
     // The refresh after install must observe the new installed state.
     let installed = false;
     const api = fakeApi({
@@ -40,9 +80,9 @@ describe('createRenoDxStore', () => {
     });
     const store = createRenoDxStore({ api });
 
-    await store.install('steam:1091500', 'stable', true);
+    await store.install('steam:1091500', 'stable');
 
-    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'stable', true);
+    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'stable');
     expect(store.isInstalled).toBe(true);
     expect(store.hostActions.use_existing?.enabled).toBe(true);
     expect(store.busy).toBe(false);
@@ -336,10 +376,6 @@ describe('createRenoDxStore', () => {
         },
         file_install: {
           confidence: 'verified',
-          risk: {
-            severity: 'info',
-            message_key: 'addon.risk.sp_safe',
-          },
           host_kind: 'proxy',
           generic_profile: null,
         },
@@ -365,19 +401,13 @@ describe('createRenoDxStore', () => {
       fallback_text: 'Open the RenoDX Discord',
     });
 
-    const ok = await store.installFromFile(
-      'steam:1091500',
-      'C:\\dl\\renodx-x.addon64',
-      'nightly',
-      false,
-    );
+    const ok = await store.installFromFile('steam:1091500', 'C:\\dl\\renodx-x.addon64', 'nightly');
 
     expect(ok).toBe('ok');
     expect(api.installFromFile).toHaveBeenCalledWith(
       'steam:1091500',
       'C:\\dl\\renodx-x.addon64',
       'nightly',
-      false,
     );
     expect(store.isInstalled).toBe(true);
   });
@@ -426,7 +456,7 @@ describe('createRenoDxStore', () => {
     });
     const store = createRenoDxStore({ api });
 
-    const ok = await store.install('steam:1091500', 'stable', false);
+    const ok = await store.install('steam:1091500', 'stable');
 
     expect(ok).toBe('failed');
     expect(store.busy).toBe(false);
@@ -440,12 +470,7 @@ describe('createRenoDxStore', () => {
     });
     const store = createRenoDxStore({ api });
 
-    const ok = await store.installFromFile(
-      'steam:1091500',
-      'C:\\dl\\renodx-x.addon64',
-      'stable',
-      false,
-    );
+    const ok = await store.installFromFile('steam:1091500', 'C:\\dl\\renodx-x.addon64', 'stable');
 
     expect(ok).toBe('failed');
     expect(store.busy).toBe(false);
@@ -545,7 +570,7 @@ describe('createRenoDxStore', () => {
     const store = createRenoDxStore({ api });
     await store.load('game1');
 
-    const installDone = store.install('game1', 'stable', false);
+    const installDone = store.install('game1', 'stable');
     await vi.waitFor(() => {
       expect(api.getAvailability).toHaveBeenCalledTimes(2);
     });
@@ -590,7 +615,7 @@ describe('createRenoDxStore', () => {
     const store = createRenoDxStore({ api });
     vi.mocked(clearDownloadProgress).mockClear();
 
-    await store.install('steam:1091500', 'stable', false);
+    await store.install('steam:1091500', 'stable');
 
     expect(vi.mocked(clearDownloadProgress)).toHaveBeenCalledWith(['steam:1091500']);
   });
@@ -618,7 +643,7 @@ describe('createRenoDxStore', () => {
     const availabilityCallsAfterLoad = vi.mocked(api.getAvailability).mock.calls.length;
     const updateCallsAfterLoad = vi.mocked(api.checkUpdate).mock.calls.length;
 
-    await store.install('steam:1091500', 'stable', false);
+    await store.install('steam:1091500', 'stable');
 
     // Exactly one extra availability scan (the host refresh) and no update-check:
     // the install verdict is derived from the command's nextState.
@@ -651,10 +676,6 @@ describe('createRenoDxStore', () => {
       outcome: {
         kind: 'installable',
         confidence: 'untested',
-        risk: {
-          severity: 'info',
-          message_key: 'addon.risk.sp_safe',
-        },
         generic_profile: {
           engine: 'unreal',
           message: {
@@ -665,10 +686,6 @@ describe('createRenoDxStore', () => {
         host_kind: 'proxy',
       },
       manual_install: {
-        risk: {
-          severity: 'info',
-          message_key: 'addon.risk.sp_safe',
-        },
         host_kind: 'proxy',
         expected_addon_name: 'renodx-example',
         game_arch: 'x64',
@@ -690,7 +707,7 @@ describe('createRenoDxStore', () => {
     expect(store.manualInstall).toBeNull();
     expect(store.vulkanLayer).toEqual(VULKAN_NOT_INSTALLED);
 
-    const ok = await store.install('steam:1091500', 'stable', false);
+    const ok = await store.install('steam:1091500', 'stable');
     await Promise.resolve();
 
     expect(ok).toBe('ok');
@@ -718,10 +735,6 @@ describe('createRenoDxStore', () => {
         file_install: null,
       },
       manual_install: {
-        risk: {
-          severity: 'info',
-          message_key: 'addon.risk.sp_safe',
-        },
         host_kind: 'proxy',
         expected_addon_name: 'renodx-example',
         game_arch: 'x64',
@@ -765,7 +778,7 @@ describe('createRenoDxStore', () => {
     const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
 
-    const ok = await store.install('steam:1091500', 'stable', false);
+    const ok = await store.install('steam:1091500', 'stable');
     await Promise.resolve();
 
     expect(ok).toBe('ok');
@@ -849,7 +862,7 @@ describe('createRenoDxStore', () => {
     const api = fakeApi({ install: vi.fn(() => Promise.resolve(installedFromBackend)) });
     const store = createRenoDxStore({ api });
 
-    await store.install('steam:1091500', 'stable', false);
+    await store.install('steam:1091500', 'stable');
 
     expect(store.isInstalled).toBe(true);
     expect(store.installedAt).toBe(1_000_000_000_000);

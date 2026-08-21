@@ -9,12 +9,18 @@ use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 
 static SHARED_VULKAN_LOCK: OnceLock<Arc<AsyncMutex<()>>> = OnceLock::new();
 
-pub(crate) async fn shared_vulkan_lock() -> OwnedMutexGuard<()> {
-    SHARED_VULKAN_LOCK
+/// Proof that the caller exclusively owns the shared Vulkan mutation boundary.
+pub(crate) struct SharedVulkanMutationGuard {
+    _guard: OwnedMutexGuard<()>,
+}
+
+pub(crate) async fn shared_vulkan_lock() -> SharedVulkanMutationGuard {
+    let guard = SHARED_VULKAN_LOCK
         .get_or_init(|| Arc::new(AsyncMutex::new(())))
         .clone()
         .lock_owned()
-        .await
+        .await;
+    SharedVulkanMutationGuard { _guard: guard }
 }
 
 /// Blocks the calling thread until the shared Vulkan layer lock is free.
@@ -22,20 +28,22 @@ pub(crate) async fn shared_vulkan_lock() -> OwnedMutexGuard<()> {
 /// # Panics
 /// Panics if called from within an async execution context (Tokio's
 /// `blocking_lock_owned` panics to prevent runtime deadlock).
-pub(crate) fn blocking_shared_vulkan_lock() -> OwnedMutexGuard<()> {
-    SHARED_VULKAN_LOCK
+pub(crate) fn blocking_shared_vulkan_lock() -> SharedVulkanMutationGuard {
+    let guard = SHARED_VULKAN_LOCK
         .get_or_init(|| Arc::new(AsyncMutex::new(())))
         .clone()
-        .blocking_lock_owned()
+        .blocking_lock_owned();
+    SharedVulkanMutationGuard { _guard: guard }
 }
 
 /// Attempts to acquire the shared Vulkan layer lock without blocking.
 /// Non-blocking and panic-free — returns `None` immediately if another
 /// operation already holds the lock.
-pub(crate) fn try_shared_vulkan_lock() -> Option<OwnedMutexGuard<()>> {
-    SHARED_VULKAN_LOCK
+pub(crate) fn try_shared_vulkan_lock() -> Option<SharedVulkanMutationGuard> {
+    let guard = SHARED_VULKAN_LOCK
         .get_or_init(|| Arc::new(AsyncMutex::new(())))
         .clone()
         .try_lock_owned()
-        .ok()
+        .ok()?;
+    Some(SharedVulkanMutationGuard { _guard: guard })
 }

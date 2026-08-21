@@ -2,7 +2,6 @@
   import type { Snippet } from 'svelte';
 
   import AddonConfidenceBadge from './AddonConfidenceBadge.svelte';
-  import AddonRiskConfirmDialog from './AddonRiskConfirmDialog.svelte';
   import AddonStateMessage from './AddonStateMessage.svelte';
   import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import { Button, Spinner } from '@shared/ui';
@@ -15,13 +14,7 @@
 
   type ViewStore = Pick<
     AddonStoreView,
-    | 'busy'
-    | 'isInstallable'
-    | 'requiresConfirmation'
-    | 'confidence'
-    | 'hostDetection'
-    | 'hostFacts'
-    | 'hostActions'
+    'busy' | 'isInstallable' | 'confidence' | 'hostDetection' | 'hostFacts' | 'hostActions'
   >;
 
   type Props = {
@@ -30,8 +23,7 @@
     busy: boolean;
     labels: AddonInstallableLabels;
     confidenceLabelKey: Record<MatchConfidence, MessageKeyWithoutParams>;
-    onInstall: (gameId: string, force: boolean) => void;
-    riskText: string;
+    onInstall: (gameId: string) => void;
     preConflictWarnings?: Snippet;
     midCallouts?: Snippet;
     actionRowLeading?: Snippet;
@@ -45,14 +37,11 @@
     labels,
     confidenceLabelKey,
     onInstall,
-    riskText,
     preConflictWarnings,
     midCallouts,
     actionRowLeading,
     confidenceTrailing,
   }: Props = $props();
-
-  let confirmOpen = $state(false);
 
   const hostConflict = $derived(store.hostDetection === 'conflict');
   const customBuild = $derived(store.hostFacts.is_custom_build);
@@ -78,20 +67,6 @@
   const installBlocked = $derived(installDisabledByHost || customBuild);
   const canStartInstall = $derived(store.isInstallable && !busy && !installBlocked);
 
-  const showRiskText = $derived(riskText.length > 0);
-  const showRiskAsWarning = $derived(store.requiresConfirmation);
-
-  const hasHostInstallOrMaintenanceAction = $derived.by((): boolean => {
-    const { install, repair, update } = store.hostActions;
-
-    return install !== undefined || repair !== undefined || update !== undefined;
-  });
-
-  const showFullAddonWarning = $derived(
-    store.requiresConfirmation &&
-      (store.hostFacts.addon_support === 'full' || hasHostInstallOrMaintenanceAction),
-  );
-
   const installLabel = $derived(store.busy ? t(labels.installing) : t(labels.installAction));
 
   function startInstall(): void {
@@ -99,29 +74,7 @@
       return;
     }
 
-    if (store.requiresConfirmation) {
-      confirmOpen = true;
-      return;
-    }
-
-    install(false);
-  }
-
-  function installConfirmed(): void {
-    confirmOpen = false;
-    install(true);
-  }
-
-  function install(force: boolean): void {
-    if (!canStartInstall) {
-      return;
-    }
-
-    onInstall(gameId, force);
-  }
-
-  function setInstallConfirmOpen(nextOpen: boolean): void {
-    confirmOpen = nextOpen;
+    onInstall(gameId);
   }
 </script>
 
@@ -147,18 +100,6 @@
       icon="warning"
       message={t(labels.hostConflictBlocksInstall)}
     />
-  {/if}
-
-  {#if showRiskText}
-    {#if showRiskAsWarning}
-      <AddonStateMessage tone="warning" icon="warning" message={riskText} />
-    {:else}
-      <AddonStateMessage tone="default" icon="info" message={riskText} />
-    {/if}
-  {/if}
-
-  {#if showFullAddonWarning}
-    <AddonStateMessage tone="warning" icon="warning" message={t(labels.fullAddonWarning)} />
   {/if}
 
   {@render midCallouts?.()}
@@ -189,14 +130,3 @@
     </div>
   </div>
 </div>
-
-<AddonRiskConfirmDialog
-  open={confirmOpen}
-  {busy}
-  {riskText}
-  titleKey={labels.confirmTitle}
-  bodyKey={labels.confirmBody}
-  acceptKey={labels.confirmAccept}
-  onOpenChange={setInstallConfirmOpen}
-  onConfirm={installConfirmed}
-/>

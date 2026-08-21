@@ -5,7 +5,6 @@ import {
   describeReshadeHost,
   getAddonDescriptionKey,
   isManagedVulkanLayer,
-  riskMessage,
   vulkanLayerHostDescription,
 } from './reshade-presenters';
 import type { HostFacts } from '@entities/addon';
@@ -94,18 +93,6 @@ describe('reshade presenters', () => {
       'gameDetails.renodx.component.addonFileInstall',
     );
     expect(getAddonDescriptionKey(null, true)).toBe('gameDetails.renodx.component.addonDesc');
-  });
-
-  it('renders a catalogued risk message interpolated with the RenoDX display name', () => {
-    expect(riskMessage({ severity: 'info', message_key: 'addon.risk.sp_safe' })).toBe(
-      'No known anti-cheat signatures were found — installing RenoDX is likely safe, but not guaranteed.',
-    );
-  });
-
-  it('falls back to the severity default for an uncatalogued message key', () => {
-    expect(riskMessage({ severity: 'warn', message_key: 'does.not.exist' })).toBe(
-      'Anti-cheat detected — installing may risk a ban.',
-    );
   });
 
   it('treats installed and installed_disabled as managed Vulkan layers', () => {

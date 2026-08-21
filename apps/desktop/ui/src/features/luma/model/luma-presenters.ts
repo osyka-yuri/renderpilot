@@ -5,7 +5,6 @@ import {
   type HostDescription,
   type HostDetection,
   type HostFacts,
-  type RiskAssessment,
 } from '@entities/addon';
 
 import type { LumaActions } from './types';
@@ -38,15 +37,6 @@ export function getReshadeDescription(input: {
       (part) => part.kind !== 'message' || part.key !== 'gameDetails.luma.fresh.validationRequired',
     ),
   };
-}
-
-/**
- * Renders an install-risk message: the backend's own `message_key` when it's
- * in the catalog, else the severity-based fallback — either way interpolated
- * with Luma's display name (the risk copy is addon-agnostic).
- */
-export function riskMessage(risk: RiskAssessment): string {
-  return presenters.riskMessage(risk);
 }
 
 /** Structured host description → single i18n string (tool keys via factory). */

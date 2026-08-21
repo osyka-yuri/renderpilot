@@ -9,7 +9,6 @@ use serde::Serialize;
 pub use renderpilot_domain::{RenoDxHostKind, RenoDxInstallState};
 
 use crate::addons::CatalogMessage;
-use crate::addons::anticheat::RiskAssessment;
 use crate::addons::renodx::types::RenoDxGenericProfile;
 
 use super::super::reshade::RenoDxAddonState;
@@ -114,8 +113,6 @@ pub enum AvailabilityOutcome {
     Installable {
         /// Confidence shown to the user (verified / experimental / untested).
         confidence: MatchConfidence,
-        /// Ban/stability risk and whether explicit confirmation is required.
-        risk: RiskAssessment,
         /// Present when this install comes from an engine-level generic profile.
         generic_profile: Option<RenoDxGenericProfile>,
         /// How RenoDX would hook in: a per-game proxy DLL or the shared Vulkan layer.
@@ -163,8 +160,6 @@ pub enum AvailabilityOutcome {
 /// path is available: install the ReShade host and add a user-downloaded add-on.
 #[derive(Debug, Clone, Serialize)]
 pub struct ManualFileInstall {
-    /// Ban/stability risk and whether explicit confirmation is required (assessed).
-    pub risk: RiskAssessment,
     /// How RenoDX would hook in: a per-game proxy DLL or the shared Vulkan layer.
     pub host_kind: HostKind,
     /// The catalogue add-on stem (`renodx-<slug>`) when a title matched, for a soft
@@ -180,8 +175,6 @@ pub struct ManualFileInstall {
 pub struct ExternalFileInstall {
     /// Confidence shown to the user (verified / experimental / untested).
     pub confidence: MatchConfidence,
-    /// Ban/stability risk and whether explicit confirmation is required.
-    pub risk: RiskAssessment,
     /// How RenoDX would hook in: a per-game proxy DLL or the shared Vulkan layer.
     pub host_kind: HostKind,
     /// Engine generic this offer came from, when applicable.

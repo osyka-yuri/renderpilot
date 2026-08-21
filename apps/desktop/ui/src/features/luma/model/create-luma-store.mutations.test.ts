@@ -16,14 +16,49 @@ import {
 } from './luma-store-test-fixtures';
 
 describe('createLumaStore', () => {
-  it('install() passes the confirmation flag and refreshes state', async () => {
+  it('waits for one in-flight safety context before installing', async () => {
+    const safety = Promise.withResolvers<{ gameContextToken: string }>();
+    const requireSafetyTokens = vi.fn(() => safety.promise);
+    const api = fakeApi();
+    const store = createLumaStore({ api, requireSafetyTokens });
+
+    const mutation = store.install('steam:403640');
+    expect(api.install).not.toHaveBeenCalled();
+
+    safety.resolve({ gameContextToken: 'game-token' });
+    await expect(mutation).resolves.toBe('ok');
+
+    expect(requireSafetyTokens).toHaveBeenCalledOnce();
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:403640', 'game');
+    expect(api.install).toHaveBeenCalledWith('steam:403640', 'game-token');
+  });
+
+  it('reports safety acquisition failures through the mutation notification path', async () => {
+    vi.mocked(publishPresentedErrorNotification).mockClear();
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const api = fakeApi();
+    const store = createLumaStore({
+      api,
+      requireSafetyTokens: vi.fn(() => Promise.reject(failure)),
+    });
+
+    await expect(store.install('steam:403640')).resolves.toBe('failed');
+
+    expect(api.install).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).toHaveBeenCalledTimes(1);
+    expect(store.safetyContextError).toBe(failure);
+  });
+
+  it('install() refreshes state after the mutation', async () => {
     const api = fakeApi();
     const store = createLumaStore({ api });
 
-    const ok = await store.install('steam:403640', true);
+    const ok = await store.install('steam:403640');
 
     expect(ok).toBe('ok');
-    expect(api.install).toHaveBeenCalledWith('steam:403640', true);
+    expect(api.install).toHaveBeenCalledWith('steam:403640');
     expect(store.isInstalled).toBe(true);
     expect(store.installedAt).not.toBeNull();
     expect(store.updatedAt).not.toBeNull();
@@ -45,7 +80,7 @@ describe('createLumaStore', () => {
     });
     const store = createLumaStore({ api });
 
-    const ok = await store.install('steam:403640', false);
+    const ok = await store.install('steam:403640');
 
     expect(ok).toBe('ok');
     expect(store.freshness).toBe('current');
@@ -65,7 +100,7 @@ describe('createLumaStore', () => {
     });
     const store = createLumaStore({ api });
 
-    await store.install('steam:403640', false);
+    await store.install('steam:403640');
 
     expect(store.dgvoodooUpdate).toBe('available');
     expect(store.freshness).toBe('available');
@@ -106,7 +141,7 @@ describe('createLumaStore', () => {
     await store.load('steam:49520');
     expect(store.externalRequirement?.kind).toBe('dgvoodoo2');
 
-    const ok = await store.install('steam:49520', false);
+    const ok = await store.install('steam:49520');
 
     expect(ok).toBe('ok');
     expect(api.checkUpdate).toHaveBeenCalled();
@@ -138,7 +173,7 @@ describe('createLumaStore', () => {
     await store.load('steam:49520');
     expect(store.features).toEqual({ dlss_fsr: 'unknown', hdr: 'unknown' });
 
-    await store.install('steam:49520', false);
+    await store.install('steam:49520');
 
     expect(store.isInstalled).toBe(true);
     expect(store.features).toEqual({ dlss_fsr: 'supported', hdr: 'supported' });
@@ -150,7 +185,7 @@ describe('createLumaStore', () => {
     const api = fakeApi({ install: vi.fn(() => Promise.reject(new Error('boom'))) });
     const store = createLumaStore({ api });
 
-    const ok = await store.install('steam:403640', false);
+    const ok = await store.install('steam:403640');
 
     expect(ok).toBe('failed');
     expect(store.busy).toBe(false);
@@ -310,7 +345,7 @@ describe('createLumaStore', () => {
     const onGameDetailsInvalidate = vi.fn(() => Promise.resolve());
     const store = createLumaStore({ api: fakeApi(), onGameDetailsInvalidate });
 
-    expect(await store.install('steam:403640', false)).toBe('ok');
+    expect(await store.install('steam:403640')).toBe('ok');
     expect(await store.repair('steam:403640')).toBe('ok');
     expect(await store.uninstall('steam:403640')).toBe('ok');
 

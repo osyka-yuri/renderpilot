@@ -28,7 +28,7 @@ pub async fn luma_availability(
 pub async fn luma_install(
     app: tauri::AppHandle,
     game_id: String,
-    confirm_anticheat: bool,
+    game_context_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::LumaInstall);
@@ -40,7 +40,7 @@ pub async fn luma_install(
             desktop::luma_install(
                 &context,
                 game_id,
-                confirm_anticheat,
+                game_context_token,
                 Some(&emit as &desktop::ProgressObserver<'_>),
             )
             .await
@@ -81,6 +81,7 @@ pub async fn luma_update(
     app: tauri::AppHandle,
     game_id: String,
     force_full: Option<bool>,
+    game_context_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::LumaUpdate);
@@ -94,6 +95,7 @@ pub async fn luma_update(
                 &context,
                 game_id,
                 force_full,
+                game_context_token,
                 Some(&emit as &desktop::ProgressObserver<'_>),
             )
             .await

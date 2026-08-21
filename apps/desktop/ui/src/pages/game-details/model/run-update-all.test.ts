@@ -114,6 +114,51 @@ describe('runUpdateAll', () => {
     expect(later.update).toHaveBeenCalledWith('game:1');
   });
 
+  it('stops remaining add-ons after a stale safety context', async () => {
+    const later = { update: vi.fn(() => Promise.resolve('ok' as const)) };
+    const stale = { code: 'safety_context_stale' };
+
+    const result = runUpdateAll({
+      items: [],
+      gameId: 'game:1',
+      addonUpdates: [
+        {
+          step: 'renodx',
+          store: {
+            update: vi.fn(() => Promise.resolve('skipped' as const)),
+            safetyContextError: stale,
+          },
+        },
+        { step: 'luma', store: later },
+      ],
+      onBulkSwap: vi.fn(),
+    });
+
+    const error = await result.catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(UpdateAllError);
+    expect((error as UpdateAllError).failures).toEqual([{ step: 'renodx', error: stale }]);
+    expect(later.update).not.toHaveBeenCalled();
+  });
+
+  it('aborts add-on updates when the library batch reports a stale context', async () => {
+    const later = { update: vi.fn(() => Promise.resolve('ok' as const)) };
+    const stale = Object.assign(new Error('stale safety context'), {
+      code: 'safety_context_scope_mismatch',
+    });
+
+    const result = runUpdateAll({
+      items: [ITEM],
+      gameId: 'game:1',
+      addonUpdates: [{ step: 'renodx', store: later }],
+      onBulkSwap: () => Promise.reject(stale),
+    });
+
+    const error = await result.catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(UpdateAllError);
+    expect((error as UpdateAllError).failures).toEqual([{ step: 'libraries', error: stale }]);
+    expect(later.update).not.toHaveBeenCalled();
+  });
+
   it('attributes isolated failures to their workflow step', async () => {
     const result = runUpdateAll({
       items: [ITEM],

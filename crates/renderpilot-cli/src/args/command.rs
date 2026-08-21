@@ -39,6 +39,7 @@ pub(crate) enum Command {
         component_id: ComponentId,
         artifact_id: ArtifactId,
         confirmation_token: Option<String>,
+        safety_context_token: Option<String>,
     },
     PlanRollback {
         game_id: GameId,

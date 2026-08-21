@@ -739,6 +739,12 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'user_message.access_denied': 'Доступ запрещён. Проверьте разрешения и повторите попытку.',
   'user_message.nvapi_catalog_not_ready':
     'Пересканируйте игру, прежде чем менять настройки NVIDIA, зависящие от DLL.',
+  'user_message.safety_context_missing':
+    'Проверка безопасности файлов ещё не готова. Обновите оценку и повторите попытку.',
+  'user_message.safety_context_stale':
+    'Оценка безопасности файлов устарела. Обновите её и повторите попытку.',
+  'user_message.safety_context_scope_mismatch':
+    'Оценка безопасности относится к другому ресурсу. Обновите её и повторите попытку.',
 
   // ── Backend suggested actions ──
   'suggested_action.refresh_games': 'Обновите список игр и попробуйте снова.',
@@ -752,6 +758,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Если проблема сохраняется, попробуйте перезапустить приложение.',
   'suggested_action.rebuild_operation_plan': 'Пожалуйста, начните действие заново.',
   'suggested_action.refresh_or_scan_game_folder': 'Обновите список или отсканируйте папку заново.',
+  'suggested_action.reload_file_safety': 'Обновите оценку безопасности файлов и повторите попытку.',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description': 'Добавьте HDR и тон-маппинг в игру через ReShade-аддон RenoDX.',
@@ -775,7 +782,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Будет удалён аддон RenoDX и восстановлены только файлы ReShade, изменённые во время настройки RenoDX.',
   'gameDetails.renodx.uninstallConfirmAction': 'Удалить',
   'gameDetails.renodx.installing': 'Установка…',
-  'gameDetails.renodx.confirmTitle': 'Установить RenoDX несмотря на риск из-за античита?',
   'gameDetails.renodx.cancel': 'Отмена',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError': 'Не удалось удалить общий Vulkan-слой ReShade.',
@@ -915,21 +921,17 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.renodx.attribution': 'RenoDX от clshortfuse.',
   'gameDetails.renodx.attributionLink': 'Открыть проект',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
-  'gameDetails.addon.riskSafe': 'Античит не обнаружен — установка безопасна.',
-  'gameDetails.addon.riskWarn': 'Обнаружен античит — установка может привести к бану.',
-  'addon.risk.sp_safe':
-    'Известные сигнатуры античита не обнаружены — установка {addonName}, скорее всего, безопасна.',
-  'addon.risk.anticheat_detected':
-    'Обнаружены сигнатуры античита — установка {addonName} может привести к бану.',
-  'gameDetails.addon.confirmAccept': 'Всё равно установить',
-  'gameDetails.addon.confirmBody':
-    'В игре используется античит. ReShade-аддон может его активировать и привести к бану. Продолжайте на свой риск.',
-  'gameDetails.addon.fullAddonWarning':
-    'Полная поддержка аддонов ReShade может быть небезопасна для мультиплеера или игр с античитом.',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     'Для этой игры установлен {installedAddon} — удалите его перед установкой {blockedAddon}.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
     'На диске найдены файлы {installedAddon} для этой игры — удалите их перед установкой {blockedAddon}.',
+  'gameDetails.fileSafety.generic':
+    'Изменение файлов многопользовательских игр может привести к ограничениям или блокировке аккаунта.',
+  'gameDetails.fileSafety.detectedOne':
+    'Обнаружен {engine}. Изменение файлов игры может привести к ограничениям или блокировке аккаунта.',
+  'gameDetails.fileSafety.detectedMany':
+    'Обнаружены античиты: {engines}. Изменение файлов игры может привести к ограничениям или блокировке аккаунта.',
+  'gameDetails.fileSafety.loadError': 'Не удалось проверить риски изменения файлов',
   'addon.availability.loadFailed': 'Не удалось проверить',
   'addon.availability.retry': 'Повторить',
   'addon.availability.checking': 'Проверка…',
@@ -964,7 +966,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.luma.uninstallConfirmBody':
     'Luma будет удалена. Если DLSS DLL принадлежит Luma, её Library Swap будет отменён с восстановлением точного состояния до Luma. Переиспользованные DLL и независимые swap-операции останутся без изменений.',
   'gameDetails.luma.uninstallConfirmAction': 'Удалить',
-  'gameDetails.luma.confirmTitle': 'Установить Luma несмотря на риск из-за античита?',
   'gameDetails.luma.vcredistWarning':
     'На системе может отсутствовать актуальный Visual C++ Redistributable. Если Luma не загружается, установите redistributable.',
   'gameDetails.luma.vcredistLink': 'Скачать redistributable',

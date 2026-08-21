@@ -42,10 +42,6 @@ export function availability(
 export const INSTALLABLE_OUTCOME: Extract<AvailabilityOutcome, { kind: 'installable' }> = {
   kind: 'installable',
   confidence: 'verified',
-  risk: {
-    severity: 'info',
-    message_key: 'addon.risk.sp_safe',
-  },
   launch_args: [],
   profile: { scope: 'game' },
   features: { dlss_fsr: 'unknown', hdr: 'unknown' },

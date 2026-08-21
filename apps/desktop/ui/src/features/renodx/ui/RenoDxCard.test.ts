@@ -190,7 +190,6 @@ function vulkanInstalledStore(): RenoDxStore {
     addonDated: null,
     installedAt: null,
     lastCheckedAt: null,
-    requiresConfirmation: false,
     hostDetection: 'absent',
     hostFacts: defaultHostFacts('stable'),
     hostActions: {},

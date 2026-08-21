@@ -9,8 +9,7 @@ use crate::{
     luma,
     output::{
         render_candidates_output, render_help, render_list_artifacts_output,
-        render_list_operations_output, render_plan_rollback_output, render_plan_swap_output,
-        render_summary, render_version,
+        render_list_operations_output, render_plan_rollback_output, render_summary, render_version,
     },
     renodx,
 };
@@ -79,12 +78,14 @@ fn render_stateful_command(command: Command, context: &Context) -> CliOutput {
             component_id,
             artifact_id,
             confirmation_token,
+            safety_context_token,
         } => apply_swap(
             context,
             &game_id,
             &component_id,
             &artifact_id,
             confirmation_token.as_deref(),
+            safety_context_token.as_deref(),
         ),
         Command::PlanRollback {
             game_id,
@@ -151,8 +152,16 @@ fn plan_swap(
     artifact_id: &ArtifactId,
 ) -> CliOutput {
     let plan = catalog::build_swap_plan(context, game_id, component_id, artifact_id)?;
-
-    render_output(render_plan_swap_output(&plan.plan))
+    let assessment = renderpilot_orchestration::FileSafetyAuthority::new()
+        .issue_game_assessment(context, game_id)?;
+    let mut output = serde_json::to_value(
+        renderpilot_orchestration::catalog::output::SwapPlanOutput::from(&plan.plan),
+    )
+    .map_err(CliError::from)?;
+    output["safety_context_token"] = serde_json::Value::String(assessment.context_token);
+    output["safety_scan_completeness"] =
+        serde_json::to_value(assessment.scan_completeness).map_err(CliError::from)?;
+    render_json(&output)
 }
 
 fn apply_swap(
@@ -161,14 +170,18 @@ fn apply_swap(
     component_id: &ComponentId,
     artifact_id: &ArtifactId,
     confirmation_token: Option<&str>,
+    safety_context_token: Option<&str>,
 ) -> CliOutput {
-    let result = catalog::apply_swap_confirmed(
+    let safety = renderpilot_orchestration::FileSafetyAuthority::new()
+        .game_permit(game_id.clone(), safety_context_token)?;
+    let result = catalog::apply_swap(catalog::ApplySwapRequest {
         context,
         game_id,
         component_id,
         artifact_id,
-        confirmation_token,
-    )?;
+        executable_confirmation: confirmation_token,
+        safety: &safety,
+    })?;
 
     render_json(&result)
 }

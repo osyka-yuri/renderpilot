@@ -1,11 +1,12 @@
 import { isMutationFailure, type AddonMutationResult } from '@entities/addon';
-import { ClientError } from '@shared/errors';
+import { ClientError, isFileSafetyContextError } from '@shared/errors';
 
 import type { BulkSwapHandler } from './create-game-details-page-model';
 import type { SwapRequest } from './swap-request';
 
 type UpdateStore = {
   update(gameId: string): Promise<AddonMutationResult>;
+  safetyContextError?: unknown;
 };
 export type UpdateAllStep = 'libraries' | 'renodx' | 'luma';
 
@@ -48,6 +49,9 @@ export async function runUpdateAll({
       await onBulkSwap(items);
     } catch (error) {
       failures.push({ step: 'libraries', error });
+      if (isFileSafetyContextError(error)) {
+        throw new UpdateAllError(failures);
+      }
     }
   }
 
@@ -57,11 +61,19 @@ export async function runUpdateAll({
         // `update` returns a tri-state; only hard failures are aggregated.
         // Errors are usually notified inside the store and not rethrown.
         const result = await store.update(gameId);
+        if (store.safetyContextError) {
+          failures.push({ step, error: store.safetyContextError });
+          break;
+        }
         if (isMutationFailure(result)) {
-          failures.push({ step, error: new ClientError('update_all_step_failed', { step }) });
+          const error = new ClientError('update_all_step_failed', { step });
+          failures.push({ step, error });
         }
       } catch (error) {
         failures.push({ step, error });
+        if (isFileSafetyContextError(error)) {
+          break;
+        }
       }
     }
   }

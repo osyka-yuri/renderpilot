@@ -7,7 +7,8 @@ This directory is the documentation hub for RenderPilot. Start with the user gui
 - [Installation and updates](user/installation.md) covers the installer, portable build, WebView2, Windows launch authorization, the updater, and data removal.
 - [Finding and adding games](user/game-discovery.md) explains launcher scans, manual folders, game roots, and executable selection.
 - [Managing libraries](user/library-management.md) covers versions, compatibility, planned operations, D3D12, Developer Mode, and rollback.
-- [RenoDX and Luma](user/addons.md) covers third-party add-ons, dependencies, updates, removal, and anti-cheat precautions.
+- [Game-file safety](user/game-file-safety.md) explains the Game Details notice, anti-cheat detection limits, and fresh mutation contexts.
+- [RenoDX and Luma](user/addons.md) covers third-party add-ons, dependencies, updates, and removal.
 - [NVIDIA settings and artwork](user/nvidia-and-covers.md) covers per-game DLSS controls, cover sources, SteamGridDB, and custom artwork.
 - [Data and troubleshooting](user/data-and-troubleshooting.md) explains local data, network access, offline behavior, recovery, and common problems.
 

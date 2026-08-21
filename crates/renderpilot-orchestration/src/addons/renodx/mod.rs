@@ -7,10 +7,11 @@
 //!
 //! The end-to-end flows live in [`use_cases`], built on the [`types`] model, its
 //! [`parse_manifest`] validation, the `game_analysis` gatherer, the deterministic
-//! `matcher`, the shared `anticheat` risk gate, `reshade` host orchestration, the
-//! `source` URL/host resolver, the `fetch` downloader, and
-//! the `install` filesystem engine. RenoDX-specific policy (which API to target,
-//! installability) lives in `policy`, separate from the generic detection facts.
+//! `matcher`, `reshade` host orchestration, the `source` URL/host resolver, the
+//! `fetch` downloader, and the `install` filesystem engine. The cross-cutting
+//! file-safety authority lives in [`crate::file_safety`]. RenoDX-specific policy
+//! (which API to target, installability) lives in `policy`, separate from the
+//! generic detection facts.
 
 pub(crate) mod dlss_fix;
 pub(crate) mod dlss_fix_binding;

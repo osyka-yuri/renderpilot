@@ -14,13 +14,14 @@
 //!
 //! The end-to-end flows live in [`use_cases`], built on the [`types`] model and
 //! [`parse_manifest`] validation, plus private matching, host, source, fetch,
-//! and install helpers under this module. Shared risk/anti-cheat and ReShade
-//! host orchestration live in sibling `addons::*` modules.
+//! and install helpers under this module. ReShade host orchestration shared by
+//! add-ons lives in sibling `addons::*` modules; the cross-cutting file-safety
+//! authority lives in [`crate::file_safety`].
 //!
 //! This module (and everything under it) never imports from the RenoDX tool
-//! module — every genuinely shared concept (matching, risk, anti-cheat, the
-//! ReShade host subsystem, the install engine) already lives in a common
-//! `addons::*` module both tools depend on instead.
+//! module. Shared add-on concepts such as matching, the ReShade host subsystem,
+//! and the install engine live in common `addons::*` modules both tools depend
+//! on instead; cross-cutting mutation policy remains outside either add-on.
 
 mod dgvoodoo;
 mod dlss;

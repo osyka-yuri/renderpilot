@@ -16,7 +16,6 @@ use serde::Serialize;
 pub use renderpilot_domain::LumaInstallState;
 
 use crate::addons::CatalogMessage;
-use crate::addons::anticheat::RiskAssessment;
 use crate::addons::luma::types::{
     LumaExternalRequirement, LumaFeatures, LumaGuidance, LumaProfile,
 };
@@ -85,8 +84,6 @@ pub enum AvailabilityOutcome {
     Installable {
         /// Confidence shown to the user (verified / experimental / untested).
         confidence: MatchConfidence,
-        /// Ban/stability risk and whether explicit confirmation is required.
-        risk: RiskAssessment,
         /// Required launch arguments, shown to the user as a copyable callout.
         launch_args: Vec<String>,
         /// Dedicated game profile vs shared engine payload (UI badge source).

@@ -1,7 +1,7 @@
 /**
  * Wire-level DTOs genuinely shared by every add-on tool (RenoDX, Luma, …) —
- * backed by the same Rust types (`addons::matching`, `addons::anticheat`,
- * `addons::reshade::dto`, `addons::update`). Field names match the JSON keys
+ * backed by the same Rust types (`addons::matching`, `addons::reshade::dto`,
+ * `addons::update`). Field names match the JSON keys
  * produced by serde exactly. Tool-specific shapes (actions, install state,
  * update reports, availability outcomes) stay in each feature's own
  * `model/types.ts`, since they genuinely diverge per tool.
@@ -24,6 +24,14 @@ export type MatchConfidence = 'verified' | 'experimental' | 'untested';
 /** ReShade host download/build channel (`ReshadeChannel`). */
 export type ReshadeChannel = 'stable' | 'nightly';
 
+/** Fresh backend-issued context tokens for risk-increasing mutations. */
+export type MutationSafetyScope = 'game' | 'game_and_shared';
+
+export type MutationSafetyTokens = {
+  gameContextToken: string;
+  sharedVulkanContextToken?: string | null;
+};
+
 /** Narrows persisted or otherwise untrusted channel metadata to the public enum. */
 export function isReshadeChannel(value: unknown): value is ReshadeChannel {
   return value === 'stable' || value === 'nightly';
@@ -42,7 +50,7 @@ import type { AddonKind as _AddonKind } from '@shared/model';
 
 export type AddonKind = _AddonKind;
 
-export type ActionConfirmationScope = 'anticheat' | 'all_vulkan_reno_dx_games';
+export type ActionConfirmationScope = 'all_vulkan_reno_dx_games';
 
 export type ActionDisabledReason =
   | 'blocked_by_conflict'
@@ -104,14 +112,6 @@ export type HostActions = {
 };
 
 /** Effective install risk severity. */
-export type RiskSeverity = 'info' | 'warn';
-
-/** Ban/stability risk assessment for installing an add-on. */
-export type RiskAssessment = {
-  severity: RiskSeverity;
-  message_key: string;
-};
-
 /**
  * Why a matched title cannot be installed (`IncompatibilityReason`, tag
  * `reason`). Not every tool's backend emits every variant (RenoDX targets any

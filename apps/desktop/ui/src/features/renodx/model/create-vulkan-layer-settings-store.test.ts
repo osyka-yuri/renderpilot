@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ReshadeChannel } from '@entities/addon';
+import type { SharedVulkanSafetyAssessment } from '@entities/game';
 import { CATALOG_SETTING_KEYS } from '@entities/settings';
 import type * as SharedLib from '@shared/lib';
 
@@ -26,7 +27,9 @@ import { clearDownloadProgress } from '@shared/lib';
 type SettingsApi = Pick<
   RenoDxApi,
   'vulkanLayerManagementStatus' | 'applyVulkanLayer' | 'removeVulkanLayer'
->;
+> & {
+  getSharedVulkanSafetyAssessment: () => Promise<SharedVulkanSafetyAssessment>;
+};
 
 type SettingsPersistence = NonNullable<Parameters<typeof createVulkanLayerSettingsStore>[1]>;
 
@@ -133,6 +136,9 @@ function fakeApi(overrides: Partial<SettingsApi> = {}): SettingsApi {
     removeVulkanLayer: vi.fn<SettingsApi['removeVulkanLayer']>(() =>
       Promise.resolve(notInstalledLayer()),
     ),
+    getSharedVulkanSafetyAssessment: vi.fn<SettingsApi['getSharedVulkanSafetyAssessment']>(() =>
+      Promise.resolve({ context_token: 'shared-safety-token' }),
+    ),
     ...overrides,
   };
 }
@@ -203,8 +209,25 @@ describe('createVulkanLayerSettingsStore', () => {
       'nightly',
     );
     expect(clearDownloadProgress).toHaveBeenCalledWith([VULKAN_LAYER_PROGRESS_ID]);
-    expect(api.applyVulkanLayer).toHaveBeenCalledWith('nightly');
+    expect(api.applyVulkanLayer).toHaveBeenCalledWith('nightly', 'shared-safety-token');
     expect(store.activeChannel).toBe('nightly');
+  });
+
+  it('requests a fresh shared safety context immediately before applying the layer', async () => {
+    const getSharedVulkanSafetyAssessment = vi.fn(() =>
+      Promise.resolve({ context_token: 'shared-safety-token' }),
+    );
+    const api = fakeApi({ getSharedVulkanSafetyAssessment });
+    const store = createVulkanLayerSettingsStore(api, fakeSettings('nightly'));
+
+    await store.load();
+
+    expect(getSharedVulkanSafetyAssessment).not.toHaveBeenCalled();
+
+    await expect(store.apply()).resolves.toBe(true);
+
+    expect(getSharedVulkanSafetyAssessment).toHaveBeenCalledTimes(1);
+    expect(api.applyVulkanLayer).toHaveBeenCalledWith('nightly', 'shared-safety-token');
   });
 
   it('presents a mutable Vulkan layer conflict as a repair action', async () => {
@@ -234,7 +257,7 @@ describe('createVulkanLayerSettingsStore', () => {
     const ok = await store.apply();
 
     expect(ok).toBe(true);
-    expect(api.applyVulkanLayer).toHaveBeenCalledWith('stable');
+    expect(api.applyVulkanLayer).toHaveBeenCalledWith('stable', 'shared-safety-token');
     expect(store.layer?.layer_detection).toBe('installed');
   });
 

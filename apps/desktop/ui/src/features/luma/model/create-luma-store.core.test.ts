@@ -29,8 +29,6 @@ describe('createLumaStore', () => {
 
     expect(store.loaded).toBe(true);
     expect(store.isInstallable).toBe(true);
-    expect(store.requiresConfirmation).toBe(false);
-    expect(store.risk?.severity).toBe('info');
     expect(store.features).toEqual({ dlss_fsr: 'unknown', hdr: 'unknown' });
   });
 
@@ -207,16 +205,12 @@ describe('createLumaStore', () => {
     expect(store.reshadeChannel).toBe('nightly');
   });
 
-  it('flags a warn-risk game as requiring confirmation', async () => {
+  it('loads an installable game without a duplicate risk confirmation flow', async () => {
     const warn: AvailabilityReport = availability({
       state: { status: 'not_installed' },
       outcome: {
         kind: 'installable',
         confidence: 'untested',
-        risk: {
-          severity: 'warn',
-          message_key: 'addon.risk.anticheat_detected',
-        },
         launch_args: [],
         profile: { scope: 'game' },
         features: { dlss_fsr: 'unknown', hdr: 'unknown' },
@@ -230,7 +224,9 @@ describe('createLumaStore', () => {
 
     await store.load('steam:403640');
 
-    expect(store.requiresConfirmation).toBe(true);
+    expect(store.isInstallable).toBe(true);
+    expect(store.confidence).toBe('untested');
+    expect(store.safetyContextError).toBeNull();
   });
 
   it('reports blocked by a tracked other-addon record', async () => {

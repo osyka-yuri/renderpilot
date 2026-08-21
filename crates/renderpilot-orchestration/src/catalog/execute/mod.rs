@@ -31,7 +31,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use apply::{apply_swap, apply_swap_confirmed};
+pub use apply::{ApplySwapRequest, apply_swap};
 pub use rollback::{build_rollback_plan, rollback_component};
 pub use types::{
     D3d12ExecutableActionResult, D3d12ExecutableActionResultKind, OperationMetadata, RollbackPlan,

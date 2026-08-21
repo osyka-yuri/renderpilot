@@ -46,7 +46,7 @@ Rendering-library changes can affect whether a game starts, how it renders, or w
 - Original files are backed up for rollback, and saved backups are verified before they are used.
 - The current game state is checked again before a change is applied, so an older plan cannot silently overwrite newer files.
 - Interrupted supported operations can be detected and recovered when RenderPilot starts again.
-- RenoDX, Luma, ReShade, and similar modifications show anti-cheat warnings where relevant. Avoid them in protected multiplayer games unless the game and service explicitly allow them.
+- Game Details keeps one compact safety notice visible for file-changing features. Anti-cheat detection can add context, but no scan result guarantees that modifying a multiplayer game is permitted; see [Game-file safety](docs/user/game-file-safety.md) before applying changes.
 - Detection, catalog state, operation history, settings, and backups remain on your computer. RenderPilot has no account system or telemetry.
 - A network connection is used only when requesting remote catalogs, libraries or add-ons, artwork, and application updates. Previously cached information remains available when a source cannot be reached.
 

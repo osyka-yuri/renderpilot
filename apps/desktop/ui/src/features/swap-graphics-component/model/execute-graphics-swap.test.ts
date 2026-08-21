@@ -132,6 +132,38 @@ describe('executeGraphicsSwap', () => {
     expect(applySwap).toHaveBeenCalledWith('game-1', 'd3d12', 'artifact:619', 'fresh-fingerprint');
   });
 
+  it('forwards the fresh game safety context to a file mutation', async () => {
+    const applySwap = vi.fn(() =>
+      Promise.resolve({
+        game_id: 'game-1',
+        component_id: 'component-1',
+        applied_path: 'C:/game/file.dll',
+        replacement_path: 'C:/repo/file.dll',
+        updated_file_count: 1,
+        d3d12_executable_action: null,
+      }),
+    );
+
+    await executeGraphicsSwap(
+      {
+        gameId: 'game-1',
+        componentId: 'component-1',
+        artifactId: 'artifact:ready',
+        isDownloaded: true,
+        gameContextToken: 'game-safety-token',
+      },
+      { applySwap, downloadArtifact: vi.fn() },
+    );
+
+    expect(applySwap).toHaveBeenCalledWith(
+      'game-1',
+      'component-1',
+      'artifact:ready',
+      undefined,
+      'game-safety-token',
+    );
+  });
+
   it('stops before apply when signal is aborted', async () => {
     const applySwap = vi.fn();
     const controller = new AbortController();

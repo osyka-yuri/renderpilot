@@ -36,6 +36,8 @@ closed_codes! {
         QueryGameCards => "query_game_cards",
         BootstrapGamesCatalog => "bootstrap_games_catalog",
         GetGameDetails => "get_game_details",
+        GetGameFileSafetyAssessment => "get_game_file_safety_assessment",
+        GetSharedVulkanSafetyAssessment => "get_shared_vulkan_safety_assessment",
         FetchGameCover => "fetch_game_cover",
         ClearGameCover => "clear_game_cover",
         SetGameCover => "set_game_cover",

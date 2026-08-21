@@ -13,7 +13,6 @@
   import type { LumaStore } from '../model/create-luma-store.svelte';
   import { LUMA_ATTRIBUTION } from '../model/attribution';
   import type { LumaEngine } from '../model/types';
-  import { riskMessage } from '../model/luma-presenters';
   import LumaDgVoodooCallout from './LumaDgVoodooCallout.svelte';
   import LumaFeatures from './LumaFeatures.svelte';
   import LumaGuidanceCallouts from './LumaGuidanceCallouts.svelte';
@@ -37,23 +36,13 @@
     unity: 'gameDetails.luma.generic.engineUnity',
   };
 
-  const riskText = $derived.by((): string => {
-    const risk = store.risk;
-
-    if (!risk) {
-      return '';
-    }
-
-    return riskMessage(risk);
-  });
-
   const genericEngine = $derived(store.profile?.scope === 'engine' ? store.profile.engine : null);
   const genericEngineLabel = $derived(
     genericEngine ? t(GENERIC_ENGINE_LABEL[genericEngine]) : null,
   );
 
-  function onInstall(gid: string, force: boolean): void {
-    void store.install(gid, force);
+  function onInstall(gid: string): void {
+    void store.install(gid);
   }
 </script>
 
@@ -64,7 +53,6 @@
   labels={LUMA_INSTALLABLE_LABELS}
   confidenceLabelKey={CONFIDENCE_LABEL_KEY}
   {onInstall}
-  {riskText}
 >
   {#snippet confidenceTrailing()}
     {#if genericEngineLabel}

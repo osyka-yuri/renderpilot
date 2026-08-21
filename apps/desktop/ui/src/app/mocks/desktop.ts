@@ -199,6 +199,19 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
     case 'delete_library_package':
       return mockDeleteLibraryPackage(readStringField(command, payload, 'packageId'));
 
+    case 'get_game_file_safety_assessment': {
+      const gameId = readStringField(command, payload, 'gameId');
+      return {
+        game_id: gameId,
+        context_token: 'preview-game-safety-token',
+        detected_engines: [],
+        scan_completeness: 'complete',
+      };
+    }
+
+    case 'get_shared_vulkan_safety_assessment':
+      return { context_token: 'preview-shared-vulkan-safety-token' };
+
     case 'luma_availability':
       readStringField(command, payload, 'gameId');
       return mockUnsupportedLumaAvailability();

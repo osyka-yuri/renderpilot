@@ -89,6 +89,17 @@ describe('GameDetailsPage', () => {
       if (command === 'renodx_dlss_fix_availability') {
         return Promise.resolve(unavailableDlssFixAvailability());
       }
+      if (command === 'get_game_file_safety_assessment') {
+        return Promise.resolve({
+          game_id: 'steam:123',
+          context_token: 'game-safety-token',
+          detected_engines: [],
+          scan_completeness: 'complete',
+        });
+      }
+      if (command === 'get_shared_vulkan_safety_assessment') {
+        return Promise.resolve({ context_token: 'shared-vulkan-safety-token' });
+      }
       if (command === 'resolve_game_executable') {
         return Promise.resolve(null);
       }
@@ -139,6 +150,22 @@ describe('GameDetailsPage', () => {
 
     expect(onPreloadOperations).toHaveBeenCalledTimes(2);
     expect(onOpenOperations).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads only the game assessment for the passive safety notice', async () => {
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: createGameDetails() },
+    });
+    flushSync();
+
+    await vi.waitFor(() => {
+      expect(invokedCommands).toContain('get_game_file_safety_assessment');
+    });
+    expect(invokedCommands).not.toContain('get_shared_vulkan_safety_assessment');
+    const safetyRows = target.querySelectorAll('[data-file-safety-row]');
+    expect(safetyRows).toHaveLength(1);
+    expect(safetyRows[0]?.closest('[data-slot="scroll-area-viewport"]')).not.toBeNull();
   });
 
   it.each([
@@ -309,5 +336,78 @@ describe('GameDetailsPage', () => {
 
     expect(target.textContent).toContain('RenoDX HDR');
     expect(target.textContent).toContain('Other');
+  });
+
+  it('starts a fresh safety assessment when the selected game changes mid-request', async () => {
+    disposeInvoker?.();
+    let resolveFirstAssessment!: (assessment: unknown) => void;
+    const firstAssessment = new Promise<unknown>((resolve) => {
+      resolveFirstAssessment = resolve;
+    });
+    const safetyGameIds: string[] = [];
+    const invoker = ((command: string, payload?: Record<string, unknown>) => {
+      invokedCommands.push(command);
+      if (command === 'get_game_file_safety_assessment') {
+        const requestedGameId = typeof payload?.gameId === 'string' ? payload.gameId : '';
+        safetyGameIds.push(requestedGameId);
+        if (requestedGameId === 'game-1') {
+          return firstAssessment;
+        }
+        return Promise.resolve({
+          game_id: requestedGameId,
+          context_token: `${requestedGameId}-safety-token`,
+          detected_engines: ['easy_anti_cheat'],
+          scan_completeness: 'complete',
+        });
+      }
+      if (command === 'get_shared_vulkan_safety_assessment') {
+        return Promise.resolve({ context_token: 'shared-vulkan-safety-token' });
+      }
+      if (command === 'resolve_game_executable') {
+        return Promise.resolve(null);
+      }
+      if (command === 'list_game_executable_candidates') {
+        return Promise.resolve([]);
+      }
+      unexpectedCommands.push(command);
+      return Promise.reject(new Error(`Unexpected command in game-switch test: ${command}`));
+    }) as DesktopInvoker;
+    disposeInvoker = registerPreviewInvoker(invoker);
+
+    const detailsFor = (gameId: string) =>
+      createGameDetails({
+        game: {
+          identity: { id: gameId, title: gameId, launcher: 'Manual' },
+          platform: 'Windows',
+          runtime: 'NativeWindows',
+          install_path: `/test/${gameId}`,
+          can_remove_from_catalog: true,
+        },
+      });
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: detailsFor('game-1') },
+    });
+    flushSync();
+    await vi.waitFor(() => {
+      expect(safetyGameIds).toEqual(['game-1']);
+    });
+
+    const host = component as {
+      replaceDetails: (details: ReturnType<typeof createGameDetails>) => void;
+    };
+    host.replaceDetails(detailsFor('game-2'));
+    flushSync();
+    resolveFirstAssessment({
+      game_id: 'game-1',
+      context_token: 'game-1-safety-token',
+      detected_engines: [],
+      scan_completeness: 'complete',
+    });
+
+    await vi.waitFor(() => {
+      expect(safetyGameIds).toEqual(['game-1', 'game-2']);
+      expect(target.textContent).toContain('Easy Anti-Cheat detected.');
+    });
   });
 });

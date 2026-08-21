@@ -7,7 +7,6 @@ use renderpilot_domain::{
     AddonKind, Architecture, GameId, InstalledAddon, InstalledAddonHostKind, PathRef,
 };
 
-use crate::addons::anticheat::{RiskSeverity, assess_risk};
 use crate::addons::game_analysis::{analyze_game, install_target_dir};
 use crate::addons::install_guard;
 use crate::addons::progress::emit_tool_finalizing;
@@ -44,19 +43,54 @@ pub struct InstallRequest<'a> {
     pub game_id: &'a GameId,
     /// The ReShade host channel to install (stable or nightly).
     pub requested_channel: ReshadeChannel,
-    /// Must be `true` to proceed when the anti-cheat risk assessment requires confirmation.
-    pub confirm_anticheat: bool,
+    /// Typed game authority and optional shared-Vulkan authority.
+    pub safety: crate::GameMutationSafetyPermits,
     /// Whether this caller permits installing the shared Vulkan layer when needed.
     pub allow_shared_vulkan_layer_install: bool,
     /// Optional download progress observer.
     pub progress: Option<&'a ProgressObserver<'a>>,
 }
 
+fn authorize_install_commit<T>(
+    context: &Context,
+    feature: &'static str,
+    guards: crate::game_mutation_lock::GameMutationBoundary,
+    safety: &crate::GameMutationSafetyPermits,
+    shared_change: shared_vulkan_layer::PreparedInstallChange,
+    game_commit: impl FnOnce(&crate::game_mutation_lock::GameMutationGuard) -> Result<T, ServiceError>,
+) -> Result<T, ServiceError> {
+    let authority = crate::FileSafetyAuthority::new();
+    match guards {
+        crate::game_mutation_lock::GameMutationBoundary::Game(guard) => {
+            if shared_change.mutates_shared_resource() {
+                return Err(ServiceError::command_failed(
+                    "a prepared shared Vulkan change requires the combined mutation boundary",
+                ));
+            }
+            authority.authorize_game_commit(context, feature, &guard, safety.game(), || {
+                game_commit(&guard)
+            })
+        }
+        crate::game_mutation_lock::GameMutationBoundary::GameShared(guards) => {
+            if !shared_change.mutates_shared_resource() {
+                return Err(ServiceError::command_failed(
+                    "the combined mutation boundary has no prepared shared Vulkan change",
+                ));
+            }
+            authority.authorize_game_shared_commit(context, feature, &guards, safety, || {
+                shared_change.commit(context)?;
+                game_commit(guards.game())
+            })
+        }
+    }
+}
+
 /// Installs RenoDX into `game`, fetching the add-on + ReShade from upstream and
 /// persisting the record needed to reverse it.
 ///
-/// `confirm_anticheat` must be `true` to proceed when the risk assessment requires
-/// it. `allow_shared_vulkan_layer_install` must be `true` for a Vulkan game when
+/// The game permit must be fresh for the target game. A shared-Vulkan permit is
+/// required when a Vulkan install will mutate
+/// the shared layer. `allow_shared_vulkan_layer_install` must be `true` for a Vulkan game when
 /// no ReShade Vulkan layer is present yet. The ReShade host (when one must be
 /// installed) uses the requested channel. An unavailable explicit channel is
 /// rejected rather than silently remapped.
@@ -72,7 +106,7 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
         reshade_sources,
         game_id,
         requested_channel,
-        confirm_anticheat,
+        safety,
         allow_shared_vulkan_layer_install,
         progress,
     } = request;
@@ -82,13 +116,7 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
     let snapshot = {
         let _guard =
             game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
-        resolve_catalog_install_snapshot(
-            context,
-            manifest,
-            game_id,
-            requested_channel,
-            confirm_anticheat,
-        )?
+        resolve_catalog_install_snapshot(context, manifest, game_id, requested_channel)?
     };
 
     // Phase 2: downloads only — no game-folder mutation.
@@ -102,27 +130,28 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
     )
     .await?;
 
-    // Phase 3: re-lock, revalidate, shared Vulkan host (system mutation), apply.
-    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
-    let revalidated = resolve_catalog_install_snapshot(
-        context,
-        manifest,
-        game_id,
-        requested_channel,
-        confirm_anticheat,
-    )?;
-    ensure_catalog_install_snapshot_matches(&snapshot, &revalidated)?;
+    let shared_change =
+        shared_vulkan_layer::prepare_for_install(shared_vulkan_layer::PrepareInstallRequest {
+            plan: &snapshot.plan,
+            reshade_config: reshade_sources,
+            channel: snapshot.channel,
+            allow_shared_vulkan_layer_install,
+            exe_path: snapshot.registered_exe_path.as_deref(),
+            progress,
+        })
+        .await?;
 
-    shared_vulkan_layer::ensure_for_install(
+    // Phase 3: acquire the final boundary, revalidate, then begin one
+    // synchronous shared+game commit with no safety checks after first write.
+    let guards = game_mutation_lock::enter_mutation_boundary_async(
         context,
-        &revalidated.plan,
-        reshade_sources,
-        revalidated.channel,
-        allow_shared_vulkan_layer_install,
-        revalidated.registered_exe_path.as_deref(),
-        progress,
+        game_id,
+        shared_change.mutates_shared_resource(),
     )
     .await?;
+    let revalidated =
+        resolve_catalog_install_snapshot(context, manifest, game_id, requested_channel)?;
+    ensure_catalog_install_snapshot_matches(&snapshot, &revalidated)?;
 
     emit_tool_finalizing(progress, AddonKind::RenoDx);
     let targets = crate::addons::renodx::mutation_targets::install_targets(
@@ -130,26 +159,35 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
         &prepared,
     )?;
     let source_last_modified = prepared.source_last_modified.as_deref();
-    crate::addons::durable::run_install_mutation(
+    authorize_install_commit(
         context,
-        &guard,
-        targets,
         crate::addons::mutation_features::RENODX_INSTALL,
-        game_id,
-        || {
-            let (record, commit) = install_files(&revalidated.target_dir, &prepared)?;
-            let record = annotate_install_record(
-                record,
-                revalidated.plan.host_kind,
-                revalidated.channel,
-                revalidated.registered_exe_path.as_deref(),
-            )?;
-            crate::fs::stamp_mtime_best_effort(
-                Path::new(record.addon_file().as_str()),
-                source_last_modified,
-                None,
-            );
-            Ok((record, commit))
+        guards,
+        &safety,
+        shared_change,
+        |guard| {
+            crate::addons::durable::run_install_mutation(
+                context,
+                guard,
+                targets,
+                crate::addons::mutation_features::RENODX_INSTALL,
+                game_id,
+                || {
+                    let (record, commit) = install_files(&revalidated.target_dir, &prepared)?;
+                    let record = annotate_install_record(
+                        record,
+                        revalidated.plan.host_kind,
+                        revalidated.channel,
+                        revalidated.registered_exe_path.as_deref(),
+                    )?;
+                    crate::fs::stamp_mtime_best_effort(
+                        Path::new(record.addon_file().as_str()),
+                        source_last_modified,
+                        None,
+                    );
+                    Ok((record, commit))
+                },
+            )
         },
     )
 }
@@ -174,7 +212,7 @@ pub async fn install_from_file(
         reshade_sources,
         game_id,
         requested_channel,
-        confirm_anticheat,
+        safety,
         allow_shared_vulkan_layer_install,
         progress,
     } = request;
@@ -190,14 +228,7 @@ pub async fn install_from_file(
     let snapshot = {
         let _guard =
             game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
-        resolve_file_install_snapshot(
-            context,
-            manifest,
-            game_id,
-            requested_channel,
-            confirm_anticheat,
-            file_arch,
-        )?
+        resolve_file_install_snapshot(context, manifest, game_id, requested_channel, file_arch)?
     };
 
     // Phase 2: host download (when needed) — no game-folder mutation.
@@ -215,54 +246,62 @@ pub async fn install_from_file(
     )
     .await?;
 
-    // Phase 3: re-lock, revalidate, shared Vulkan host, apply.
-    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
-    let revalidated = resolve_file_install_snapshot(
-        context,
-        manifest,
-        game_id,
-        requested_channel,
-        confirm_anticheat,
-        file_arch,
-    )?;
-    ensure_catalog_install_snapshot_matches(&snapshot, &revalidated)?;
+    let shared_change =
+        shared_vulkan_layer::prepare_for_install(shared_vulkan_layer::PrepareInstallRequest {
+            plan: &snapshot.plan,
+            reshade_config: reshade_sources,
+            channel: snapshot.channel,
+            allow_shared_vulkan_layer_install,
+            exe_path: snapshot.registered_exe_path.as_deref(),
+            progress,
+        })
+        .await?;
 
-    shared_vulkan_layer::ensure_for_install(
+    // Phase 3: final combined boundary and one synchronous commit.
+    let guards = game_mutation_lock::enter_mutation_boundary_async(
         context,
-        &revalidated.plan,
-        reshade_sources,
-        revalidated.channel,
-        allow_shared_vulkan_layer_install,
-        revalidated.registered_exe_path.as_deref(),
-        progress,
+        game_id,
+        shared_change.mutates_shared_resource(),
     )
     .await?;
+    let revalidated =
+        resolve_file_install_snapshot(context, manifest, game_id, requested_channel, file_arch)?;
+    ensure_catalog_install_snapshot_matches(&snapshot, &revalidated)?;
 
     emit_tool_finalizing(progress, AddonKind::RenoDx);
     let targets = crate::addons::renodx::mutation_targets::install_targets(
         &revalidated.target_dir,
         &prepared,
     )?;
-    crate::addons::durable::run_install_mutation(
+    authorize_install_commit(
         context,
-        &guard,
-        targets,
         crate::addons::mutation_features::RENODX_INSTALL_FROM_FILE,
-        game_id,
-        || {
-            let (record, commit) = install_files(&revalidated.target_dir, &prepared)?;
-            let record = annotate_install_record(
-                record,
-                revalidated.plan.host_kind,
-                revalidated.channel,
-                revalidated.registered_exe_path.as_deref(),
-            )?;
-            crate::fs::stamp_mtime_best_effort(
-                Path::new(record.addon_file().as_str()),
-                None,
-                source_mtime,
-            );
-            Ok((record, commit))
+        guards,
+        &safety,
+        shared_change,
+        |guard| {
+            crate::addons::durable::run_install_mutation(
+                context,
+                guard,
+                targets,
+                crate::addons::mutation_features::RENODX_INSTALL_FROM_FILE,
+                game_id,
+                || {
+                    let (record, commit) = install_files(&revalidated.target_dir, &prepared)?;
+                    let record = annotate_install_record(
+                        record,
+                        revalidated.plan.host_kind,
+                        revalidated.channel,
+                        revalidated.registered_exe_path.as_deref(),
+                    )?;
+                    crate::fs::stamp_mtime_best_effort(
+                        Path::new(record.addon_file().as_str()),
+                        None,
+                        source_mtime,
+                    );
+                    Ok((record, commit))
+                },
+            )
         },
     )
 }
@@ -281,10 +320,8 @@ fn resolve_catalog_install_snapshot(
     manifest: &RenoDxManifest,
     game_id: &GameId,
     requested_channel: ReshadeChannel,
-    confirm_anticheat: bool,
 ) -> Result<CatalogInstallSnapshot, ServiceError> {
     let game = require_game(context, game_id)?;
-    let scan_dir = Path::new(game.install_path().as_str());
     let override_path = executable_override(context, game_id);
     let (analysis, resolution) = analyze_and_resolve(&game, manifest, override_path.as_deref());
     let target_dir = install_target_dir(&analysis)?;
@@ -321,8 +358,6 @@ fn resolve_catalog_install_snapshot(
         }
     };
 
-    let risk = assess_risk(scan_dir, RiskSeverity::Info);
-    crate::addons::anticheat::enforce_gate(&risk, confirm_anticheat)?;
     let writes_host = resolve_writes_host(&plan, &target_dir)?;
     let registered_exe_path = analysis
         .primary_executable
@@ -342,11 +377,9 @@ fn resolve_file_install_snapshot(
     manifest: &RenoDxManifest,
     game_id: &GameId,
     requested_channel: ReshadeChannel,
-    confirm_anticheat: bool,
     file_arch: Architecture,
 ) -> Result<CatalogInstallSnapshot, ServiceError> {
     let game = require_game(context, game_id)?;
-    let scan_dir = Path::new(game.install_path().as_str());
     let analysis = analyze_game(&game, executable_override(context, game_id).as_deref());
     let target_dir = install_target_dir(&analysis)?;
     let roots = install_guard::resolve_install_scan_roots(&analysis)?;
@@ -371,8 +404,6 @@ fn resolve_file_install_snapshot(
         })?;
     ensure_addon_arch(file_arch, plan.arch)?;
 
-    let risk = assess_risk(scan_dir, RiskSeverity::Info);
-    crate::addons::anticheat::enforce_gate(&risk, confirm_anticheat)?;
     let writes_host = resolve_writes_host(&plan, &target_dir)?;
     let registered_exe_path = analysis
         .primary_executable
@@ -514,36 +545,15 @@ fn ensure_requested_channel(
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    use std::fs;
+
+    use renderpilot_application::GameRepository;
+    use renderpilot_domain::{
+        GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+    };
+    use tempfile::{TempDir, tempdir};
 
     use super::*;
-    use crate::addons::anticheat::{InstallGate, RiskAssessment, RiskSeverity, decide_gate};
-
-    fn risk(severity: RiskSeverity) -> RiskAssessment {
-        RiskAssessment {
-            severity,
-            message_key: "k".to_owned(),
-        }
-    }
-
-    #[test]
-    fn safe_risk_proceeds_without_confirmation() {
-        assert_eq!(
-            decide_gate(&risk(RiskSeverity::Info), false),
-            InstallGate::Proceed
-        );
-    }
-
-    #[test]
-    fn warn_risk_needs_confirmation_then_proceeds() {
-        assert_eq!(
-            decide_gate(&risk(RiskSeverity::Warn), false),
-            InstallGate::NeedsConfirmation
-        );
-        assert_eq!(
-            decide_gate(&risk(RiskSeverity::Warn), true),
-            InstallGate::Proceed
-        );
-    }
 
     #[test]
     fn addon_arch_invariant_rejects_a_bitness_mismatch() {
@@ -562,5 +572,127 @@ mod tests {
             .expect_err("Stable must not silently remap to Nightly");
 
         assert_matches!(error, ServiceError::InvalidInput(_));
+    }
+
+    struct SafetyFixture {
+        _db_dir: TempDir,
+        game_dir: TempDir,
+        context: Context,
+        game_id: GameId,
+    }
+
+    fn safety_fixture(suffix: &str) -> SafetyFixture {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new(format!("manual:install-safety-{suffix}")).expect("game id");
+        let game = GameInstallation::new(
+            GameIdentity::new(game_id.clone(), "Safety Test Game", Launcher::Manual)
+                .expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(game_dir.path().to_string_lossy()).expect("game path"),
+        );
+        context.storage().upsert_game(&game).expect("game");
+
+        SafetyFixture {
+            _db_dir: db_dir,
+            game_dir,
+            context,
+            game_id,
+        }
+    }
+
+    async fn assert_install_barrier_rejects(
+        fixture: &SafetyFixture,
+        safety: crate::GameMutationSafetyPermits,
+        expected: fn(&ServiceError) -> bool,
+    ) {
+        let guards = game_mutation_lock::enter_mutation_boundary_async(
+            &fixture.context,
+            &fixture.game_id,
+            false,
+        )
+        .await
+        .expect("game boundary");
+        let mut commit_called = false;
+        let error = authorize_install_commit(
+            &fixture.context,
+            crate::addons::mutation_features::RENODX_INSTALL,
+            guards,
+            &safety,
+            shared_vulkan_layer::PreparedInstallChange::NotNeeded,
+            |_| {
+                commit_called = true;
+                Ok(())
+            },
+        )
+        .expect_err("invalid safety must reject the install commit");
+
+        assert!(expected(&error), "unexpected error: {error:?}");
+        assert!(!commit_called, "safety rejection must precede first write");
+        assert!(
+            fixture
+                .context
+                .storage()
+                .pending_file_mutations_for_game(&fixture.game_id)
+                .expect("pending mutations")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn install_commit_barrier_rejects_stale_game_context_before_first_write() {
+        let fixture = safety_fixture("stale");
+        let authority = crate::FileSafetyAuthority::new();
+        let assessment = authority
+            .issue_game_assessment(&fixture.context, &fixture.game_id)
+            .expect("assessment");
+        let safety = authority
+            .game_mutation_permits(
+                fixture.game_id.clone(),
+                Some(&assessment.context_token),
+                None,
+            )
+            .expect("permits");
+        fs::create_dir(fixture.game_dir.path().join("EasyAntiCheat")).expect("anti-cheat marker");
+
+        assert_install_barrier_rejects(&fixture, safety, |error| {
+            matches!(error, ServiceError::SafetyContextStale { .. })
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn install_commit_barrier_rejects_another_game_scope_before_first_write() {
+        let fixture = safety_fixture("scope");
+        let other = safety_fixture("other");
+        fixture
+            .context
+            .storage()
+            .upsert_game(
+                &other
+                    .context
+                    .storage()
+                    .require_game(&other.game_id)
+                    .expect("other game"),
+            )
+            .expect("copy other game");
+        let authority = crate::FileSafetyAuthority::new();
+        let assessment = authority
+            .issue_game_assessment(&fixture.context, &other.game_id)
+            .expect("assessment");
+        let safety = authority
+            .game_mutation_permits(
+                fixture.game_id.clone(),
+                Some(&assessment.context_token),
+                None,
+            )
+            .expect("well-formed permits");
+
+        assert_install_barrier_rejects(&fixture, safety, |error| {
+            matches!(error, ServiceError::SafetyContextScopeMismatch { .. })
+        })
+        .await;
     }
 }

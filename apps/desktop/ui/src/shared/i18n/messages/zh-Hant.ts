@@ -558,6 +558,9 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
     '操作失敗，且 RenderPilot 無法完整還原先前的檔案狀態。重試前請檢查遊戲檔案。',
   'user_message.access_denied': '存取遭拒。請檢查權限後再試。',
   'user_message.nvapi_catalog_not_ready': '變更依賴 DLL 的 NVIDIA 設定前，請重新掃描遊戲。',
+  'user_message.safety_context_missing': '檔案安全性檢查尚未準備好。請重新整理評估後再試。',
+  'user_message.safety_context_stale': '檔案安全性評估已過期。請重新整理後再試。',
+  'user_message.safety_context_scope_mismatch': '檔案安全性評估屬於其他資源。請重新整理後再試。',
 
   'suggested_action.refresh_games': '重新整理遊戲清單並重試。',
   'suggested_action.reload_game_details': '重新整理遊戲詳情並重試。',
@@ -568,6 +571,7 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'suggested_action.retry_or_restart': '如果問題仍然存在，請嘗試重新啟動應用程式。',
   'suggested_action.rebuild_operation_plan': '請重新開始操作。',
   'suggested_action.refresh_or_scan_game_folder': '重新整理清單或再次掃描資料夾。',
+  'suggested_action.reload_file_safety': '重新整理檔案安全性評估後再試。',
 
   'settings.about.title': '更新',
   'settings.about.description': '檢查應用程式更新。',
@@ -635,7 +639,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
     '這會移除 RenoDX 附加元件，並只還原 RenoDX 設定期間變更過的 ReShade 檔案。',
   'gameDetails.renodx.uninstallConfirmAction': '移除',
   'gameDetails.renodx.installing': '正在安裝…',
-  'gameDetails.renodx.confirmTitle': '仍要在反作弊風險下安裝 RenoDX 嗎？',
   'gameDetails.renodx.cancel': '取消',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError': '無法移除共用 ReShade Vulkan 層。',
@@ -760,15 +763,11 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.renodx.attribution': 'RenoDX 由 clshortfuse 開發。',
   'gameDetails.renodx.attributionLink': '檢視專案',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
-  'gameDetails.addon.riskSafe': '未偵測到反作弊 — 安裝是安全的。',
-  'gameDetails.addon.riskWarn': '偵測到反作弊系統 — 安裝可能導致帳號遭停權。',
-  'addon.risk.sp_safe': '未偵測到已知的反作弊特徵 — 安裝 {addonName} 應屬安全，但無法完全保證。',
-  'addon.risk.anticheat_detected': '偵測到反作弊特徵 — 安裝 {addonName} 可能導致帳號遭停權。',
-  'gameDetails.addon.confirmAccept': '仍然安裝',
-  'gameDetails.addon.confirmBody':
-    '此遊戲使用反作弊系統。ReShade 附加元件可能觸發偵測，並導致帳號遭停權。繼續操作的風險須由您自行承擔。',
-  'gameDetails.addon.fullAddonWarning':
-    '對於多人遊戲或受反作弊系統保護的遊戲，啟用完整的 ReShade 附加元件支援可能並不安全。',
+  'gameDetails.fileSafety.generic': '修改多人遊戲檔案可能導致帳號受限或停權。',
+  'gameDetails.fileSafety.detectedOne': '偵測到 {engine}。修改遊戲檔案可能導致帳號受限或停權。',
+  'gameDetails.fileSafety.detectedMany':
+    '偵測到反作弊：{engines}。修改遊戲檔案可能導致帳號受限或停權。',
+  'gameDetails.fileSafety.loadError': '無法檢查檔案修改風險',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     '此遊戲已安裝 {installedAddon} — 請先解除安裝它，再安裝 {blockedAddon}。',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
@@ -806,7 +805,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.luma.uninstallConfirmBody':
     '這會移除 Luma。如果 DLSS DLL 由 Luma 管理，系統會復原其 Library Swap，並精確還原至安裝 Luma 前的基準狀態。重複使用的 DLL 與獨立 Swap 將維持不變。',
   'gameDetails.luma.uninstallConfirmAction': '移除',
-  'gameDetails.luma.confirmTitle': '是否在存在反作弊風險的情況下仍安裝 Luma？',
   'gameDetails.luma.vcredistWarning':
     '系統可能缺少最新的 Microsoft Visual C++ 可轉散發套件。如果 Luma 無法載入，請安裝此套件。',
   'gameDetails.luma.vcredistLink': '下載可轉散發套件',
