@@ -1,38 +1,15 @@
 <script lang="ts">
-  import type { GameCandidateGroup, GameDetails, GameLibraryComponent } from '@entities/game';
+  import type { GameDetails } from '@entities/game';
   import {
-    ADDONS_TAB_VALUE,
     createGameDetailsTabs,
-    reconcileGameDetailsTabValue,
-    NVIDIA_STREAMLINE_TECHNOLOGY,
     DLSS_FAMILY_CARDS,
+    reconcileGameDetailsTabValue,
   } from '../model/game-details-tabs';
-  import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-    Card,
-    CardContent,
-    CardDescription,
-    CardTitle,
-    Progress,
-    ScrollArea,
-    Button,
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-  } from '@shared/ui';
-  import HistoryIcon from '@lucide/svelte/icons/history';
-  import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
-  import Loader2Icon from '@lucide/svelte/icons/loader-2';
+  import { Tabs, Card, CardContent, CardDescription, CardTitle, ScrollArea } from '@shared/ui';
   import { t } from '@shared/i18n';
   import { DesktopCommandError, isFileSafetyContextError, reportClientError } from '@shared/errors';
   import { sumDownloadFractions } from '@shared/lib';
   import { publishPresentedErrorNotification } from '@shared/notifications';
-  import type { SettingFamily } from '@features/nvapi-settings';
-  import { RenoDxCard } from '@features/renodx';
-  import { LumaCard } from '@features/luma';
   import type {
     SwapHandler,
     RollbackHandler,
@@ -50,15 +27,12 @@
   import type { MutationSafetyTokens } from '@entities/addon';
   import type { SwapRequest } from '../model/swap-request';
   import { resolveExecutableLockReason } from '../model/game-executable-lock';
-  import GameExecutablePopover from './GameExecutablePopover.svelte';
-  import NvidiaProfileCard from './NvidiaProfileCard.svelte';
-  import DlssComponentCard from './DlssComponentCard.svelte';
-  import StreamlineComponentCard from './StreamlineComponentCard.svelte';
   import D3d12ExecutableConfirmDialog from './D3d12ExecutableConfirmDialog.svelte';
   import DeveloperModeRequirementDialog from './DeveloperModeRequirementDialog.svelte';
-  import VendorComponentCard from './VendorComponentCard.svelte';
-  import { areSameGameIds, GameFileSafetyRow } from '@entities/game';
+  import { areSameGameIds } from '@entities/game';
   import { onDestroy, untrack } from 'svelte';
+  import GameDetailsToolbar from './GameDetailsToolbar.svelte';
+  import GameDetailsTabsContent from './GameDetailsTabsContent.svelte';
 
   type Props = {
     details?: GameDetails | null;
@@ -345,20 +319,6 @@
       void nvidia.reload(id);
     });
   });
-
-  function getCandidateGroup(componentId: string): GameCandidateGroup | null {
-    return details?.candidate_groups.find((g) => g.component_id === componentId) ?? null;
-  }
-
-  function dlssFamilyCard(
-    component: GameLibraryComponent,
-  ): { family: SettingFamily; title: string } | null {
-    return DLSS_FAMILY_CARDS[component.technology] ?? null;
-  }
-
-  function isStreamline(component: GameLibraryComponent): boolean {
-    return component.technology === NVIDIA_STREAMLINE_TECHNOLOGY;
-  }
 </script>
 
 <section class="flex h-full min-h-0 flex-col overflow-hidden" aria-labelledby="game-details-title">
@@ -377,169 +337,50 @@
   {:else if gameId}
     <!-- Keep tab controls visible while the notice and active tab content share one viewport. -->
     <Tabs bind:value={selectedTab} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-      <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
-        {#if tabs.values.length > 0}
-          <TabsList aria-label={details.game.identity.title}>
-            {#each vendorTabs as tab (tab.key)}
-              <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
-            {/each}
-            {#if tabs.addonsTab}
-              <TabsTrigger value={tabs.addonsTab.value}>{t('gameDetails.otherTab')}</TabsTrigger>
-            {/if}
-          </TabsList>
-        {/if}
-
-        <div class="ms-auto flex flex-wrap items-center gap-2">
-          {#if showProgress && downloadCount > 0}
-            <div class="w-16">
-              <Progress
-                value={downloadValue}
-                max={downloadCount}
-                aria-label={t('common.downloadProgress')}
-              />
-            </div>
-          {/if}
-          <Tooltip>
-            <TooltipTrigger>
-              {#snippet child({ props })}
-                <Button
-                  {...props}
-                  variant="default"
-                  size="sm"
-                  disabled={updatingAll ||
-                    capturingUpdateAllSafety ||
-                    planningUpdateAll ||
-                    busy ||
-                    gameAddons.busy ||
-                    nothingToUpdate}
-                  aria-busy={capturingUpdateAllSafety || updatingAll || planningUpdateAll}
-                  onclick={handleUpdateAll}
-                >
-                  {#if updatingAll || planningUpdateAll}
-                    <Loader2Icon class="animate-spin" aria-hidden="true" />
-                  {:else}
-                    <ArrowUpToLineIcon aria-hidden="true" />
-                  {/if}
-                  {nothingToUpdate
-                    ? t('gameDetails.updateAll.action')
-                    : t('gameDetails.updateAll.actionCount', { count: totalUpdateCount })}
-                </Button>
-              {/snippet}
-            </TooltipTrigger>
-            <TooltipContent>
-              {nothingToUpdate
-                ? t('gameDetails.updateAll.upToDate')
-                : t('gameDetails.updateAll.tooltip', { count: totalUpdateCount })}
-            </TooltipContent>
-          </Tooltip>
-
-          {#if onOpenOperations}
-            <Button
-              variant="secondary"
-              size="sm"
-              onclick={onOpenOperations}
-              onpointerenter={onPreloadOperations}
-              onfocus={onPreloadOperations}
-            >
-              <HistoryIcon aria-hidden="true" />
-              {t('operations.title')}
-            </Button>
-          {/if}
-
-          <GameExecutablePopover {gameId} exe={gameExe} lockReason={executableLockReason} />
-        </div>
-      </div>
+      <GameDetailsToolbar
+        title={details.game.identity.title}
+        {vendorTabs}
+        hasAddonsTab={tabs.addonsTab !== null}
+        {gameId}
+        exe={gameExe}
+        lockReason={executableLockReason}
+        {showProgress}
+        {downloadCount}
+        {downloadValue}
+        {updatingAll}
+        {capturingUpdateAllSafety}
+        {planningUpdateAll}
+        {busy}
+        addonsBusy={gameAddons.busy}
+        {nothingToUpdate}
+        {totalUpdateCount}
+        onUpdateAll={handleUpdateAll}
+        {onOpenOperations}
+        {onPreloadOperations}
+      />
 
       <ScrollArea class="min-h-0 flex-1">
-        <div class="grid gap-4 p-1">
-          <GameFileSafetyRow assessment={fileSafety.assessment} />
-
-          {#each vendorTabs as tab (tab.key)}
-            <TabsContent value={tab.key} class="mt-0">
-              <div class="grid gap-3">
-                {#if tab.key === 'nvidia'}
-                  {#if gameId && nvidia.nvapiAvailable}
-                    <NvidiaProfileCard nvapi={nvidia} />
-                  {/if}
-
-                  {@const nonStreamline = tab.components.filter((c) => !isStreamline(c))}
-                  {@const streamline = tab.components.filter(isStreamline)}
-
-                  {#each nonStreamline as component (component.id)}
-                    {@const group = getCandidateGroup(component.id)}
-                    {@const dlssCard = dlssFamilyCard(component)}
-                    {#if dlssCard && gameId}
-                      <DlssComponentCard
-                        {gameId}
-                        {component}
-                        {group}
-                        family={dlssCard.family}
-                        title={dlssCard.title}
-                        {nvidia}
-                        nvapiAvailable={nvidia.nvapiAvailable}
-                        {busy}
-                        onSwap={handleSwapWithSafety}
-                        {onRollback}
-                      />
-                    {:else}
-                      <VendorComponentCard
-                        {component}
-                        {group}
-                        {busy}
-                        onSwap={handleSwapWithSafety}
-                        {onRollback}
-                      />
-                    {/if}
-                  {/each}
-
-                  {#if streamline.length > 0}
-                    {@const groupsById = Object.fromEntries(
-                      streamline.map((c) => [c.id, getCandidateGroup(c.id)] as const),
-                    )}
-                    <StreamlineComponentCard
-                      components={streamline}
-                      {groupsById}
-                      coordinatedOptions={details?.streamline_candidate_options ?? []}
-                      {busy}
-                      onBulkSwap={handleBulkSwapWithSafety}
-                      {onBulkRollback}
-                    />
-                  {/if}
-                {:else}
-                  {#each tab.components as component (component.id)}
-                    {@const group = getCandidateGroup(component.id)}
-                    <VendorComponentCard
-                      {component}
-                      {group}
-                      {busy}
-                      onSwap={handleSwapWithSafety}
-                      {onRollback}
-                    />
-                  {/each}
-                {/if}
-              </div>
-            </TabsContent>
-          {/each}
-
-          {#if tabs.addonsTab}
-            <TabsContent value={ADDONS_TAB_VALUE} class="mt-0">
-              <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,50rem),1fr))] gap-3">
-                {#if gameAddons.isEnabled('renodx')}
-                  <RenoDxCard
-                    {gameId}
-                    busy={exclusiveBusy}
-                    store={renodx}
-                    {onOpenRenoDxSettings}
-                    {onPreloadRenoDxSettings}
-                  />
-                {/if}
-                {#if gameAddons.isEnabled('luma')}
-                  <LumaCard {gameId} busy={exclusiveBusy} {launcher} store={luma} />
-                {/if}
-              </div>
-            </TabsContent>
-          {/if}
-        </div>
+        <GameDetailsTabsContent
+          {details}
+          {gameId}
+          {vendorTabs}
+          hasAddonsTab={tabs.addonsTab !== null}
+          assessment={fileSafety.assessment}
+          {nvidia}
+          {busy}
+          {exclusiveBusy}
+          {launcher}
+          {renodx}
+          {luma}
+          renodxEnabled={gameAddons.isEnabled('renodx')}
+          lumaEnabled={gameAddons.isEnabled('luma')}
+          onSwap={handleSwapWithSafety}
+          {onRollback}
+          onBulkSwap={handleBulkSwapWithSafety}
+          {onBulkRollback}
+          {onOpenRenoDxSettings}
+          {onPreloadRenoDxSettings}
+        />
       </ScrollArea>
     </Tabs>
   {/if}
