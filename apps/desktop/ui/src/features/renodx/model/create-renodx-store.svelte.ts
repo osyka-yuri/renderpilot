@@ -4,9 +4,7 @@ import {
   createAddonStore,
   hostSnapshotApi,
   mergeAddonApis,
-  type AddonMutationResult,
   type MatchConfidence,
-  type MutationSafetyScope,
   type ReshadeChannel,
   type MutationSafetyTokens,
 } from '@entities/addon';
@@ -18,11 +16,12 @@ import {
   defaultHostFacts,
   type AvailabilitySnapshot,
 } from './renodx-store-helpers';
+import { createRenoDxCompanionStore } from './renodx-store-companion.svelte';
+import { createRenoDxDlssFixMutations } from './renodx-store-dlss-fix-mutations';
+import { createRenoDxHostMutations } from './renodx-store-host-mutations';
 import type {
   AvailabilityOutcome,
   AvailabilityReport,
-  DlssFixAvailability,
-  HostKind,
   ManualFileInstall,
   RenoDxInstallState,
   RenoDxUpdateReport,
@@ -35,10 +34,7 @@ export type RenoDxStore = ReturnType<typeof createRenoDxStore>;
 
 export type RenoDxStoreOptions = {
   api?: RenoDxApi;
-  /**
-   * Called after a successful install/uninstall changes whether this game
-   * blocks Luma. Peer refreshes are page-owned and best-effort.
-   */
+  /** Called after a successful install/uninstall changes whether this game blocks Luma. */
   onExclusivityChange?: (gameId: string) => void;
   /** Refreshes the details capability projection after install/uninstall. */
   onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
@@ -59,9 +55,7 @@ export type RenoDxStoreOptions = {
 export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
   const api = options.api ?? renodxApi;
   const onExclusivityChange = options.onExclusivityChange;
-  const onGameDetailsInvalidate = options.onGameDetailsInvalidate;
   const requireSafetyTokens = options.requireSafetyTokens;
-  const onSafetyContextError = options.onSafetyContextError;
 
   let availabilitySnapshot = $state<AvailabilitySnapshot>({
     hostDetection: 'absent',
@@ -74,7 +68,6 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
   let outcome = $state<AvailabilityOutcome | null>(null);
   let manualInstall = $state<ManualFileInstall | null>(null);
   let vulkanLayer = $state<VulkanLayerReport | null>(null);
-  let dlssFixAvailability = $state<DlssFixAvailability | null>(null);
 
   function applyAvailabilitySnapshot(
     report: Parameters<typeof availabilitySnapshotFromReport>[0],
@@ -83,12 +76,8 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     const nextSnapshot = availabilitySnapshotFromReport(report);
     availabilitySnapshot = nextSnapshot;
     if (mode === 'resetSelection') {
-      selectedReshadeChannel = selectedChannelFromSnapshot(nextSnapshot);
+      selectedReshadeChannel = nextSnapshot.hostFacts.channel.selected;
     }
-  }
-
-  function selectedChannelFromSnapshot(snapshot: AvailabilitySnapshot): ReshadeChannel {
-    return snapshot.hostFacts.channel.selected;
   }
 
   function channelIsSupported(channel: ReshadeChannel): boolean {
@@ -104,10 +93,9 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     onExclusivityChange,
     onMutationError: (error, scope) => {
       if (requireSafetyTokens) {
-        void onSafetyContextError?.(error, scope);
+        void options.onSafetyContextError?.(error, scope);
       }
     },
-    // Keep the synthetic install report; companion probes live in afterCommit.
     postMutationProbe: 'never',
     applyLoadReport: (report) => {
       applyAvailabilitySnapshot(report, 'resetSelection');
@@ -117,8 +105,6 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     },
     applyHostRefresh: (report) => {
       applyAvailabilitySnapshot(report, 'preserveSelection');
-      // Keep outcome / manual install / vulkan layer in sync after mutations
-      // (load-only path already assigns these via applyLoadReport).
       outcome = report.outcome;
       manualInstall = report.manual_install;
       vulkanLayer = report.vulkan_layer;
@@ -135,7 +121,6 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       outcome = null;
       manualInstall = null;
       vulkanLayer = null;
-      dlssFixAvailability = null;
     },
     buildUpdateReportForInstall: (nextState) => {
       if (nextState.status !== 'installed') {
@@ -157,6 +142,18 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     freshnessExtraSources: (report) => [report.dlssFix],
   });
 
+  const companion = createRenoDxCompanionStore({
+    api,
+    core,
+    setSelectedChannel: (channel) => {
+      selectedReshadeChannel = channel;
+    },
+    setVulkanLayer: (report) => {
+      vulkanLayer = report;
+    },
+    onGameDetailsInvalidate: options.onGameDetailsInvalidate,
+  });
+
   const isExternal = $derived(outcome?.kind === 'external');
   const isNativeHdr = $derived(outcome?.kind === 'native_hdr');
   const externalUrl = $derived(outcome?.kind === 'external' ? outcome.url : null);
@@ -172,7 +169,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
   const vulkanUpdateDiagnostics = $derived(core.updateReport?.vulkan_diagnostics ?? []);
   const dlssFix = $derived(
     presentDlssFix({
-      availability: dlssFixAvailability,
+      availability: companion.dlssFixAvailability,
       fallbackEvidencePresent:
         core.state?.status === 'installed' && core.state.dlss_fix_evidence_present,
       updateStatus: core.updateReport?.dlssFix ?? null,
@@ -182,297 +179,45 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     core.state?.status === 'installed' ? core.state.addon_tracked : null,
   );
 
-  function safetyScopeForHost(hostKind: HostKind | null | undefined): MutationSafetyScope {
-    return hostKind === 'proxy' ? 'game' : 'game_and_shared';
+  function deactivate(): void {
+    core.deactivate();
+    companion.clear();
   }
 
-  function plannedInstallHostKind(): HostKind | null {
-    if (outcome?.kind === 'installable') {
-      return outcome.host_kind;
-    }
-    if (outcome?.kind === 'external' && outcome.file_install) {
-      return outcome.file_install.host_kind;
-    }
-    return manualInstall?.host_kind ?? null;
-  }
-
-  function installedHostKind(): HostKind | null {
-    return core.state?.status === 'installed' ? core.state.host_kind : null;
-  }
-
-  async function probeDlssFixAvailability(gameId: string, token: number): Promise<void> {
-    try {
-      const availability = await api.dlssFixAvailability(gameId);
-      if (core.isCurrentRequest(token)) {
-        dlssFixAvailability = availability;
-      }
-    } catch {
-      if (core.isCurrentRequest(token)) {
-        dlssFixAvailability = null;
-      }
-    }
-  }
-
-  async function load(gameId: string): Promise<void> {
-    dlssFixAvailability = null;
-    const loading = core.load(gameId);
-    const token = core.requestToken;
-    await loading;
-    if (core.isCurrentRequest(token) && !core.loadError) {
-      await probeDlssFixAvailability(gameId, token);
-    }
-  }
-
-  async function retry(gameId: string): Promise<void> {
-    dlssFixAvailability = null;
-    const loading = core.retry(gameId);
-    const token = core.requestToken;
-    await loading;
-    if (core.isCurrentRequest(token) && !core.loadError) {
-      await probeDlssFixAvailability(gameId, token);
-    }
-  }
-
-  async function checkForUpdates(gameId: string): Promise<void> {
-    dlssFixAvailability = null;
-    const checking = core.checkForUpdates(gameId);
-    const token = core.requestToken;
-    await checking;
-    if (core.isCurrentRequest(token)) {
-      await probeDlssFixAvailability(gameId, token);
-    }
-  }
-
-  async function refreshVulkanLayerStatus(token: number): Promise<void> {
-    try {
-      const report = await api.vulkanLayerStatus();
-      if (core.isCurrentRequest(token)) {
-        vulkanLayer = report;
-      }
-    } catch {
-      // Best-effort: a failed layer-status refresh leaves the previous report.
-    }
-  }
-
-  /**
-   * Post-commit companion refresh for install-like mutations.
-   * Freshness stays on the synthetic install report (`postMutationProbe: 'never'`);
-   * Luma uses store-level `postMutationProbe: 'passive'` for advisory checks.
-   */
-  async function afterInstallLikeCommit(
-    gameId: string,
-    token: number,
-    channel?: ReshadeChannel,
-  ): Promise<void> {
-    if (!core.isCurrentRequest(token)) {
-      return;
-    }
-    if (channel !== undefined) {
+  const mutations = createRenoDxHostMutations({
+    api,
+    core,
+    getAvailabilitySnapshot: () => availabilitySnapshot,
+    getOutcome: () => outcome,
+    getManualInstallHostKind: () => manualInstall?.host_kind ?? null,
+    channelIsSupported,
+    onChannelSwitched: (channel) => {
       selectedReshadeChannel = channel;
-      await refreshVulkanLayerStatus(token);
-    }
-    if (!core.isCurrentRequest(token)) {
-      return;
-    }
-    dlssFixAvailability = null;
-    await probeDlssFixAvailability(gameId, token);
-  }
-
-  async function afterCapabilityCommit(
-    gameId: string,
-    token: number,
-    channel?: ReshadeChannel,
-  ): Promise<void> {
-    await afterInstallLikeCommit(gameId, token, channel);
-    if (core.isCurrentRequest(token)) {
-      await onGameDetailsInvalidate?.(gameId);
-    }
-  }
-
-  async function install(gameId: string, channel: ReshadeChannel): Promise<AddonMutationResult> {
-    if (!channelIsSupported(channel)) {
-      return 'skipped';
-    }
-    const safetyScope = safetyScopeForHost(plannedInstallHostKind());
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, safetyScope);
-        return tokens
-          ? api.install(gameId, channel, tokens.gameContextToken, tokens.sharedVulkanContextToken)
-          : api.install(gameId, channel);
-      },
-      {
-        errorKey: 'gameDetails.renodx.installError',
-        safetyScope,
-        afterCommit: (token) => afterCapabilityCommit(gameId, token, channel),
-        notifyExclusivity: true,
-      },
-    );
-  }
-
-  async function installFromFile(
-    gameId: string,
-    filePath: string,
-    channel: ReshadeChannel,
-  ): Promise<AddonMutationResult> {
-    if (!channelIsSupported(channel)) {
-      return 'skipped';
-    }
-    const safetyScope = safetyScopeForHost(plannedInstallHostKind());
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, safetyScope);
-        return tokens
-          ? api.installFromFile(
-              gameId,
-              filePath,
-              channel,
-              tokens.gameContextToken,
-              tokens.sharedVulkanContextToken,
-            )
-          : api.installFromFile(gameId, filePath, channel);
-      },
-      {
-        errorKey: 'gameDetails.renodx.installError',
-        safetyScope,
-        afterCommit: (token) => afterCapabilityCommit(gameId, token, channel),
-        notifyExclusivity: true,
-      },
-    );
-  }
-
-  async function update(gameId: string): Promise<AddonMutationResult> {
-    const safetyScope = safetyScopeForHost(installedHostKind());
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, safetyScope);
-        return tokens
-          ? api.update(gameId, tokens.gameContextToken, tokens.sharedVulkanContextToken)
-          : api.update(gameId);
-      },
-      {
-        errorKey: 'gameDetails.renodx.updateError',
-        safetyScope,
-        requireUpdateAvailable: true,
-        afterCommit: (token) => afterInstallLikeCommit(gameId, token),
-      },
-    );
-  }
-
-  async function switchChannel(
-    gameId: string,
-    channel: ReshadeChannel,
-  ): Promise<AddonMutationResult> {
-    const action = availabilitySnapshot.actions.switch_channel;
-    if (
-      core.busy ||
-      core.state?.status !== 'installed' ||
-      core.state.host_kind !== 'proxy' ||
-      action?.enabled !== true ||
-      action.target_channel !== channel ||
-      channel === currentHostChannel(availabilitySnapshot)
-    ) {
-      return 'skipped';
-    }
-    const safetyScope = 'game' satisfies MutationSafetyScope;
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, safetyScope);
-        return tokens
-          ? api.switchChannel(
-              gameId,
-              channel,
-              tokens.gameContextToken,
-              tokens.sharedVulkanContextToken,
-            )
-          : api.switchChannel(gameId, channel);
-      },
-      {
-        errorKey: 'gameDetails.renodx.switchError',
-        safetyScope,
-        afterCommit: () => {
-          selectedReshadeChannel = channel;
-          availabilitySnapshot = {
-            ...availabilitySnapshot,
-            hostFacts: {
-              ...availabilitySnapshot.hostFacts,
-              channel: {
-                ...availabilitySnapshot.hostFacts.channel,
-                selected: channel,
-                detected: channel,
-              },
-            },
-          };
+      availabilitySnapshot = {
+        ...availabilitySnapshot,
+        hostFacts: {
+          ...availabilitySnapshot.hostFacts,
+          channel: {
+            ...availabilitySnapshot.hostFacts.channel,
+            selected: channel,
+            detected: channel,
+          },
         },
-      },
-    );
-  }
+      };
+    },
+    requireSafetyTokens,
+    afterInstallLikeCommit: companion.afterInstallLikeCommit,
+    afterCapabilityCommit: companion.afterCapabilityCommit,
+  });
+  const dlssFixMutations = createRenoDxDlssFixMutations({
+    api,
+    core,
+    requireSafetyTokens,
+    afterInstallLikeCommit: companion.afterInstallLikeCommit,
+  });
 
   function setSelectedReshadeChannel(channel: ReshadeChannel): void {
     selectedReshadeChannel = channel;
-  }
-
-  async function uninstall(gameId: string): Promise<AddonMutationResult> {
-    return core.runBusyMutation(gameId, () => api.uninstall(gameId), {
-      errorKey: 'gameDetails.renodx.uninstallError',
-      clearDownloadProgress: false,
-      notifyExclusivity: true,
-      afterCommit: (token) => afterCapabilityCommit(gameId, token),
-    });
-  }
-
-  async function installDlssFix(gameId: string): Promise<AddonMutationResult> {
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, 'game');
-        return tokens
-          ? api.installDlssFix(gameId, tokens.gameContextToken)
-          : api.installDlssFix(gameId);
-      },
-      {
-        errorKey: 'gameDetails.renodx.dlssFixInstallError',
-        safetyScope: 'game',
-        afterCommit: (token) => afterInstallLikeCommit(gameId, token),
-      },
-    );
-  }
-
-  async function uninstallDlssFix(gameId: string): Promise<AddonMutationResult> {
-    return core.runBusyMutation(gameId, () => api.uninstallDlssFix(gameId), {
-      errorKey: 'gameDetails.renodx.dlssFixRemoveError',
-      clearDownloadProgress: false,
-      afterCommit: (token) => afterInstallLikeCommit(gameId, token),
-    });
-  }
-
-  async function updateDlssFix(gameId: string): Promise<AddonMutationResult> {
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, 'game');
-        return tokens
-          ? api.updateDlssFix(gameId, tokens.gameContextToken)
-          : api.updateDlssFix(gameId);
-      },
-      {
-        errorKey: 'gameDetails.renodx.dlssFixInstallError',
-        safetyScope: 'game',
-        afterCommit: (token) => afterInstallLikeCommit(gameId, token),
-      },
-    );
-  }
-
-  async function retryDlssFixRecovery(gameId: string): Promise<AddonMutationResult> {
-    return core.runBusyMutation(gameId, () => api.retryDlssFixRecovery(gameId), {
-      errorKey: 'gameDetails.renodx.dlssFixInstallError',
-      clearDownloadProgress: false,
-      afterCommit: (token) => afterInstallLikeCommit(gameId, token),
-    });
   }
 
   return mergeAddonApis(
@@ -480,6 +225,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     commonOutcomeApi(() => outcome),
     hostSnapshotApi(() => availabilitySnapshot),
     {
+      deactivate,
       get reshadeChannel() {
         return currentHostChannel(availabilitySnapshot);
       },
@@ -528,19 +274,19 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       get dlssFix() {
         return dlssFix;
       },
-      load,
-      retry,
-      checkForUpdates,
-      install,
-      installFromFile,
+      load: companion.load,
+      retry: companion.retry,
+      checkForUpdates: companion.checkForUpdates,
+      install: mutations.install,
+      installFromFile: mutations.installFromFile,
       setSelectedReshadeChannel,
-      switchChannel,
-      update,
-      uninstall,
-      installDlssFix,
-      updateDlssFix,
-      retryDlssFixRecovery,
-      uninstallDlssFix,
+      switchChannel: mutations.switchChannel,
+      update: mutations.update,
+      uninstall: mutations.uninstall,
+      installDlssFix: dlssFixMutations.installDlssFix,
+      updateDlssFix: dlssFixMutations.updateDlssFix,
+      retryDlssFixRecovery: dlssFixMutations.retryDlssFixRecovery,
+      uninstallDlssFix: dlssFixMutations.uninstallDlssFix,
     },
   );
 }

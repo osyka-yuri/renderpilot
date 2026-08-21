@@ -88,6 +88,20 @@ describe('createRenoDxStore', () => {
     expect(store.busy).toBe(false);
   });
 
+  it('updates the selected channel before the install companion refresh', async () => {
+    const api = fakeApi();
+    const store = createRenoDxStore({ api });
+    vi.mocked(api.vulkanLayerStatus).mockImplementation(() => {
+      expect(store.selectedReshadeChannel).toBe('nightly');
+      return Promise.resolve(VULKAN_INSTALLED);
+    });
+
+    await store.load('steam:1091500');
+    await store.install('steam:1091500', 'nightly');
+
+    expect(store.selectedReshadeChannel).toBe('nightly');
+  });
+
   it('surfaces an available update for an installed game', async () => {
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),

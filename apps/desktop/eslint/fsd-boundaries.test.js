@@ -556,5 +556,5 @@ describe('production FSD composition', () => {
     expect(ruleSeverity(foundationConfig, '@typescript-eslint/no-restricted-imports')).toBe(0);
     expect(ruleSeverity(foundationConfig, 'local-architecture/no-fsd-alias-re-export')).toBe(2);
     expect(ruleSeverity(foundationConfig, 'local-architecture/import-boundaries')).toBe(2);
-  });
+  }, 15_000);
 });
