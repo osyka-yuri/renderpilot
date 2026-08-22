@@ -13,13 +13,19 @@ use super::{LAYER_DLL_NAME, LAYER_JSON_NAME};
 /// Detects the ReShade Vulkan layer state.
 #[cfg(test)]
 #[must_use]
-pub(crate) fn detect(registry: &impl LayerRegistry, layer_dir: &Path) -> VulkanLayerState {
+pub(crate) fn detect(
+    registry: &(impl LayerRegistry + ?Sized),
+    layer_dir: &Path,
+) -> VulkanLayerState {
     detect_report(registry, layer_dir).state
 }
 
 /// Builds a detailed detector report for the shared ReShade Vulkan layer.
 #[must_use]
-pub fn detect_report(registry: &impl LayerRegistry, layer_dir: &Path) -> VulkanLayerReport {
+pub fn detect_report(
+    registry: &(impl LayerRegistry + ?Sized),
+    layer_dir: &Path,
+) -> VulkanLayerReport {
     let mut report = detect_report_inner(registry, layer_dir);
     // Post-processing: surface a `RegistryScopeNotWritable` caveat when the
     // state suggests the user might want to install or re-register the layer
@@ -44,7 +50,10 @@ pub fn detect_report(registry: &impl LayerRegistry, layer_dir: &Path) -> VulkanL
     report
 }
 
-fn detect_report_inner(registry: &impl LayerRegistry, layer_dir: &Path) -> VulkanLayerReport {
+fn detect_report_inner(
+    registry: &(impl LayerRegistry + ?Sized),
+    layer_dir: &Path,
+) -> VulkanLayerReport {
     let mut candidates = Vec::new();
     let mut broken: Vec<(VulkanLayerDiagnostic, VulkanLayerFacts)> = Vec::new();
     // Track which manifest paths have an HKLM registration. If the winning

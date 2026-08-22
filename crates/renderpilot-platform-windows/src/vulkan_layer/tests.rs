@@ -7,6 +7,7 @@ use tempfile::tempdir;
 
 struct FakeRegistry {
     entries: RefCell<Vec<LayerRegistryEntry>>,
+    canonical_registration: RefCell<RegistryValueState>,
     can_write: bool,
 }
 
@@ -14,6 +15,7 @@ impl Default for FakeRegistry {
     fn default() -> Self {
         Self {
             entries: RefCell::new(Vec::new()),
+            canonical_registration: RefCell::new(RegistryValueState::Absent),
             can_write: true,
         }
     }
@@ -67,6 +69,27 @@ impl LayerRegistry for FakeRegistry {
     }
     fn can_write_scope(&self) -> bool {
         self.can_write
+    }
+    fn observe_canonical_registration(
+        &self,
+        _manifest_path: &Path,
+    ) -> io::Result<RegistryValueState> {
+        Ok(self.canonical_registration.borrow().clone())
+    }
+    fn activate_canonical_registration(&self, _manifest_path: &Path) -> io::Result<()> {
+        *self.canonical_registration.borrow_mut() = RegistryValueState::Present {
+            value_type: 4,
+            raw_bytes: vec![0; 4],
+        };
+        Ok(())
+    }
+    fn restore_canonical_registration(
+        &self,
+        _manifest_path: &Path,
+        state: &RegistryValueState,
+    ) -> io::Result<()> {
+        *self.canonical_registration.borrow_mut() = state.clone();
+        Ok(())
     }
 }
 
@@ -125,6 +148,49 @@ fn detect_is_absent_for_empty_registry() {
     let registry = FakeRegistry::default();
     let dir = tempdir().unwrap();
     assert_eq!(detect(&registry, dir.path()), VulkanLayerState::Absent);
+}
+
+#[test]
+fn canonical_registry_participant_restores_exact_raw_state() {
+    let registry = FakeRegistry::default();
+    let manifest = Path::new(r"C:\ProgramData\ReShade\ReShade64.json");
+
+    for state in [
+        RegistryValueState::Absent,
+        RegistryValueState::Present {
+            value_type: 4,
+            raw_bytes: vec![1, 0, 0, 0],
+        },
+        RegistryValueState::Present {
+            value_type: 3,
+            raw_bytes: vec![0xde, 0xad, 0xbe, 0xef],
+        },
+    ] {
+        registry
+            .restore_canonical_registration(manifest, &state)
+            .unwrap();
+        assert_eq!(
+            registry.observe_canonical_registration(manifest).unwrap(),
+            state
+        );
+
+        registry.activate_canonical_registration(manifest).unwrap();
+        assert_eq!(
+            registry.observe_canonical_registration(manifest).unwrap(),
+            RegistryValueState::Present {
+                value_type: 4,
+                raw_bytes: vec![0; 4],
+            }
+        );
+
+        registry
+            .restore_canonical_registration(manifest, &state)
+            .unwrap();
+        assert_eq!(
+            registry.observe_canonical_registration(manifest).unwrap(),
+            state
+        );
+    }
 }
 
 #[test]
@@ -290,6 +356,7 @@ fn broken_layer_in_standard_location_without_dll_is_conflict() {
     );
 }
 
+#[cfg(windows)]
 #[test]
 fn permission_denied_dll_is_distinct_from_unreadable() {
     // When the DLL path is a directory (or otherwise triggers an access-
@@ -435,6 +502,7 @@ fn foreign_manifest_malformed_json_is_reported_as_malformed() {
     }
 }
 
+#[cfg(windows)]
 #[test]
 fn foreign_manifest_permission_denied_is_distinct_from_malformed() {
     // A ReShade-looking foreign manifest that cannot be read due to a
@@ -522,6 +590,99 @@ fn register_app_supports_multiple_games() {
 }
 
 #[test]
+fn app_planner_preserves_bom_newlines_comments_and_unknown_lines() {
+    let raw = b"\xEF\xBB\xBF; keep this comment\r\nUnknown=keep\r\nApps=C:\\Games\\one.exe\r\nTail=keep\r\n";
+    let plan = plan_register_app(Some(raw), Path::new(r"C:\Games\two.exe")).unwrap();
+
+    assert_eq!(
+        plan.change,
+        AppListChange::Replacement(
+            b"\xEF\xBB\xBF; keep this comment\r\nUnknown=keep\r\nApps=C:\\Games\\one.exe,C:\\Games\\two.exe\r\nTail=keep\r\n".to_vec()
+        )
+    );
+    assert_eq!(plan.resulting_apps.len(), 2);
+}
+
+#[test]
+fn app_planner_preserves_unrelated_entry_formatting() {
+    let raw = b"Apps=C:\\Games\\one.exe,   C:\\Games\\two.exe  \r\n";
+    let registered = plan_register_app(Some(raw), Path::new(r"C:\Games\three.exe")).unwrap();
+    assert_eq!(
+        registered.change,
+        AppListChange::Replacement(
+            b"Apps=C:\\Games\\one.exe,   C:\\Games\\two.exe  ,C:\\Games\\three.exe\r\n".to_vec()
+        )
+    );
+
+    let unregistered = plan_unregister_app(Some(raw), Path::new(r"C:\Games\one.exe")).unwrap();
+    assert_eq!(
+        unregistered.change,
+        AppListChange::Replacement(b"Apps=   C:\\Games\\two.exe  \r\n".to_vec())
+    );
+}
+
+#[test]
+fn app_planner_returns_true_byte_noop_for_case_insensitive_existing_path() {
+    let raw = b"Apps=C:\\Games\\DOOM.exe\r\n";
+    let plan = plan_register_app(Some(raw), Path::new(r"c:\games\doom.EXE")).unwrap();
+
+    assert_eq!(plan.change, AppListChange::Unchanged);
+    assert_eq!(
+        plan.resulting_apps,
+        vec![PathBuf::from(r"C:\Games\DOOM.exe")]
+    );
+}
+
+#[test]
+fn app_planner_keeps_empty_apps_value_and_unknown_content_on_unregister() {
+    let raw = b"# comment\nApps=C:\\Games\\DOOM.exe\nUnknown=value\n";
+    let plan = plan_unregister_app(Some(raw), Path::new(r"C:\Games\DOOM.exe")).unwrap();
+
+    assert!(plan.resulting_list_is_empty());
+    assert_eq!(
+        plan.change,
+        AppListChange::Replacement(b"# comment\nApps=\nUnknown=value\n".to_vec())
+    );
+}
+
+#[test]
+fn app_planner_appends_key_without_discarding_existing_file() {
+    let raw = b"[ReShade]\r\nEnabled=1\r\n";
+    let plan = plan_register_app(Some(raw), Path::new(r"C:\Games\DOOM.exe")).unwrap();
+
+    assert_eq!(
+        plan.change,
+        AppListChange::Replacement(
+            b"[ReShade]\r\nEnabled=1\r\nApps=C:\\Games\\DOOM.exe\r\n".to_vec()
+        )
+    );
+}
+
+#[test]
+fn app_planner_rejects_ambiguous_or_invalid_input() {
+    assert_eq!(
+        plan_register_app(
+            Some(b"Apps=C:\\Games\\one.exe\nApps=C:\\Games\\two.exe\n"),
+            Path::new(r"C:\Games\three.exe")
+        )
+        .unwrap_err(),
+        AppListPlanError::MultipleAppsKeys
+    );
+    assert_eq!(
+        plan_register_app(Some(&[0xff, 0xfe]), Path::new(r"C:\Games\three.exe")).unwrap_err(),
+        AppListPlanError::InvalidUtf8
+    );
+    assert_eq!(
+        plan_register_app(Some(b"Apps foo\n"), Path::new(r"C:\Games\three.exe")).unwrap_err(),
+        AppListPlanError::MalformedAppsKey
+    );
+    assert_eq!(
+        plan_register_app(Some(b"Apps=\n"), Path::new(r"C:\Games,three.exe")).unwrap_err(),
+        AppListPlanError::PathNotRepresentable
+    );
+}
+
+#[test]
 fn unregister_app_returns_true_when_list_empty() {
     let dir = tempdir().unwrap();
     let exe = Path::new(r"C:\Games\DOOM.exe");
@@ -529,16 +690,17 @@ fn unregister_app_returns_true_when_list_empty() {
 
     let empty = unregister_app(dir.path(), exe).unwrap();
     assert!(empty);
-    assert!(!dir.path().join(APPS_INI_NAME).exists());
+    assert_eq!(
+        std::fs::read(dir.path().join(APPS_INI_NAME)).unwrap(),
+        b"Apps=\n"
+    );
 }
 
 #[test]
 fn unregister_app_returns_false_when_others_remain() {
     let dir = tempdir().unwrap();
-    let game1 = dir.path().join("game1.exe");
-    let game2 = dir.path().join("game2.exe");
-    std::fs::write(&game1, b"game1").unwrap();
-    std::fs::write(&game2, b"game2").unwrap();
+    let game1 = PathBuf::from(r"C:\Games\game1.exe");
+    let game2 = PathBuf::from(r"C:\Games\game2.exe");
     register_app(dir.path(), &game1).unwrap();
     register_app(dir.path(), &game2).unwrap();
 
@@ -566,18 +728,20 @@ fn unregister_app_returns_true_when_ini_has_no_apps_key() {
     let empty = unregister_app(dir.path(), Path::new(r"C:\Games\missing.exe")).unwrap();
 
     assert!(empty);
-    assert!(!dir.path().join(APPS_INI_NAME).exists());
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join(APPS_INI_NAME)).unwrap(),
+        "[ReShade]\nEnabled=1\n"
+    );
 }
 
 #[test]
-fn unregister_app_prunes_stale_missing_apps_on_available_roots() {
+fn unregister_app_does_not_prune_unrelated_apps() {
     let dir = tempdir().unwrap();
-    let live = dir.path().join("live.exe");
-    let stale = dir.path().join("stale.exe");
-    std::fs::write(&live, b"live").unwrap();
-    write_app_list(dir.path(), &[live.clone(), stale]).unwrap();
+    let live = PathBuf::from(r"C:\Games\live.exe");
+    let stale = PathBuf::from(r"C:\Games\stale.exe");
+    write_app_list(dir.path(), &[live.clone(), stale.clone()]).unwrap();
 
-    let empty = unregister_app(dir.path(), Path::new(r"C:\Games\removed.exe")).unwrap();
+    let empty = unregister_app(dir.path(), &stale).unwrap();
 
     assert!(!empty);
     assert_eq!(read_app_list(dir.path()).unwrap(), vec![live]);
@@ -649,8 +813,8 @@ fn resolve_library_path_handles_relative_with_dot_prefix() {
 #[test]
 fn resolve_library_path_handles_absolute() {
     let manifest = Path::new(r"C:\ProgramData\ReShade\ReShade64.json");
-    let resolved = resolve_library_path(manifest, r"C:\D:\Other\ReShade64.dll");
-    assert_eq!(resolved, Path::new(r"C:\D:\Other\ReShade64.dll"));
+    let resolved = resolve_library_path(manifest, r"D:\Other\ReShade64.dll");
+    assert_eq!(resolved, Path::new(r"D:\Other\ReShade64.dll"));
 }
 
 #[test]

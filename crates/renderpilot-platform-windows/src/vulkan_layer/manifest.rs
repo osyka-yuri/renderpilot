@@ -8,7 +8,7 @@ use super::types::{
     VulkanLayerArchitecture, VulkanLayerDiagnostic, VulkanLayerFacts, VulkanLayerState,
     VulkanLoaderVisibility,
 };
-use super::util::{manifest_path_looks_reshade, same_path};
+use super::util::{is_absolute, manifest_path_looks_reshade, same_path};
 use super::{LAYER_DLL_NAME, LAYER_JSON_NAME, LAYER_NAME};
 
 /// Serializable Vulkan implicit-layer manifest in the loader's schema.
@@ -98,7 +98,7 @@ pub(crate) fn classify_manifest(
     // A registry value must point to an absolute manifest path. Relative paths
     // are a broken registration — the Vulkan loader resolves them against an
     // unpredictable working directory.
-    if !manifest_path.is_absolute() {
+    if !is_absolute(manifest_path) {
         return ManifestKind::Broken {
             diagnostic: VulkanLayerDiagnostic::ManifestMalformed,
             facts: VulkanLayerFacts {
@@ -365,10 +365,20 @@ struct ForeignLayer {
 }
 
 pub(crate) fn resolve_library_path(manifest_path: &Path, library_path: &str) -> PathBuf {
-    let stripped = library_path.strip_prefix(".\\").unwrap_or(library_path);
+    let stripped = library_path
+        .strip_prefix(".\\")
+        .or_else(|| library_path.strip_prefix("./"))
+        .unwrap_or(library_path);
     let candidate = PathBuf::from(stripped);
-    if candidate.is_absolute() {
+    if is_absolute(&candidate) {
         return candidate;
+    }
+    let manifest = manifest_path.to_string_lossy();
+    if manifest.contains('\\')
+        && let Some(parent_end) = manifest.rfind(['/', '\\'])
+    {
+        let relative = stripped.replace('/', "\\");
+        return PathBuf::from(format!("{}\\{relative}", &manifest[..parent_end]));
     }
     manifest_path
         .parent()

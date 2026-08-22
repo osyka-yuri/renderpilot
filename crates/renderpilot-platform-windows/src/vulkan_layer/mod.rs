@@ -8,8 +8,10 @@
 //! our install, and we can update theirs.
 
 /// Vulkan loader implicit-layer registry key (relative to a hive root).
+#[cfg(windows)]
 const IMPLICIT_LAYERS_KEY: &str = r"Software\Khronos\Vulkan\ImplicitLayers";
 /// 32-bit view of the same key on 64-bit Windows.
+#[cfg(windows)]
 const IMPLICIT_LAYERS_KEY_WOW64: &str = r"Software\Wow6432Node\Khronos\Vulkan\ImplicitLayers";
 
 /// Layer name in the manifest (matches ReShade's official layer name).
@@ -28,22 +30,37 @@ mod install;
 mod manifest;
 mod paths;
 mod pe;
+mod planner;
 mod registry;
 mod types;
 mod util;
 
-pub use apps_ini::{register_app, unregister_app};
+pub use apps_ini::{
+    AppListChange, AppListPlan, AppListPlanError, parse_app_list, plan_register_app,
+    plan_unregister_app, read_app_list, read_app_list_bytes, register_app, unregister_app,
+};
 pub use detection::detect_report;
 pub use install::{LayerInstallError, install, uninstall};
 pub use paths::reshade_common_dir;
-pub use registry::{LayerRegistry, WindowsLayerRegistry};
+#[cfg(windows)]
+pub use planner::observe_standard_shared_vulkan_layer;
+pub use planner::{
+    AppUnregisterOutcome, DirectoryEntryKind, DirectoryEntryObservation, DirectoryMutation,
+    DirectoryObservation, FileMutation, FileObservation, LayerPlanOperation, LayerPlannerError,
+    RegistryMutation, SharedVulkanLayerObservation, SharedVulkanLayerPlan, active_registry_value,
+    canonical_manifest_bytes, observe_shared_vulkan_layer, plan_install_and_register, plan_refresh,
+    plan_register_app_only, plan_settings_remove, plan_unregister_app_only, unregister_app_outcome,
+};
+#[cfg(windows)]
+pub use registry::WindowsLayerRegistry;
+pub use registry::{LayerRegistry, RegistryValueState};
 pub use types::{
     LayerRegistryEntry, RegistryHive, VulkanLayerArchitecture, VulkanLayerDiagnostic,
     VulkanLayerFacts, VulkanLayerReport, VulkanLayerState, VulkanLoaderVisibility,
 };
 
 #[cfg(test)]
-pub(crate) use apps_ini::{read_app_list, write_app_list};
+pub(crate) use apps_ini::write_app_list;
 #[cfg(test)]
 pub(crate) use detection::detect;
 #[cfg(test)]

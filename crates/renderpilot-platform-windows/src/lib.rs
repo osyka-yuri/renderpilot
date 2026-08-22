@@ -16,7 +16,6 @@ mod install_identity;
 mod manual_folder;
 mod path_normalize;
 mod steam_appmanifest;
-#[cfg(windows)]
 pub mod vulkan_layer;
 
 pub use developer_mode::{DeveloperModeStatus, developer_mode_status};
