@@ -97,6 +97,7 @@ pub mod record;
 pub(crate) mod records;
 pub mod renodx;
 pub(crate) mod reshade;
+pub(crate) mod shared_vulkan_mutation;
 pub(crate) mod tool;
 pub(crate) mod tracking;
 pub mod update;

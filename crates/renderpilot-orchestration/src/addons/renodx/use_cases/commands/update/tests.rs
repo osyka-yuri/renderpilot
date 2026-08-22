@@ -11,7 +11,6 @@ use super::commit::authorize_update_commit;
 use super::prepare::prepare_update_artifacts;
 use super::snapshot::{UpdateSnapshot, ensure_update_snapshot_matches};
 use crate::addons::reshade::types::ReshadeChannel;
-use crate::game_mutation_lock;
 use crate::{Context, ServiceError};
 
 fn record() -> InstalledAddon {
@@ -67,7 +66,7 @@ async fn assert_update_barrier_rejects(
     safety: crate::GameMutationSafetyPermits,
     expected: fn(&ServiceError) -> bool,
 ) {
-    let guards = game_mutation_lock::enter_mutation_boundary_async(
+    let guards = crate::mutation_boundary::enter_mutation_boundary_async(
         &fixture.context,
         &fixture.game_id,
         false,
@@ -75,7 +74,7 @@ async fn assert_update_barrier_rejects(
     .await
     .expect("game boundary");
     let mut commit_called = false;
-    let error = authorize_update_commit(&fixture.context, guards, &safety, None, |_| {
+    let error = authorize_update_commit(&fixture.context, guards, &safety, |_| {
         commit_called = true;
         Ok(())
     })

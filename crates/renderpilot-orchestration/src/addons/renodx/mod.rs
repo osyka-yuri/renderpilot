@@ -20,6 +20,7 @@ pub mod dto;
 mod errors;
 mod fetch;
 mod game_context;
+pub(crate) mod game_participants;
 pub(crate) mod install;
 pub mod manifest_store;
 pub(crate) mod matcher;

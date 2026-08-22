@@ -5,7 +5,6 @@ use renderpilot_domain::{AddonKind, GameId};
 use crate::addons::progress::emit_tool_finalizing;
 use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::reshade::types::ReshadeSourceCatalog;
-use crate::game_mutation_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -55,7 +54,7 @@ pub async fn update(request: UpdateRequest<'_>) -> Result<(), ServiceError> {
     // Phase 1: snapshot under the per-game lock.
     let snapshot = {
         let _guard =
-            game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+            crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
         resolve_update_snapshot(context, manifest, reshade_sources, game_id)?
     };
 
@@ -76,7 +75,7 @@ pub async fn update(request: UpdateRequest<'_>) -> Result<(), ServiceError> {
     // Phase 3: re-lock, revalidate, shared Vulkan (if any), apply.
     // Peer exclusivity is not re-checked here: one installed-addon row per game
     // plus our own record already blocks foreign tools for the duration of prepare.
-    let guards = game_mutation_lock::enter_mutation_boundary_async(
+    let guards = crate::mutation_boundary::enter_mutation_boundary_async(
         context,
         game_id,
         shared_update.is_some(),
@@ -94,14 +93,26 @@ pub async fn update(request: UpdateRequest<'_>) -> Result<(), ServiceError> {
         &replacement_paths,
         host_install_path.as_deref(),
     )?;
-    authorize_update_commit(context, guards, &safety, shared_update, |guard| {
-        commit::apply_update(commit::UpdateCommit {
+    match shared_update {
+        Some(shared_update) => commit::authorize_combined_update(commit::CombinedUpdateRequest {
             context,
-            guard,
+            guards,
+            safety: &safety,
+            shared_update,
             artifacts: prepared,
             current,
             targets,
             game_id,
-        })
-    })
+        }),
+        None => authorize_update_commit(context, guards, &safety, |guard| {
+            commit::apply_update(commit::UpdateCommit {
+                context,
+                guard,
+                artifacts: prepared,
+                current,
+                targets,
+                game_id,
+            })
+        }),
+    }
 }

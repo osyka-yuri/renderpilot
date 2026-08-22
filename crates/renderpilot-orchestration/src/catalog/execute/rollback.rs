@@ -10,7 +10,7 @@ pub fn rollback_component(
     game_id: &GameId,
     component_id: &ComponentId,
 ) -> Result<RollbackResult, ServiceError> {
-    let guard = crate::game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
+    let guard = crate::mutation_boundary::enter_game_mutation_boundary(context, game_id)?;
     rollback_component_locked(context, &guard, game_id, component_id)
 }
 
@@ -164,7 +164,7 @@ pub fn build_rollback_plan(
     game_id: &GameId,
     component_id: &ComponentId,
 ) -> Result<RollbackPlan, ServiceError> {
-    let guard = crate::game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
+    let guard = crate::mutation_boundary::enter_game_mutation_boundary(context, game_id)?;
     build_rollback_plan_locked(context, &guard, game_id, component_id)
 }
 

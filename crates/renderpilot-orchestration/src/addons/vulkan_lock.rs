@@ -47,3 +47,16 @@ pub(crate) fn try_shared_vulkan_lock() -> Option<SharedVulkanMutationGuard> {
         .ok()?;
     Some(SharedVulkanMutationGuard { _guard: guard })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_lock_is_process_local_and_non_blocking_probe_is_one_shot() {
+        let first = blocking_shared_vulkan_lock();
+        assert!(try_shared_vulkan_lock().is_none());
+        drop(first);
+        assert!(try_shared_vulkan_lock().is_some());
+    }
+}

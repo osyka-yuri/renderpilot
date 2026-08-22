@@ -10,6 +10,7 @@ use crate::addons::reshade::split_install::{InstallRoots, PayloadRollback, run_s
 use super::super::errors;
 use super::PreparedInstall;
 use super::ops::{addon_op, combined_ops, host_ops, ini_op_for_game};
+use crate::addons::renodx::game_participants::{self, GameParticipantPlan};
 use crate::addons::reshade::host_policy;
 use crate::addons::reshade::scan as reshade;
 use crate::addons::reshade::update::host_binary_source;
@@ -166,4 +167,27 @@ pub(super) fn build_vulkan_plan(
         kind: AddonKind::RenoDx,
         ops,
     })
+}
+
+/// Plans the exact touched game files for a combined Vulkan mutation.
+///
+/// This is deliberately separate from the generic engine executor: the shared
+/// transaction must capture exact before/after bytes before it writes either
+/// participant, while ordinary game-only installs retain the engine's baseline
+/// sequential behavior.
+pub(crate) fn build_vulkan_game_participants(
+    prepared: &PreparedInstall,
+    game_dir: &Path,
+) -> Result<GameParticipantPlan, ServiceError> {
+    let plan = build_vulkan_plan(prepared, game_dir)?;
+    game_participants::build(game_dir, &plan)
+}
+
+/// Maps the exact Vulkan game participant receipt to the normal RenoDX record.
+pub(crate) fn build_vulkan_record(
+    prepared: &PreparedInstall,
+    game_dir: &Path,
+    participants: &GameParticipantPlan,
+) -> Result<InstalledAddon, ServiceError> {
+    build_record(prepared, game_dir, false, &[], participants.receipt())
 }

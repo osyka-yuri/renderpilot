@@ -21,6 +21,54 @@ pub struct PreparedReShadeUpdate {
     download: crate::addons::reshade::fetch::Download,
 }
 
+pub(crate) struct PreparedSharedVulkanUpdate {
+    pub(crate) layer_dir: std::path::PathBuf,
+    pub(crate) plan: renderpilot_platform_windows::vulkan_layer::SharedVulkanLayerPlan,
+    pub(crate) shared_record: renderpilot_domain::SharedArtifactRecord,
+    pub(crate) changed: bool,
+}
+
+impl PreparedSharedVulkanUpdate {
+    /// Applies this final, lock-derived plan through the durable coordinator.
+    pub(crate) fn commit(self, context: &Context) -> Result<UpdateStatus, ServiceError> {
+        let Self {
+            layer_dir,
+            plan,
+            shared_record,
+            changed,
+        } = self;
+        let composed = crate::addons::shared_vulkan_mutation::compose(None, Some(plan))?;
+        let roots = crate::addons::shared_vulkan_mutation::TrustedRoots::shared_only(&layer_dir)?;
+        let registry = crate::addons::renodx::platform::vulkan::native_registry()
+            .ok_or_else(errors::vulkan_unsupported_platform)?;
+        let mutation_id = ulid::Ulid::generate().to_string();
+        let identity = crate::addons::shared_vulkan_mutation::MutationIdentity::new(
+            &mutation_id,
+            crate::addons::shared_vulkan_mutation::ScopeSpec::shared_only(),
+            "renodx_shared_vulkan_refresh",
+        );
+        let physical = crate::addons::shared_vulkan_mutation::PhysicalParticipants::new(
+            roots,
+            composed,
+            Some(registry),
+        );
+        let projection = crate::addons::shared_vulkan_mutation::CatalogProjection::new(
+            renderpilot_storage_sqlite::SharedArtifactMutation::Upsert(&shared_record),
+        );
+        crate::addons::shared_vulkan_mutation::execute(
+            crate::addons::shared_vulkan_mutation::Request::new(
+                context, identity, physical, projection,
+            ),
+        )?;
+
+        Ok(if changed {
+            UpdateStatus::Available
+        } else {
+            UpdateStatus::Current
+        })
+    }
+}
+
 impl PreparedReShadeUpdate {
     /// Downloads and validates a ReShade payload without mutating shared state.
     pub async fn prepare(
@@ -35,7 +83,10 @@ impl PreparedReShadeUpdate {
 
     /// Applies the prepared payload. The caller must invoke this only from an
     /// authority commit closure that holds the shared Vulkan guard.
-    pub fn commit(self, context: &Context) -> Result<UpdateStatus, ServiceError> {
+    pub(crate) fn plan_locked(
+        &self,
+        context: &Context,
+    ) -> Result<PreparedSharedVulkanUpdate, ServiceError> {
         let report = vulkan::layer_report();
         match layer_mutation_gate(&report) {
             LayerMutationGate::ExternalReadOnly => {
@@ -68,21 +119,31 @@ impl PreparedReShadeUpdate {
         );
         let changed = needs_layer_write || verdict.status != UpdateStatus::Current;
 
-        if changed {
-            vulkan::install_layer(&self.download.bytes)?;
-        }
-
-        vulkan::record_downloaded_layer(
-            context.storage(),
-            &self.source,
-            &self.download,
-            renderpilot_domain::SharedArtifactOrigin::RenderPilotCreated,
-        )?;
-
-        Ok(if changed {
-            UpdateStatus::Available
-        } else {
-            UpdateStatus::Current
+        let layer_dir = vulkan::layer_dir().ok_or_else(errors::vulkan_unsupported_platform)?;
+        let registry = crate::addons::renodx::platform::vulkan::native_registry()
+            .ok_or_else(errors::vulkan_unsupported_platform)?;
+        let observation = renderpilot_platform_windows::vulkan_layer::observe_shared_vulkan_layer(
+            registry, &layer_dir,
+        )
+        .map_err(|error| {
+            errors::failed(format!("failed to inspect shared Vulkan layer: {error}"))
+        })?;
+        let plan = renderpilot_platform_windows::vulkan_layer::plan_refresh(
+            observation,
+            &self.download.bytes,
+        )
+        .map_err(|error| errors::failed(error.to_string()))?;
+        let shared_record =
+            crate::addons::renodx::platform::vulkan::shared_artifact::downloaded_record(
+                &layer_dir,
+                &self.source,
+                &self.download,
+            )?;
+        Ok(PreparedSharedVulkanUpdate {
+            layer_dir,
+            plan,
+            shared_record,
+            changed,
         })
     }
 }

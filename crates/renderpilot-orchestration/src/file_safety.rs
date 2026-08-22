@@ -261,8 +261,8 @@ impl FileSafetyAuthority {
         commit: impl FnOnce() -> Result<T, ServiceError>,
     ) -> Result<T, ServiceError> {
         require_shared_vulkan_feature(feature)?;
-        self.validate_shared_vulkan_permit(guard, permit)?;
-        commit()
+        let current = self.issue_shared_vulkan_assessment()?;
+        authorize_shared_vulkan_token(guard, permit, &current.context_token, commit)
     }
 
     /// Validates both scopes under the canonical combined lock set before one
@@ -271,7 +271,7 @@ impl FileSafetyAuthority {
         &self,
         context: &Context,
         feature: &str,
-        guards: &crate::game_mutation_lock::GameSharedMutationGuards,
+        guards: &crate::mutation_boundary::GameSharedMutationGuards,
         permits: &GameMutationSafetyPermits,
         commit: impl FnOnce() -> Result<T, ServiceError>,
     ) -> Result<T, ServiceError> {
@@ -322,21 +322,38 @@ impl FileSafetyAuthority {
         permit: &SharedVulkanSafetyPermit,
     ) -> Result<(), ServiceError> {
         let current = self.issue_shared_vulkan_assessment()?;
-        let current_token = parse_token(&current.context_token)
-            .map_err(|_| ServiceError::safety_context_stale(SafetyScope::SharedVulkan))?;
-        if permit.scope_hash != current_token.scope_hash {
-            return Err(ServiceError::safety_context_scope_mismatch(
-                SafetyScope::SharedVulkan,
-                SafetyScope::Unknown,
-            ));
-        }
-        if permit.observation_hash != current_token.observation_hash {
-            return Err(ServiceError::safety_context_stale(
-                SafetyScope::SharedVulkan,
-            ));
-        }
-        Ok(())
+        validate_shared_vulkan_token(permit, &current.context_token)
     }
+}
+
+fn validate_shared_vulkan_token(
+    permit: &SharedVulkanSafetyPermit,
+    current_context_token: &str,
+) -> Result<(), ServiceError> {
+    let current_token = parse_token(current_context_token)
+        .map_err(|_| ServiceError::safety_context_stale(SafetyScope::SharedVulkan))?;
+    if permit.scope_hash != current_token.scope_hash {
+        return Err(ServiceError::safety_context_scope_mismatch(
+            SafetyScope::SharedVulkan,
+            SafetyScope::Unknown,
+        ));
+    }
+    if permit.observation_hash != current_token.observation_hash {
+        return Err(ServiceError::safety_context_stale(
+            SafetyScope::SharedVulkan,
+        ));
+    }
+    Ok(())
+}
+
+fn authorize_shared_vulkan_token<T>(
+    _guard: &crate::addons::vulkan_lock::SharedVulkanMutationGuard,
+    permit: &SharedVulkanSafetyPermit,
+    current_context_token: &str,
+    commit: impl FnOnce() -> Result<T, ServiceError>,
+) -> Result<T, ServiceError> {
+    validate_shared_vulkan_token(permit, current_context_token)?;
+    commit()
 }
 
 /// Issues a fresh assessment for one catalog game.
@@ -440,55 +457,82 @@ fn game_context_token(
 
 fn shared_vulkan_context_token() -> Result<String, ServiceError> {
     let report = crate::addons::renodx::vulkan::layer_report();
-    let mut payload = format!(
-        "observation=shared_vulkan\ndetection={:?}\narchitecture={:?}\nvisibility={:?}\nversion={}",
-        report.layer_detection,
-        report.layer_facts.architecture,
-        report.layer_facts.loader_visibility,
-        report.layer_facts.version.as_deref().unwrap_or(""),
-    );
+    let registry = crate::addons::renodx::platform::vulkan::native_registry().ok_or_else(|| {
+        ServiceError::invalid_input("RenoDX for Vulkan games is only supported on Windows")
+    })?;
+    let layer_dir =
+        crate::addons::renodx::platform::vulkan::program_data::layer_dir().ok_or_else(|| {
+            ServiceError::DetectionFailed(
+                "could not observe the shared Vulkan safety context: \
+                 the standard ReShade ProgramData directory is unavailable"
+                    .to_owned(),
+            )
+        })?;
+    let observation = renderpilot_platform_windows::vulkan_layer::observe_shared_vulkan_layer(
+        registry, &layer_dir,
+    )
+    .map_err(|error| {
+        ServiceError::DetectionFailed(format!(
+            "could not observe the shared Vulkan safety context: {error}"
+        ))
+    })?;
+    Ok(shared_vulkan_context_token_from(&report, &observation))
+}
 
-    for (label, path) in [
-        ("manifest", report.layer_facts.manifest_path.as_deref()),
-        ("dll", report.layer_facts.dll_path.as_deref()),
+/// Builds a shared-resource token from the already acquired report and exact
+/// platform observation. This function is deliberately pure: it does not
+/// inspect paths, files, registry values, or environment state.
+fn shared_vulkan_context_token_from(
+    report: &crate::addons::renodx::dto::vulkan::VulkanLayerReport,
+    observation: &renderpilot_platform_windows::vulkan_layer::SharedVulkanLayerObservation,
+) -> String {
+    let mut payload = format!(
+        "observation=shared_vulkan\ndetection={}\narchitecture={}\nvisibility={}",
+        shared_detection_id(report.layer_detection),
+        shared_architecture_id(report.layer_facts.architecture),
+        shared_visibility_id(report.layer_facts.loader_visibility),
+    );
+    let version = report.layer_facts.version.as_deref().unwrap_or("");
+    payload.push_str(&format!(
+        "\nversion_length={}\nversion_hash={}",
+        version.len(),
+        opaque_token(version.as_bytes())
+    ));
+
+    for (label, file) in [
+        ("dll", &observation.dll),
+        ("manifest", &observation.manifest),
+        ("apps_ini", &observation.apps),
     ] {
         payload.push_str(&format!(
-            "\n{label}_path={}",
-            path.map(canonical_identity).unwrap_or_default()
-        ));
-        payload.push_str(&format!(
             "\n{label}_observation={}",
-            path.map(observe_shared_file)
-                .unwrap_or_else(|| "absent".to_owned())
+            file_observation_token(file)
         ));
     }
-
-    // The public Vulkan report intentionally omits the app-registration file,
-    // but shared-layer mutations also rewrite it when a game is registered or
-    // removed. Include its content in the opaque observation without exposing
-    // the path or app list on the wire.
-    if let Some(common_dir) = renderpilot_platform_windows::vulkan_layer::reshade_common_dir() {
-        let apps_ini = common_dir.join("ReShadeApps.ini");
-        payload.push_str(&format!(
-            "\napps_ini_observation={}",
-            observe_shared_file(&apps_ini)
-        ));
-    }
+    payload.push_str(&format!(
+        "\nregistry_observation={}",
+        registry_observation_token(&observation.registry)
+    ));
+    payload.push_str(&format!(
+        "\ndirectory_observation={}",
+        directory_observation_token(&observation.directory)
+    ));
 
     let mut diagnostics = report
         .diagnostic_reasons
         .iter()
-        .map(|diagnostic| format!("{diagnostic:?}"))
+        .copied()
+        .map(shared_diagnostic_id)
         .collect::<Vec<_>>();
     diagnostics.sort_unstable();
     payload.push_str(&format!("\ndiagnostics={}", diagnostics.join(";")));
 
-    let scope_hash = shared_vulkan_scope_hash();
-    Ok(framed_token(
+    let scope_hash = shared_vulkan_scope_hash(&observation.layer_dir);
+    framed_token(
         SafetyTokenNamespace::SharedVulkan,
         &scope_hash,
         &opaque_token(payload.as_bytes()),
-    ))
+    )
 }
 
 fn game_scope_hash(game_id: &GameId, install_root: &Path) -> String {
@@ -502,20 +546,166 @@ fn game_scope_hash(game_id: &GameId, install_root: &Path) -> String {
     )
 }
 
-fn shared_vulkan_scope_hash() -> String {
-    let resource_root = renderpilot_platform_windows::vulkan_layer::reshade_common_dir()
-        .map(|path| canonical_identity(&path))
-        .unwrap_or_else(|| "unsupported".to_owned());
+fn shared_vulkan_scope_hash(resource_root: &Path) -> String {
     opaque_token(
-        format!("{SAFETY_TOKEN_VERSION}\nscope=shared_vulkan\nroot={resource_root}").as_bytes(),
+        format!(
+            "{SAFETY_TOKEN_VERSION}\nscope=shared_vulkan\nroot={}",
+            lexical_identity(resource_root)
+        )
+        .as_bytes(),
     )
 }
 
-fn observe_shared_file(path: &Path) -> String {
-    match renderpilot_detection::sha256_file(path) {
-        Ok(hash) => format!("present:{hash}"),
-        Err(_) if path.exists() => "unreadable".to_owned(),
-        Err(_) => "absent".to_owned(),
+fn file_observation_token(
+    observation: &renderpilot_platform_windows::vulkan_layer::FileObservation,
+) -> String {
+    match observation {
+        renderpilot_platform_windows::vulkan_layer::FileObservation::Absent => "absent".to_owned(),
+        renderpilot_platform_windows::vulkan_layer::FileObservation::Present(bytes) => {
+            format!(
+                "present:length={}:hash={}",
+                bytes.len(),
+                opaque_token(bytes)
+            )
+        }
+    }
+}
+
+fn registry_observation_token(
+    observation: &renderpilot_platform_windows::vulkan_layer::RegistryValueState,
+) -> String {
+    match observation {
+        renderpilot_platform_windows::vulkan_layer::RegistryValueState::Absent => {
+            "absent".to_owned()
+        }
+        renderpilot_platform_windows::vulkan_layer::RegistryValueState::Present {
+            value_type,
+            raw_bytes,
+        } => format!(
+            "present:value_type={value_type}:length={}:hash={}",
+            raw_bytes.len(),
+            opaque_token(raw_bytes)
+        ),
+    }
+}
+
+fn directory_observation_token(
+    observation: &renderpilot_platform_windows::vulkan_layer::DirectoryObservation,
+) -> String {
+    let mut entries = observation.entries.iter().collect::<Vec<_>>();
+    entries.sort_unstable_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| left.kind.cmp(&right.kind))
+    });
+    let mut entries_digest = Sha256::new();
+    for entry in entries {
+        let name = path_identity_bytes(&entry.name);
+        entries_digest.update((name.len() as u64).to_le_bytes());
+        entries_digest.update(name);
+        entries_digest.update([directory_entry_kind_tag(entry.kind)]);
+    }
+    format!(
+        "exists={};entries_hash={}",
+        observation.exists,
+        hex::encode(entries_digest.finalize())
+    )
+}
+
+fn lexical_identity(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+#[cfg(windows)]
+fn path_identity_bytes(path: &Path) -> Vec<u8> {
+    use std::os::windows::ffi::OsStrExt;
+
+    path.as_os_str()
+        .encode_wide()
+        .flat_map(u16::to_le_bytes)
+        .collect()
+}
+
+#[cfg(unix)]
+fn path_identity_bytes(path: &Path) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+
+    path.as_os_str().as_bytes().to_vec()
+}
+
+#[cfg(not(any(windows, unix)))]
+fn path_identity_bytes(path: &Path) -> Vec<u8> {
+    path.to_string_lossy().as_bytes().to_vec()
+}
+
+const fn directory_entry_kind_tag(
+    kind: renderpilot_platform_windows::vulkan_layer::DirectoryEntryKind,
+) -> u8 {
+    match kind {
+        renderpilot_platform_windows::vulkan_layer::DirectoryEntryKind::File => 0,
+        renderpilot_platform_windows::vulkan_layer::DirectoryEntryKind::Directory => 1,
+        renderpilot_platform_windows::vulkan_layer::DirectoryEntryKind::Symlink => 2,
+        renderpilot_platform_windows::vulkan_layer::DirectoryEntryKind::Other => 3,
+    }
+}
+
+const fn shared_detection_id(
+    detection: crate::addons::renodx::dto::vulkan::VulkanLayerDetection,
+) -> &'static str {
+    use crate::addons::renodx::dto::vulkan::VulkanLayerDetection;
+    match detection {
+        VulkanLayerDetection::NotInstalled => "not_installed",
+        VulkanLayerDetection::Installed => "installed",
+        VulkanLayerDetection::InstalledDisabled => "installed_disabled",
+        VulkanLayerDetection::ExternalReadOnly => "external_read_only",
+        VulkanLayerDetection::Conflict => "conflict",
+        VulkanLayerDetection::Unsupported => "unsupported",
+    }
+}
+
+const fn shared_architecture_id(
+    architecture: crate::addons::renodx::dto::vulkan::VulkanLayerArchitecture,
+) -> &'static str {
+    use crate::addons::renodx::dto::vulkan::VulkanLayerArchitecture;
+    match architecture {
+        VulkanLayerArchitecture::X64 => "x64",
+        VulkanLayerArchitecture::X86 => "x86",
+        VulkanLayerArchitecture::Unknown => "unknown",
+    }
+}
+
+const fn shared_visibility_id(
+    visibility: crate::addons::renodx::dto::vulkan::VulkanLoaderVisibility,
+) -> &'static str {
+    use crate::addons::renodx::dto::vulkan::VulkanLoaderVisibility;
+    match visibility {
+        VulkanLoaderVisibility::Normal => "normal",
+        VulkanLoaderVisibility::HkcuNotVisibleWhenElevated => "hkcu_not_visible_when_elevated",
+        VulkanLoaderVisibility::Ambiguous => "ambiguous",
+    }
+}
+
+const fn shared_diagnostic_id(
+    diagnostic: crate::addons::renodx::dto::vulkan::LayerDiagnosticReason,
+) -> &'static str {
+    use crate::addons::renodx::dto::vulkan::LayerDiagnosticReason;
+    match diagnostic {
+        LayerDiagnosticReason::ExternalLayerDetected => "external_layer_detected",
+        LayerDiagnosticReason::DuplicateLayerManifest => "duplicate_layer_manifest",
+        LayerDiagnosticReason::AmbiguousLoaderVisibility => "ambiguous_loader_visibility",
+        LayerDiagnosticReason::MissingLayerDll => "missing_layer_dll",
+        LayerDiagnosticReason::UnreadableDll => "unreadable_dll",
+        LayerDiagnosticReason::MissingManifest => "missing_manifest",
+        LayerDiagnosticReason::RegistryMissing => "registry_missing",
+        LayerDiagnosticReason::RegistryDisabled => "registry_disabled",
+        LayerDiagnosticReason::UnsupportedArchitecture => "unsupported_architecture",
+        LayerDiagnosticReason::HkcuNotVisibleWhenElevated => "hkcu_not_visible_when_elevated",
+        LayerDiagnosticReason::ManifestMalformed => "manifest_malformed",
+        LayerDiagnosticReason::RegistryScopeNotWritable => "registry_scope_not_writable",
+        LayerDiagnosticReason::PermissionDenied => "permission_denied",
+        LayerDiagnosticReason::BackendValidationFailed => "backend_validation_failed",
+        LayerDiagnosticReason::HashMismatch => "hash_mismatch",
+        LayerDiagnosticReason::DbOnlyFallback => "db_only_fallback",
     }
 }
 
@@ -630,6 +820,7 @@ mod tests {
         GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
     };
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::tempdir;
 
     #[test]
@@ -750,12 +941,10 @@ mod tests {
     fn game_to_global_scope_mismatch_is_rejected_during_permit_construction() {
         let game_id = GameId::new("manual:game-global").expect("id");
         let authority = FileSafetyAuthority::new();
-        let shared = authority
-            .issue_shared_vulkan_assessment()
-            .expect("shared assessment");
+        let shared_token = test_shared_vulkan_context_token();
 
         let error = authority
-            .game_permit(game_id.clone(), Some(&shared.context_token))
+            .game_permit(game_id.clone(), Some(&shared_token))
             .expect_err("shared token cannot construct a game permit");
 
         assert_eq!(
@@ -926,11 +1115,10 @@ mod tests {
                 .expect("game permit"),
             shared_vulkan: None,
         };
-        let guards = crate::game_mutation_lock::enter_game_shared_mutation_boundary_async(
-            &context, &game_id,
-        )
-        .await
-        .expect("combined guards");
+        let guards =
+            crate::mutation_boundary::enter_game_shared_mutation_boundary_async(&context, &game_id)
+                .await
+                .expect("combined guards");
 
         let error = authority
             .authorize_game_shared_commit(
@@ -950,6 +1138,7 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[tokio::test]
     async fn combined_commit_rejects_stale_shared_permit_before_entering_commit() {
         let database = tempdir().expect("database root");
@@ -975,11 +1164,10 @@ mod tests {
                 .expect("game permit"),
             shared_vulkan: Some(shared_permit),
         };
-        let guards = crate::game_mutation_lock::enter_game_shared_mutation_boundary_async(
-            &context, &game_id,
-        )
-        .await
-        .expect("combined guards");
+        let guards =
+            crate::mutation_boundary::enter_game_shared_mutation_boundary_async(&context, &game_id)
+                .await
+                .expect("combined guards");
 
         let error = authority
             .authorize_game_shared_commit(
@@ -997,6 +1185,168 @@ mod tests {
                 scope: SafetyScope::SharedVulkan,
             }
         );
+    }
+
+    #[test]
+    fn shared_token_binds_registry_raw_bytes_and_type() {
+        let report = shared_report();
+        let dword_one = shared_observation(
+            renderpilot_platform_windows::vulkan_layer::RegistryValueState::Present {
+                value_type: 4,
+                raw_bytes: vec![1, 0, 0, 0],
+            },
+        );
+        let dword_two = shared_observation(
+            renderpilot_platform_windows::vulkan_layer::RegistryValueState::Present {
+                value_type: 4,
+                raw_bytes: vec![2, 0, 0, 0],
+            },
+        );
+        let binary_one = shared_observation(
+            renderpilot_platform_windows::vulkan_layer::RegistryValueState::Present {
+                value_type: 3,
+                raw_bytes: vec![1, 0, 0, 0],
+            },
+        );
+
+        let first = shared_vulkan_context_token_from(&report, &dword_one);
+        assert_ne!(
+            first,
+            shared_vulkan_context_token_from(&report, &dword_two),
+            "the raw registry value is part of the safety observation"
+        );
+        assert_ne!(
+            first,
+            shared_vulkan_context_token_from(&report, &binary_one),
+            "registry type is part of the safety observation"
+        );
+    }
+
+    #[test]
+    fn shared_token_binds_registry_absence_and_exact_file_participants() {
+        let report = shared_report();
+        let absent = shared_observation(
+            renderpilot_platform_windows::vulkan_layer::RegistryValueState::Absent,
+        );
+        let present = shared_observation(
+            renderpilot_platform_windows::vulkan_layer::RegistryValueState::Present {
+                value_type: 4,
+                raw_bytes: vec![0, 0, 0, 0],
+            },
+        );
+
+        assert_ne!(
+            shared_vulkan_context_token_from(&report, &absent),
+            shared_vulkan_context_token_from(&report, &present),
+            "registry absence and presence are distinct states"
+        );
+
+        let mut changed_apps = present.clone();
+        changed_apps.apps = renderpilot_platform_windows::vulkan_layer::FileObservation::Present(
+            b"Apps=C:\\Games\\other.exe\n".to_vec(),
+        );
+        assert_ne!(
+            shared_vulkan_context_token_from(&report, &present),
+            shared_vulkan_context_token_from(&report, &changed_apps),
+            "the exact app-list bytes are part of the safety observation"
+        );
+    }
+
+    #[test]
+    fn stale_shared_permit_never_enters_commit_closure() {
+        let report = shared_report();
+        let first = shared_vulkan_context_token_from(
+            &report,
+            &shared_observation(
+                renderpilot_platform_windows::vulkan_layer::RegistryValueState::Absent,
+            ),
+        );
+        let current = shared_vulkan_context_token_from(
+            &report,
+            &shared_observation(
+                renderpilot_platform_windows::vulkan_layer::RegistryValueState::Present {
+                    value_type: 4,
+                    raw_bytes: vec![0, 0, 0, 0],
+                },
+            ),
+        );
+        let permit = FileSafetyAuthority::new()
+            .shared_vulkan_permit(Some(&first))
+            .expect("well-formed permit");
+        let guard = crate::addons::vulkan_lock::blocking_shared_vulkan_lock();
+        let mut entered = false;
+
+        let error = authorize_shared_vulkan_token(&guard, &permit, &current, || {
+            entered = true;
+            Ok(())
+        })
+        .expect_err("changed shared observation must stale the permit");
+
+        assert_eq!(
+            error,
+            ServiceError::SafetyContextStale {
+                scope: SafetyScope::SharedVulkan,
+            }
+        );
+        assert!(
+            !entered,
+            "stale permits must be rejected before the closure"
+        );
+    }
+
+    fn shared_report() -> crate::addons::renodx::dto::vulkan::VulkanLayerReport {
+        use crate::addons::renodx::dto::vulkan::{
+            VulkanLayerActions, VulkanLayerArchitecture, VulkanLayerDetection, VulkanLayerFacts,
+            VulkanLayerReport, VulkanLoaderVisibility,
+        };
+
+        VulkanLayerReport {
+            layer_detection: VulkanLayerDetection::Installed,
+            layer_facts: VulkanLayerFacts {
+                manifest_path: None,
+                dll_path: None,
+                version: Some("test-version".to_owned()),
+                architecture: VulkanLayerArchitecture::X64,
+                loader_visibility: VulkanLoaderVisibility::Normal,
+            },
+            diagnostic_reasons: Vec::new(),
+            actions: VulkanLayerActions {
+                install: None,
+                update: None,
+                switch_channel: None,
+                remove: None,
+                resolve_conflict: None,
+            },
+        }
+    }
+
+    fn shared_observation(
+        registry: renderpilot_platform_windows::vulkan_layer::RegistryValueState,
+    ) -> renderpilot_platform_windows::vulkan_layer::SharedVulkanLayerObservation {
+        use renderpilot_platform_windows::vulkan_layer::{
+            DirectoryObservation, FileObservation, SharedVulkanLayerObservation,
+        };
+
+        SharedVulkanLayerObservation {
+            layer_dir: PathBuf::from(r"C:\ProgramData\ReShade"),
+            directory: DirectoryObservation {
+                exists: true,
+                entries: Vec::new(),
+            },
+            dll: FileObservation::Present(b"dll".to_vec()),
+            manifest: FileObservation::Present(b"manifest".to_vec()),
+            apps: FileObservation::Present(b"Apps=C:\\Games\\one.exe\n".to_vec()),
+            registry,
+        }
+    }
+
+    fn test_shared_vulkan_context_token() -> String {
+        shared_vulkan_context_token_from(
+            &shared_report(),
+            &shared_observation(
+                renderpilot_platform_windows::vulkan_layer::RegistryValueState::Absent,
+            ),
+        )
     }
 
     fn seed_game(context: &Context, game_id: &GameId, root: &Path) {

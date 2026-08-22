@@ -62,7 +62,7 @@ pub async fn install_dlss_fix(
 ) -> Result<RenoDxInstallState, ServiceError> {
     let snapshot = {
         let _guard =
-            game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+            crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
         resolve_snapshot(context, game_id, true)?
     };
     match snapshot.binding.state {
@@ -74,7 +74,8 @@ pub async fn install_dlss_fix(
             ) =>
         {
             let _guard =
-                game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+                crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id)
+                    .await?;
             let current = resolve_snapshot(context, game_id, true)?;
             ensure_snapshot_matches(&snapshot, &current)?;
             return crate::FileSafetyAuthority::new().authorize_game_commit(
@@ -100,7 +101,8 @@ pub async fn install_dlss_fix(
 
     let arch = snapshot.binding.arch.ok_or_else(invalid_binding)?;
     let download = fetch::fetch_dlss_fix(arch, progress).await?;
-    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let guard =
+        crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
     let current = resolve_snapshot(context, game_id, true)?;
     ensure_snapshot_matches(&snapshot, &current)?;
     if current.binding.state != DlssFixBindingState::None {
@@ -149,7 +151,7 @@ pub async fn update_dlss_fix(
 ) -> Result<RenoDxInstallState, ServiceError> {
     let snapshot = {
         let _guard =
-            game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+            crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
         resolve_snapshot(context, game_id, false)?
     };
     match snapshot.binding.state {
@@ -166,7 +168,8 @@ pub async fn update_dlss_fix(
             ) =>
         {
             let _guard =
-                game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+                crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id)
+                    .await?;
             let current = resolve_snapshot(context, game_id, false)?;
             ensure_snapshot_matches(&snapshot, &current)?;
             return crate::FileSafetyAuthority::new().authorize_game_commit(
@@ -184,7 +187,8 @@ pub async fn update_dlss_fix(
 
     let arch = snapshot.binding.arch.ok_or_else(invalid_binding)?;
     let download = fetch::fetch_dlss_fix(arch, progress).await?;
-    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let guard =
+        crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
     let current = resolve_snapshot(context, game_id, false)?;
     ensure_snapshot_matches(&snapshot, &current)?;
     if current.binding.state == DlssFixBindingState::Invalid {
@@ -247,7 +251,7 @@ pub fn uninstall_dlss_fix(
     context: &Context,
     game_id: &GameId,
 ) -> Result<RenoDxInstallState, ServiceError> {
-    let guard = game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
+    let guard = crate::mutation_boundary::enter_game_mutation_boundary(context, game_id)?;
     let snapshot = resolve_snapshot(context, game_id, false)?;
     if snapshot.binding.state == DlssFixBindingState::Invalid {
         return Err(invalid_binding());

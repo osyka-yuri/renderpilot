@@ -3,8 +3,8 @@
 //! Proxy host switches use the same 3-phase contract as RenoDX update: snapshot
 //! under the game lock, network fetch unlocked, revalidate + durable apply under
 //! lock. Same-channel metadata heal stays lock-only (no network). Shared Vulkan
-//! channel switches delegate to the shared-layer command outside the per-game
-//! durable file transaction.
+//! channel switches publish the shared files and game-owned catalog projection
+//! through one combined durable transaction.
 
 use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{AddonKind, GameId, InstalledAddonHostKind, RenoDxInstallState};
@@ -22,7 +22,6 @@ use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::reshade::fetch::fetch_reshade_from_source;
 use crate::addons::reshade::types::{ReshadeChannel, ReshadeSourceCatalog};
 use crate::addons::reshade::update::host_binary_source;
-use crate::game_mutation_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -74,7 +73,8 @@ pub async fn switch_reshade_channel(
     // Phase 1: resolve under the per-game lock. A same-channel metadata heal
     // has no unlocked prepare phase, so it crosses the safety barrier while
     // this guard is still held.
-    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let guard =
+        crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
     let phase1 =
         resolve_channel_switch_phase1(context, manifest, reshade_sources, game_id, target_channel)?;
 
@@ -98,9 +98,10 @@ pub async fn switch_reshade_channel(
                 progress,
             )
             .await?;
-            let guards =
-                game_mutation_lock::enter_game_shared_mutation_boundary_async(context, game_id)
-                    .await?;
+            let guards = crate::mutation_boundary::enter_game_shared_mutation_boundary_async(
+                context, game_id,
+            )
+            .await?;
             let current = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
                 .ok_or_else(errors::not_installed)?;
             if current != record
@@ -111,15 +112,68 @@ pub async fn switch_reshade_channel(
             {
                 return Err(errors::state_changed_retry_update());
             }
+            let updated = current.with_reshade_channel(target_channel.as_str());
+            let shared = prepared.plan_locked(context)?;
+            if shared.plan.is_noop() {
+                return crate::FileSafetyAuthority::new().authorize_game_commit(
+                    context,
+                    crate::addons::mutation_features::RENODX_SWITCH_RESHADE_CHANNEL,
+                    guards.game(),
+                    safety.game(),
+                    || {
+                        context.storage().upsert_installed_addon(&updated)?;
+                        Ok(tracking::install_state_from_record(&updated))
+                    },
+                );
+            }
             crate::FileSafetyAuthority::new().authorize_game_shared_commit(
                 context,
                 crate::addons::mutation_features::RENODX_SWITCH_RESHADE_CHANNEL,
                 &guards,
                 &safety,
                 || {
-                    prepared.commit(context)?;
-                    let updated = current.with_reshade_channel(target_channel.as_str());
-                    context.storage().upsert_installed_addon(&updated)?;
+                    let crate::addons::renodx::use_cases::commands::update_reshade::PreparedSharedVulkanUpdate {
+                        layer_dir,
+                        plan,
+                        shared_record,
+                        changed: _,
+                    } = shared;
+                    let composed = crate::addons::shared_vulkan_mutation::compose(None, Some(plan))?;
+                    // Channel switching changes the shared layer and the
+                    // game-owned catalog projection only.  There is no game
+                    // file participant, so do not mint a synthetic game
+                    // capability for an unrelated root.
+                    let roots =
+                        crate::addons::shared_vulkan_mutation::TrustedRoots::game_shared_without_game_files(
+                            &layer_dir,
+                        )?;
+                    let registry = crate::addons::renodx::platform::vulkan::native_registry()
+                        .ok_or_else(errors::vulkan_unsupported_platform)?;
+                    let mutation_id = ulid::Ulid::generate().to_string();
+                    let identity = crate::addons::shared_vulkan_mutation::MutationIdentity::new(
+                        &mutation_id,
+                        crate::addons::shared_vulkan_mutation::ScopeSpec::game_upsert(
+                            game_id, &updated,
+                        ),
+                        crate::addons::mutation_features::RENODX_SWITCH_RESHADE_CHANNEL,
+                    );
+                    let physical =
+                        crate::addons::shared_vulkan_mutation::PhysicalParticipants::new(
+                            roots,
+                            composed,
+                            Some(registry),
+                        );
+                    let projection =
+                        crate::addons::shared_vulkan_mutation::CatalogProjection::new(
+                            renderpilot_storage_sqlite::SharedArtifactMutation::Upsert(
+                                &shared_record,
+                            ),
+                        );
+                    crate::addons::shared_vulkan_mutation::execute(
+                        crate::addons::shared_vulkan_mutation::Request::new(
+                            context, identity, physical, projection,
+                        ),
+                    )?;
                     Ok(tracking::install_state_from_record(&updated))
                 },
             )
@@ -133,7 +187,8 @@ pub async fn switch_reshade_channel(
 
             // Phase 3: re-lock, revalidate, durable apply.
             let guard =
-                game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+                crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id)
+                    .await?;
             let current = match resolve_channel_switch_phase1(
                 context,
                 manifest,

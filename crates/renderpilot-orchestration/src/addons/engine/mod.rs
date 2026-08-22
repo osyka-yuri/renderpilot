@@ -31,6 +31,7 @@ mod sentinel;
 mod types;
 
 pub(crate) use changes::{Action, InstallChanges};
+pub(crate) use helpers::{ensure_bare_file_name, existing_case_insensitive, safe_join};
 pub use rollback::{cleanup_empty_dirs_best_effort, uninstall, uninstall_tree};
 pub use sentinel::{clear_torn_install_marker, is_install_torn};
 pub use types::{

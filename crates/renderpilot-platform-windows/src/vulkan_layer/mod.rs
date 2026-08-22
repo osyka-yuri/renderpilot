@@ -26,6 +26,7 @@ const APPS_KEY: &str = "Apps";
 
 mod apps_ini;
 mod detection;
+#[cfg(test)]
 mod install;
 mod manifest;
 mod paths;
@@ -37,10 +38,9 @@ mod util;
 
 pub use apps_ini::{
     AppListChange, AppListPlan, AppListPlanError, parse_app_list, plan_register_app,
-    plan_unregister_app, read_app_list, read_app_list_bytes, register_app, unregister_app,
+    plan_unregister_app, read_app_list, read_app_list_bytes,
 };
 pub use detection::detect_report;
-pub use install::{LayerInstallError, install, uninstall};
 pub use paths::reshade_common_dir;
 #[cfg(windows)]
 pub use planner::observe_standard_shared_vulkan_layer;
@@ -60,9 +60,11 @@ pub use types::{
 };
 
 #[cfg(test)]
-pub(crate) use apps_ini::write_app_list;
+pub(crate) use apps_ini::{register_app, unregister_app, write_app_list};
 #[cfg(test)]
 pub(crate) use detection::detect;
+#[cfg(test)]
+pub(crate) use install::{LayerInstallError, install, uninstall};
 #[cfg(test)]
 pub(crate) use manifest::{inspect_manifest, layer_manifest_json, resolve_library_path};
 #[cfg(test)]

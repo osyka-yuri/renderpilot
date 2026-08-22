@@ -1,9 +1,10 @@
 //! Safe removal of a user-managed game card from the catalog.
 
-use renderpilot_application::GameRepository;
+use renderpilot_application::{GameRepository, InstalledAddonRepository};
 use renderpilot_domain::{GameId, RootAuthority};
 
 use crate::ServiceError;
+use crate::addons::renodx::use_cases::commands::uninstall as renodx_uninstall;
 
 /// Result of removing one user-managed game from the catalog.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,22 +15,63 @@ pub struct RemoveGameFromCatalogResult {
 
 /// Removes one user-managed card after executing its complete cleanup plan.
 ///
-/// The catalog and game guards cover the complete compound operation. Component
-/// rollback uses the same durable mutation path as an explicit rollback and the
-/// card is deleted only after a fresh inventory proves that no managed state
-/// remains. Successful durable steps are intentionally retained on failure so
-/// retrying continues from the remaining inventory.
+/// The catalog and game/shared guards cover the complete compound operation.
+/// Component rollback uses the same durable mutation path as an explicit
+/// rollback and the card is deleted only after a fresh inventory proves that
+/// no managed state remains. Successful durable steps are intentionally
+/// retained on failure so retrying continues from the remaining inventory.
 pub fn remove_game_from_catalog(
     context: &crate::Context,
     game_id: &GameId,
 ) -> Result<RemoveGameFromCatalogResult, ServiceError> {
     let _catalog_guard = context.catalog_scan_guard();
-    let game_guard = crate::game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
     let storage = context.storage();
     require_removable_game(context, game_id)?;
+    loop {
+        let game_guard = crate::mutation_boundary::enter_game_mutation_boundary(context, game_id)?;
+        let addon = storage.get_installed_addon(game_id)?;
+        let Some(addon) = addon else {
+            return remove_game_with_game_guard(context, game_id, &game_guard);
+        };
+        let is_shared_vulkan =
+            renodx_uninstall::registered_vulkan_exe_for_uninstall(context, game_id, &addon)
+                .is_some();
+        if !is_shared_vulkan {
+            return remove_game_with_game_guard(context, game_id, &game_guard);
+        }
+
+        // Shared Vulkan cleanup must re-enter through game -> shared. The
+        // initial game-only snapshot is only a routing hint; the record is
+        // read again after both guards are held before any mutation begins.
+        drop(game_guard);
+        let guards =
+            crate::mutation_boundary::enter_game_shared_mutation_boundary(context, game_id)?;
+        let current = storage.get_installed_addon(game_id)?;
+        let Some(current) = current else {
+            drop(guards);
+            continue;
+        };
+        let still_shared_vulkan =
+            renodx_uninstall::registered_vulkan_exe_for_uninstall(context, game_id, &current)
+                .is_some();
+        if !still_shared_vulkan {
+            drop(guards);
+            continue;
+        }
+        renodx_uninstall::uninstall_shared_locked(context, &guards, game_id, &current)?;
+        let game_guard = guards.into_game();
+        return remove_game_with_game_guard(context, game_id, &game_guard);
+    }
+}
+
+fn remove_game_with_game_guard(
+    context: &crate::Context,
+    game_id: &GameId,
+    game_guard: &crate::game_mutation_lock::GameMutationGuard,
+) -> Result<RemoveGameFromCatalogResult, ServiceError> {
     let cleanup =
-        super::managed_state::ManagedCleanupPlan::build_locked(context, &game_guard, game_id)?;
-    cleanup.execute_locked(context, &game_guard, game_id)?;
+        super::managed_state::ManagedCleanupPlan::build_locked(context, game_guard, game_id)?;
+    cleanup.execute_locked(context, game_guard, game_id)?;
     let remaining = super::managed_state::inventory(context, game_id)?;
     if !remaining.is_empty() {
         return Err(ServiceError::GameRemovalCleanupFailed {
@@ -39,6 +81,7 @@ pub fn remove_game_from_catalog(
         });
     }
 
+    let storage = context.storage();
     let deleted = storage.delete_game(game_id)?;
     if let Some(catalog_path) = storage.catalog_file_path()? {
         crate::covers::unlink_cover_file_best_effort(

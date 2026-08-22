@@ -29,7 +29,7 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
         executable_confirmation: confirmation_token,
         safety,
     } = request;
-    let guard = crate::game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
+    let guard = crate::mutation_boundary::enter_game_mutation_boundary(context, game_id)?;
     let storage = context.storage();
     let preflight = match crate::catalog::swap::load_swap_preflight(
         context,

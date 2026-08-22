@@ -40,6 +40,7 @@ mod uninstall;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use plans::{build_vulkan_game_participants, build_vulkan_record};
 pub use recovery::recover_torn_install;
 pub(crate) use uninstall::PreparedRenoDxUninstall;
 #[cfg(test)]

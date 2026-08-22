@@ -76,7 +76,6 @@ use crate::addons::luma::game_context::require_game;
 use crate::addons::luma::types::LumaManifest;
 use crate::addons::records;
 use crate::addons::reshade::types::ReshadeSourceCatalog;
-use crate::game_mutation_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -116,7 +115,7 @@ pub async fn update(request: UpdateRequest<'_>) -> Result<(), ServiceError> {
     // Phase 1: snapshot under the per-game lock, then release for network work.
     let (snapshot, had_torn_marker) = {
         let _guard =
-            game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+            crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
         let _game = require_game(context, game_id)?;
         let record = records::record_of_kind(context, game_id, AddonKind::Luma)?
             .ok_or_else(errors::not_installed)?;
@@ -138,7 +137,8 @@ pub async fn update(request: UpdateRequest<'_>) -> Result<(), ServiceError> {
     .await?;
 
     // Phase 3: re-lock, revalidate, apply under sentinel.
-    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let guard =
+        crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
     let record = crate::addons::records::record_of_kind(context, game_id, AddonKind::Luma)?
         .ok_or_else(errors::not_installed)?;
     ensure_record_still_matches_snapshot(&snapshot, &record)?;

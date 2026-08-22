@@ -119,7 +119,7 @@ fn scan_source_impl(
     let mut affected_ids = consolidation_candidates.to_vec();
     affected_ids.push(selected_game.id().clone());
     let _guards =
-        crate::game_mutation_lock::enter_game_mutation_boundaries(inputs.context, affected_ids)?;
+        crate::mutation_boundary::enter_game_mutation_boundaries(inputs.context, affected_ids)?;
     if root_change != ExplicitRootChange::Unchanged {
         ensure_root_change_not_blocked_before_scan(inputs.context, &selected_game)?;
     }

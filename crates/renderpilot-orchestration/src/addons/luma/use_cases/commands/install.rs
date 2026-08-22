@@ -24,7 +24,6 @@ use crate::addons::progress::emit_tool_finalizing;
 use crate::addons::records;
 use crate::addons::reshade::host_policy;
 use crate::addons::reshade::types::ReshadeSourceCatalog;
-use crate::game_mutation_lock;
 use crate::net::ProgressObserver;
 use crate::paths::same_path;
 use crate::{Context, ServiceError};
@@ -107,7 +106,7 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
     // release for multi-artifact network work.
     let (snapshot, plan, dgvoodoo_preparation_kind) = {
         let _guard =
-            game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+            crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
         let prepared = resolve_install_snapshot(context, manifest, game_id)?;
         (
             prepared.snapshot,
@@ -132,7 +131,8 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
     .await?;
 
     // Phase 3: re-lock, revalidate, apply under exclusivity.
-    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let guard =
+        crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
     let revalidated = resolve_install_snapshot(context, manifest, game_id)?;
     ensure_install_snapshot_still_matches(&snapshot, &revalidated.snapshot)?;
     // Adopted ownership paths were frozen during unlocked prepare -- rebuild them
@@ -386,6 +386,9 @@ fn ensure_not_unmanaged(scan_dirs: &[&Path]) -> Result<(), ServiceError> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    use crate::game_mutation_lock;
+
     #[cfg(windows)]
     use super::*;
     #[cfg(windows)]

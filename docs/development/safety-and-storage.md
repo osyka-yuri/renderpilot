@@ -16,6 +16,8 @@ Transport tokens are parsed once at the API-to-orchestration boundary; mutation 
 
 A shared-resource token protects operations that actually mutate the shared Vulkan layer. Combined RenoDX commits acquire the game lock before the shared-layer lock, validate both permits, and only then begin one synchronous commit. The shared observation is independent from a game assessment and is not evidence that the layer is active for every game. The user-facing anti-cheat notice remains game-scoped.
 
+Game and shared-resource mutation locks are process-local. RenderPilot does not coordinate simultaneous writes from independent application instances or catalogs. Completed operations remain interoperable through ReShade's canonical `%ProgramData%\ReShade` layout even if the physical SQLite catalog database is later lost, reset, or deleted; loss of the database grants no cleanup authority over that external layout. This is distinct from explicit removal of a game card, which runs the add-on's uninstall policy: it unregisters that game's app and may remove the canonical DLL, manifest, and registration only when the exact app-list observation proves that it was the last registered app. The durable transaction record exists to recover one interrupted operation, not to turn the external layout into app-owned storage.
+
 ## Baselines and rollback
 
 The first managed change captures the original file as a `.bak` baseline. That first baseline is not replaced by later updates or downgrades. Its SHA-256 identity is checked before restoration. Rollback has its own preflight and enumerates every affected path, including coordinated files such as a D3D12 library and executable state.
@@ -36,7 +38,7 @@ A current portable catalog is validated without a snapshot or mutation. An older
 
 The stable supervisor owns snapshots, journals, receipts, publication, selection, and recovery. The signed App generation owns schema inspection and its schema-specific migration chain. This separation lets a compatible installed supervisor run a later signed generation without granting either process the other's authority. Portable migration never falls back to rebuilding user data. General, nonportable storage may rebuild a malformed schema only after creating and validating an SQLite backup.
 
-The current release contract targets schema v17. Its v16→v17 step replaces weak global scan caches with owner-scoped file observations and typed, fail-closed scan authority. Schema changes must update the shared release contract, migration steps, physical contract, repository behavior, and tests together.
+The current release contract targets schema v18. Its v16→v17 step replaces weak global scan caches with owner-scoped file observations and typed, fail-closed scan authority; its v17→v18 step adds the singleton shared-Vulkan durable mutation fence. Schema changes must update the shared release contract, migration steps, physical contract, repository behavior, and tests together.
 
 The database holds catalog entities, scan state, operation and pending-mutation records, add-on capabilities and installations, cover metadata, and related settings. A scan persists its game, components, and artifacts in one transaction. SQLite runs in WAL mode, and typed rollback baselines use a private storage encoding behind repository contracts. Large library payloads and covers live in filesystem storage rather than SQLite.
 

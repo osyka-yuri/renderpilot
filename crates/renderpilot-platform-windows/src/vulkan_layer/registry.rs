@@ -41,9 +41,11 @@ pub trait LayerRegistry {
             .map(|entry| entry.manifest_path)
             .collect()
     }
-    /// Compatibility operation used by the existing direct installer.
+    /// Test-fixture compatibility for the removed direct installer.
+    #[cfg(test)]
     fn register(&self, manifest_path: &Path) -> io::Result<()>;
-    /// Compatibility operation used by the existing direct uninstaller.
+    /// Test-fixture compatibility for the removed direct uninstaller.
+    #[cfg(test)]
     fn unregister(&self, manifest_path: &Path) -> io::Result<()>;
     /// Whether the registry scope used by the official ReShade layout (HKLM)
     /// can be written by this process. Used by `detect_report` to surface a
@@ -68,7 +70,8 @@ pub trait LayerRegistry {
         ))
     }
 
-    /// Activates the canonical registration for the compatibility installer.
+    /// Test-fixture compatibility for the removed direct installer.
+    #[cfg(test)]
     fn activate_canonical_registration(&self, manifest_path: &Path) -> io::Result<()> {
         let _ = manifest_path;
         Err(io::Error::new(
@@ -163,10 +166,12 @@ impl LayerRegistry for WindowsLayerRegistry {
         entries
     }
 
+    #[cfg(test)]
     fn register(&self, manifest_path: &Path) -> io::Result<()> {
         self.activate_canonical_registration(manifest_path)
     }
 
+    #[cfg(test)]
     fn unregister(&self, manifest_path: &Path) -> io::Result<()> {
         self.restore_canonical_registration(manifest_path, &RegistryValueState::Absent)
     }
@@ -212,6 +217,7 @@ impl LayerRegistry for WindowsLayerRegistry {
         }
     }
 
+    #[cfg(test)]
     fn activate_canonical_registration(&self, manifest_path: &Path) -> io::Result<()> {
         let value_name = validate_canonical_manifest(manifest_path)?;
         let key = open_canonical_key_write()?;

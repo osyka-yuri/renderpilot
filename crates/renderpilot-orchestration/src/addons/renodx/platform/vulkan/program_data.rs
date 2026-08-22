@@ -1,6 +1,4 @@
 /// ProgramData installation paths.
-use crate::ServiceError;
-use crate::addons::renodx::errors;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
@@ -22,72 +20,6 @@ pub(crate) fn standard_paths() -> Option<(PathBuf, PathBuf, PathBuf)> {
     let manifest = dir.join("ReShade64.json");
     let dll = dir.join("ReShade64.dll");
     Some((dir, manifest, dll))
-}
-
-/// Installs the ReShade Vulkan layer DLL.
-///
-/// # Errors
-/// Fails if the platform installation fails or the host is not Windows.
-#[cfg(windows)]
-pub fn install_layer(dll_bytes: &[u8]) -> Result<(), ServiceError> {
-    use renderpilot_platform_windows::vulkan_layer::{
-        self, LayerInstallError, WindowsLayerRegistry,
-    };
-
-    let dir = vulkan_layer::reshade_common_dir()
-        .ok_or_else(|| errors::failed("no ProgramData directory".to_owned()))?;
-    vulkan_layer::install(&WindowsLayerRegistry, &dir, dll_bytes).map_err(|error| {
-        let msg = match error {
-            LayerInstallError::PermissionDenied => {
-                return ServiceError::AccessDenied {
-                    operation: "installing the shared ReShade Vulkan layer".to_owned(),
-                    detail: "the ProgramData layer path is not writable".to_owned(),
-                };
-            }
-            LayerInstallError::RegistryScopeNotWritable => {
-                return ServiceError::AccessDenied {
-                    operation: "registering the shared ReShade Vulkan layer".to_owned(),
-                    detail: "the HKLM loader registry scope is not writable".to_owned(),
-                };
-            }
-            LayerInstallError::Io(error) => {
-                format!("failed to install the shared Vulkan layer: {error}")
-            }
-            LayerInstallError::ManifestSerialization(error) => {
-                format!("failed to build the shared Vulkan layer manifest: {error}")
-            }
-        };
-        errors::failed(msg)
-    })
-}
-
-/// Non-Windows stub.
-#[cfg(not(windows))]
-pub fn install_layer(_dll_bytes: &[u8]) -> Result<(), ServiceError> {
-    Err(errors::vulkan_unsupported_platform())
-}
-
-/// Removes the shared ReShade Vulkan layer unconditionally (regardless of
-/// `ReShadeApps.ini` state). A user maintenance action.
-///
-/// # Errors
-/// Fails if the platform removal fails or the host is not Windows.
-#[cfg(windows)]
-pub fn remove_layer() -> Result<(), ServiceError> {
-    use renderpilot_platform_windows::vulkan_layer::{self, WindowsLayerRegistry};
-
-    let Some(dir) = vulkan_layer::reshade_common_dir() else {
-        return Ok(());
-    };
-    vulkan_layer::uninstall(&WindowsLayerRegistry, &dir).map_err(|error| {
-        errors::failed(format!("failed to remove the shared Vulkan layer: {error}"))
-    })
-}
-
-/// Non-Windows stub.
-#[cfg(not(windows))]
-pub fn remove_layer() -> Result<(), ServiceError> {
-    Err(errors::vulkan_unsupported_platform())
 }
 
 pub(crate) fn current_layer_digest() -> Option<String> {

@@ -1,6 +1,7 @@
 use super::*;
 use crate::addons::renodx::test_support::{self, MACHINE_AMD64, PE32_PLUS_MAGIC};
-use renderpilot_domain::InstalledAddonHostKind;
+use renderpilot_application::SharedArtifactRepository;
+use renderpilot_domain::{InstalledAddonHostKind, SharedArtifactKind};
 use tempfile::tempdir;
 
 fn context() -> (tempfile::TempDir, Context) {
@@ -77,6 +78,55 @@ fn backed_names(record: &InstalledAddon) -> Vec<String> {
         .filter_map(PathRef::file_name)
         .map(str::to_owned)
         .collect()
+}
+
+#[test]
+fn shared_layer_adoption_defers_when_the_local_boundary_is_busy() {
+    let (_dir, context) = context();
+    let _shared = crate::addons::vulkan_lock::blocking_shared_vulkan_lock();
+
+    record_shared_vulkan_layer_best_effort(&context);
+
+    assert!(
+        context
+            .storage()
+            .get_shared_artifact(SharedArtifactKind::RenoDxVulkanLayer)
+            .expect("shared artifact")
+            .is_none()
+    );
+}
+
+#[test]
+fn shared_layer_adoption_defers_without_resolving_a_pending_mutation() {
+    let (_dir, context) = context();
+    context
+        .storage()
+        .try_begin_shared_vulkan_mutation(&renderpilot_storage_sqlite::BeginSharedVulkanMutation {
+            id: "adoption-defers".to_owned(),
+            scope: renderpilot_storage_sqlite::SharedVulkanMutationScope::SharedOnly,
+            game_id: None,
+            feature: "test".to_owned(),
+            initial_manifest_json: "{}".to_owned(),
+            root_capabilities_json: "{}".to_owned(),
+        })
+        .expect("shared reservation");
+
+    record_shared_vulkan_layer_best_effort(&context);
+
+    assert!(
+        context
+            .storage()
+            .get_shared_artifact(SharedArtifactKind::RenoDxVulkanLayer)
+            .expect("shared artifact")
+            .is_none()
+    );
+    assert!(
+        context
+            .storage()
+            .pending_shared_vulkan_mutation()
+            .expect("pending mutation")
+            .is_some()
+    );
 }
 
 #[test]

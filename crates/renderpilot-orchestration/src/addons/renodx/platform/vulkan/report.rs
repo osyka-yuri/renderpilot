@@ -39,12 +39,15 @@ pub fn layer_report() -> VulkanLayerReport {
 
 #[cfg(windows)]
 fn platform_layer_report() -> VulkanLayerReport {
-    use renderpilot_platform_windows::vulkan_layer::{self, WindowsLayerRegistry};
+    use renderpilot_platform_windows::vulkan_layer;
 
     let Some(dir) = vulkan_layer::reshade_common_dir() else {
         return not_installed_report();
     };
-    let report = vulkan_layer::detect_report(&WindowsLayerRegistry, &dir);
+    let Some(registry) = super::native_registry() else {
+        return unsupported_report();
+    };
+    let report = vulkan_layer::detect_report(registry, &dir);
     map_platform_report(report)
 }
 
@@ -234,7 +237,6 @@ fn not_installed_report() -> VulkanLayerReport {
     }
 }
 
-#[cfg(any(test, not(windows)))]
 fn unsupported_report() -> VulkanLayerReport {
     VulkanLayerReport {
         layer_detection: VulkanLayerDetection::Unsupported,

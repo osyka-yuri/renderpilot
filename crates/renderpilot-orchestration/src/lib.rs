@@ -23,6 +23,7 @@ mod game_mutation_lock;
 pub mod libraries;
 /// Coordinated CDN manifest refresh (passive TTL vs forced + cooldown).
 pub mod manifests;
+pub(crate) mod mutation_boundary;
 pub mod net;
 pub mod nvapi;
 mod paths;

@@ -60,6 +60,13 @@ impl MutationScope {
         Self::new([root.to_path_buf()])
     }
 
+    /// Canonical roots carried by this validated authority. Durable
+    /// coordinators may persist a capability projection of these roots, but
+    /// callers cannot construct or mutate the underlying set directly.
+    pub(crate) fn roots(&self) -> &[PathBuf] {
+        &self.roots
+    }
+
     pub(super) fn contains(&self, path: &Path) -> Result<bool, ServiceError> {
         let candidate = super::canonical_candidate(path)?;
         Ok(self

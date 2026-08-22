@@ -52,7 +52,9 @@ mod io;
 mod mtime;
 mod sidecar;
 
-pub(crate) use atomic::{copy_file_atomically, write_file_atomically};
+pub(crate) use atomic::{
+    copy_file_atomically, move_file_no_replace, publish_staged_replace, write_file_atomically,
+};
 pub(crate) use cache::{
     CacheGeneration, CacheObservation, CachePublication, MatchingCurrentPolicy,
     commit_cache_candidate, observe_cache_file,

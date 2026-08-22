@@ -27,31 +27,11 @@ pub(crate) struct GameMutationGuardSet {
     _guards: Vec<GameMutationGuard>,
 }
 
-/// Proof that the caller owns both mutation boundaries used by a combined
-/// per-game/shared-Vulkan commit. Construction fixes the global lock order to
-/// game first, shared Vulkan second.
-pub(crate) struct GameSharedMutationGuards {
-    game: GameMutationGuard,
-    shared_vulkan: crate::addons::vulkan_lock::SharedVulkanMutationGuard,
-}
-
-/// Final guard set chosen from a freshly resolved operation plan.
-pub(crate) enum GameMutationBoundary {
-    Game(GameMutationGuard),
-    GameShared(GameSharedMutationGuards),
-}
-
-impl GameSharedMutationGuards {
-    pub(crate) fn game(&self) -> &GameMutationGuard {
-        &self.game
-    }
-
-    pub(crate) fn shared_vulkan(&self) -> &crate::addons::vulkan_lock::SharedVulkanMutationGuard {
-        &self.shared_vulkan
-    }
-}
-
 impl GameMutationGuardSet {
+    pub(crate) fn from_guards(guards: Vec<GameMutationGuard>) -> Self {
+        Self { _guards: guards }
+    }
+
     /// Protected identities in deterministic lock order.
     #[cfg(test)]
     pub(crate) fn game_ids(&self) -> impl Iterator<Item = &GameId> {
@@ -66,7 +46,7 @@ impl GameMutationGuard {
     }
 }
 
-fn lock_for(game_id: &GameId) -> Arc<AsyncMutex<()>> {
+fn mutex_for(game_id: &GameId) -> Arc<AsyncMutex<()>> {
     let key = game_id.as_str().to_owned();
     let locks = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
     let mut locks = locks.lock().unwrap_or_else(PoisonError::into_inner);
@@ -83,7 +63,7 @@ fn lock_for(game_id: &GameId) -> Arc<AsyncMutex<()>> {
 
 pub(crate) async fn lock(game_id: &GameId) -> GameMutationGuard {
     notify_lock_attempt(game_id);
-    let guard = lock_for(game_id).lock_owned().await;
+    let guard = mutex_for(game_id).lock_owned().await;
     GameMutationGuard {
         game_id: game_id.clone(),
         _guard: guard,
@@ -97,89 +77,10 @@ pub(crate) async fn lock(game_id: &GameId) -> GameMutationGuard {
 /// Panics inside an async runtime. Async callers must use [`lock`].
 pub(crate) fn blocking_lock(game_id: &GameId) -> GameMutationGuard {
     notify_lock_attempt(game_id);
-    let guard = lock_for(game_id).blocking_lock_owned();
+    let guard = mutex_for(game_id).blocking_lock_owned();
     GameMutationGuard {
         game_id: game_id.clone(),
         _guard: guard,
-    }
-}
-
-/// Acquires the per-game mutation boundary and runs recovery preamble
-/// (durable file-mutation recovery + legacy managed-file reconciliation).
-/// Sync twin of [`enter_game_mutation_boundary_async`].
-pub(crate) fn enter_game_mutation_boundary(
-    context: &crate::Context,
-    game_id: &GameId,
-) -> Result<GameMutationGuard, crate::ServiceError> {
-    let guard = blocking_lock(game_id);
-    crate::file_mutation::recover_pending(context, &guard)?;
-    crate::addons::reconcile_legacy_managed_files_locked(context, &guard, game_id)?;
-    Ok(guard)
-}
-
-/// Acquires every requested game boundary in stable id order.
-///
-/// Sorting is the global deadlock-avoidance rule for root correction and
-/// legacy-card consolidation.
-pub(crate) fn enter_game_mutation_boundaries(
-    context: &crate::Context,
-    game_ids: impl IntoIterator<Item = GameId>,
-) -> Result<GameMutationGuardSet, crate::ServiceError> {
-    let mut game_ids = game_ids.into_iter().collect::<Vec<_>>();
-    game_ids.sort();
-    game_ids.dedup();
-
-    let mut guards = Vec::with_capacity(game_ids.len());
-    for game_id in game_ids {
-        guards.push(blocking_lock(&game_id));
-    }
-    for guard in &guards {
-        crate::file_mutation::recover_pending(context, guard)?;
-        crate::addons::reconcile_legacy_managed_files_locked(context, guard, guard.game_id())?;
-    }
-    Ok(GameMutationGuardSet { _guards: guards })
-}
-
-/// Async variant for callers that cannot block (e.g. Tauri async commands).
-pub(crate) async fn enter_game_mutation_boundary_async(
-    context: &crate::Context,
-    game_id: &GameId,
-) -> Result<GameMutationGuard, crate::ServiceError> {
-    let guard = lock(game_id).await;
-    crate::file_mutation::recover_pending(context, &guard)?;
-    crate::addons::reconcile_legacy_managed_files_locked(context, &guard, game_id)?;
-    Ok(guard)
-}
-
-/// Acquires the combined game/shared-Vulkan boundary in the only supported
-/// order and runs the normal per-game recovery preamble before the shared lock.
-pub(crate) async fn enter_game_shared_mutation_boundary_async(
-    context: &crate::Context,
-    game_id: &GameId,
-) -> Result<GameSharedMutationGuards, crate::ServiceError> {
-    let game = enter_game_mutation_boundary_async(context, game_id).await?;
-    let shared_vulkan = crate::addons::vulkan_lock::shared_vulkan_lock().await;
-    Ok(GameSharedMutationGuards {
-        game,
-        shared_vulkan,
-    })
-}
-
-/// Selects the final game-only or combined boundary without duplicating lock
-/// ordering across RenoDX operations.
-pub(crate) async fn enter_mutation_boundary_async(
-    context: &crate::Context,
-    game_id: &GameId,
-    include_shared_vulkan: bool,
-) -> Result<GameMutationBoundary, crate::ServiceError> {
-    if include_shared_vulkan {
-        Ok(GameMutationBoundary::GameShared(
-            enter_game_shared_mutation_boundary_async(context, game_id).await?,
-        ))
-    } else {
-        Ok(GameMutationBoundary::Game(
-            enter_game_mutation_boundary_async(context, game_id).await?,
-        ))
     }
 }
 
@@ -212,7 +113,7 @@ fn notify_lock_attempt(_game_id: &GameId) {}
 /// Test-only: production mutation commands and `load_availability` use [`lock`].
 #[cfg(test)]
 pub(crate) fn try_lock(game_id: &GameId) -> Option<GameMutationGuard> {
-    let guard = lock_for(game_id).try_lock_owned().ok()?;
+    let guard = mutex_for(game_id).try_lock_owned().ok()?;
     Some(GameMutationGuard {
         game_id: game_id.clone(),
         _guard: guard,
@@ -239,8 +140,11 @@ mod tests {
         let context = crate::Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
         let a = GameId::new("game:a").expect("a");
         let b = GameId::new("game:b").expect("b");
-        let set = enter_game_mutation_boundaries(&context, [b.clone(), a.clone(), b.clone()])
-            .expect("locks");
+        let set = crate::mutation_boundary::enter_game_mutation_boundaries(
+            &context,
+            [b.clone(), a.clone(), b.clone()],
+        )
+        .expect("locks");
         assert_eq!(set.game_ids().collect::<Vec<_>>(), vec![&a, &b]);
     }
 
@@ -262,8 +166,8 @@ mod tests {
             std::thread::spawn(move || {
                 let ids = ids.map(|id| GameId::new(id).expect("id"));
                 barrier.wait();
-                let guard =
-                    enter_game_mutation_boundaries(&context, ids).expect("multi-game locks");
+                let guard = crate::mutation_boundary::enter_game_mutation_boundaries(&context, ids)
+                    .expect("multi-game locks");
                 done_tx.send(()).expect("completion");
                 drop(guard);
             });

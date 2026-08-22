@@ -16,6 +16,21 @@ use super::{
     NoReplaceWrite, PreparedNoReplaceWrite, sync_no_replace_temp_file, write_no_replace_temp_bytes,
 };
 
+pub(super) fn move_linux_no_replace(source: &Path, destination: &Path) -> Result<(), ServiceError> {
+    rustix::fs::renameat_with(
+        rustix::fs::CWD,
+        source,
+        rustix::fs::CWD,
+        destination,
+        rustix::fs::RenameFlags::NOREPLACE,
+    )
+    .map_err(|error| {
+        crate::failed(format!(
+            "failed to move durable mutation participant without replacement: {error}"
+        ))
+    })
+}
+
 #[cfg(target_os = "linux")]
 impl PreparedNoReplaceWrite {
     pub(super) fn publish_linux(&mut self) -> Result<NoReplaceWrite, ServiceError> {

@@ -121,6 +121,54 @@ impl PreparedRenoDxUninstall {
             .collect()
     }
 
+    /// Translates the prepared uninstall operations into exact SVAM file
+    /// participants without performing any writes.  The operation order is
+    /// preserved, including the backup sidecar consumed by a restore.
+    pub(crate) fn take_file_intents(
+        &mut self,
+    ) -> Result<Vec<crate::addons::shared_vulkan_mutation::FileIntent>, ServiceError> {
+        let mut intents = Vec::new();
+        for operation in std::mem::take(&mut self.operations) {
+            match operation {
+                RenoDxUninstallOperation::RemoveCreated { path }
+                | RenoDxUninstallOperation::RemoveIni { path } => {
+                    intents.push(crate::addons::shared_vulkan_mutation::FileIntent {
+                        before: read_regular_file(&path)?,
+                        live_path: path,
+                        after: None,
+                    })
+                }
+                RenoDxUninstallOperation::RestoreBackup { live, backup } => {
+                    let before = read_regular_file(&live)?;
+                    let restored = read_regular_file(&backup)?.ok_or_else(|| {
+                        crate::failed(format!(
+                            "RenoDX uninstall backup disappeared before composition: {}",
+                            backup.display()
+                        ))
+                    })?;
+                    intents.push(crate::addons::shared_vulkan_mutation::FileIntent {
+                        live_path: live,
+                        before,
+                        after: Some(restored.clone()),
+                    });
+                    intents.push(crate::addons::shared_vulkan_mutation::FileIntent {
+                        live_path: backup,
+                        before: Some(restored),
+                        after: None,
+                    });
+                }
+                RenoDxUninstallOperation::RewriteIni { path, bytes } => {
+                    intents.push(crate::addons::shared_vulkan_mutation::FileIntent {
+                        before: read_regular_file(&path)?,
+                        live_path: path,
+                        after: Some(bytes),
+                    });
+                }
+            }
+        }
+        Ok(intents)
+    }
+
     /// Removes operations whose exact path set is not under a reachable durable
     /// scope. This keeps an offline/deleted install from blocking metadata
     /// cleanup and ensures apply cannot touch a path the transaction did not
@@ -184,6 +232,23 @@ impl PreparedRenoDxUninstall {
             reshade::remove_reshade_logs_best_effort(base_path);
         }
     }
+}
+
+fn read_regular_file(path: &Path) -> Result<Option<Vec<u8>>, ServiceError> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(crate::failed(error.to_string())),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(crate::failed(format!(
+            "RenoDX uninstall participant is not a regular file: {}",
+            path.display()
+        )));
+    }
+    std::fs::read(path)
+        .map(Some)
+        .map_err(|error| crate::failed(error.to_string()))
 }
 
 /// Compatibility harness for the existing focused install-engine tests. The

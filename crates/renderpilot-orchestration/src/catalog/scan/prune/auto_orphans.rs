@@ -80,7 +80,7 @@ pub(crate) fn prune_auto_scan_orphans(
     }
 
     let _game_guards =
-        crate::game_mutation_lock::enter_game_mutation_boundaries(context, stale_ids.clone())?;
+        crate::mutation_boundary::enter_game_mutation_boundaries(context, stale_ids.clone())?;
 
     // State may have changed while locks were being acquired. Re-read and
     // repeat every eligibility check before entering the delete transaction.

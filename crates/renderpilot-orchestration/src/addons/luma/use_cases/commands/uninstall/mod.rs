@@ -21,7 +21,7 @@ use crate::{Context, ServiceError};
 /// and the user can retry. Kind safety comes from `record_of_kind` before any
 /// mutation.
 pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError> {
-    let guard = game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
+    let guard = crate::mutation_boundary::enter_game_mutation_boundary(context, game_id)?;
     uninstall_locked(context, &guard, game_id)
 }
 

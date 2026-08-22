@@ -315,20 +315,53 @@ fn path_ref(label: &str, path: &Path) -> Result<PathRef, ServiceError> {
 /// Persists an advisory record of the adopted shared Vulkan layer. Best-effort
 /// by design: this is a read-path convenience (see
 /// [`reconcile_orphaned_install_locked`]), so a failure here -- including losing
-/// the race for the shared-layer lock -- only means the next `load_availability`
-/// call re-attempts the same adoption; it never blocks or fails the read the
-/// caller actually asked for.
+/// the race for the shared-layer lock -- leaves only optional provenance absent;
+/// it never blocks or fails the availability read the caller actually asked for.
 fn record_shared_vulkan_layer_best_effort(context: &Context) {
     let Some(_guard) = vulkan_lock::try_shared_vulkan_lock() else {
-        log::warn!("skipped persisting adopted Vulkan layer record: layer lock is busy");
+        log::debug!("deferred adopted Vulkan layer record: local layer boundary is busy");
         return;
     };
-    if let Err(error) = vulkan::record_detected_layer(
-        context.storage(),
+    match context.storage().pending_shared_vulkan_mutation() {
+        Ok(Some(_)) => {
+            log::debug!("deferred adopted Vulkan layer record: durable mutation is pending");
+            return;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            log::warn!(
+                "skipped persisting adopted Vulkan layer record: pending mutation query failed: {error}"
+            );
+            return;
+        }
+    }
+
+    if !matches!(
+        vulkan::layer_report().detection(),
+        crate::addons::renodx::vulkan::VulkanLayerDetection::Installed
+            | crate::addons::renodx::vulkan::VulkanLayerDetection::InstalledDisabled
+    ) {
+        return;
+    }
+    let record = match super::platform::vulkan::shared_artifact::detected_record(
         SharedArtifactOrigin::AdoptedOfficial,
         None,
     ) {
-        log::warn!("failed to persist adopted Vulkan layer record: {error}");
+        Ok(record) => record,
+        Err(error) => {
+            log::warn!("failed to build adopted Vulkan layer record: {error}");
+            return;
+        }
+    };
+    match context
+        .storage()
+        .try_upsert_shared_artifact_if_unreserved(&record)
+    {
+        Ok(renderpilot_storage_sqlite::ConditionalSharedArtifactWrite::Applied) => {}
+        Ok(renderpilot_storage_sqlite::ConditionalSharedArtifactWrite::Deferred) => {
+            log::debug!("deferred adopted Vulkan layer record: reservation won the database race");
+        }
+        Err(error) => log::warn!("failed to persist adopted Vulkan layer record: {error}"),
     }
 }
 

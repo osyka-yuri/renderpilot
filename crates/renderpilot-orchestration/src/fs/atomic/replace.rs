@@ -72,6 +72,43 @@ pub(crate) fn copy_file_atomically(source: &Path, dest: &Path) -> Result<(), Ser
     replace_with_temp_file(&temp_path, dest)
 }
 
+/// Publishes an already synced, same-parent stage file by native atomic
+/// replacement. The stage pathname is consumed only after the rename succeeds.
+pub(crate) fn publish_staged_replace(stage: &Path, destination: &Path) -> Result<(), ServiceError> {
+    replace_with_temp_file(stage, destination)
+}
+
+/// Moves a file without replacing an existing destination. Supported
+/// production hosts use their native no-replace rename, so this works on
+/// filesystems that do not support hard links.
+pub(crate) fn move_file_no_replace(source: &Path, destination: &Path) -> Result<(), ServiceError> {
+    #[cfg(windows)]
+    return super::windows::move_windows_no_replace(source, destination);
+
+    #[cfg(target_os = "linux")]
+    return super::linux::move_linux_no_replace(source, destination);
+
+    #[cfg(all(
+        not(any(windows, target_os = "linux")),
+        feature = "development-host-fallback"
+    ))]
+    {
+        fs::hard_link(source, destination).map_err(|error| {
+            crate::failed(format!(
+                "failed to claim no-replace destination `{}` for `{}`: {error}",
+                destination.display(),
+                source.display()
+            ))
+        })?;
+        fs::remove_file(source).map_err(|error| {
+            crate::failed(format!(
+                "failed to remove source `{}` after no-replace destination claim: {error}",
+                source.display()
+            ))
+        })
+    }
+}
+
 /// Streams `source` into a freshly created (never-clobbered) temp file and flushes
 /// it to durable storage, removing the temp on any failure.
 fn copy_into_temp(source: &Path, temp_path: &Path) -> Result<(), ServiceError> {
@@ -185,4 +222,34 @@ pub(super) fn temporary_file_path(path: &Path, marker: &str) -> PathBuf {
         "{file_name}.{marker}-{}-{timestamp}",
         std::process::id()
     ))
+}
+
+#[cfg(test)]
+mod staged_tomb_tests {
+    use super::*;
+
+    #[test]
+    fn staged_tomb_move_is_no_replace() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let live = directory.path().join("live.bin");
+        let tomb = directory.path().join("tomb.bin");
+        fs::write(&live, b"live").expect("live");
+        fs::write(&tomb, b"foreign").expect("tomb");
+
+        assert!(move_file_no_replace(&live, &tomb).is_err());
+        assert_eq!(fs::read(&live).expect("live remains"), b"live");
+        assert_eq!(fs::read(&tomb).expect("tomb remains"), b"foreign");
+    }
+
+    #[test]
+    fn staged_tomb_move_consumes_the_live_name() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let live = directory.path().join("live.bin");
+        let tomb = directory.path().join("tomb.bin");
+        fs::write(&live, b"live").expect("live");
+
+        move_file_no_replace(&live, &tomb).expect("move");
+        assert!(!live.exists());
+        assert_eq!(fs::read(&tomb).expect("tomb"), b"live");
+    }
 }

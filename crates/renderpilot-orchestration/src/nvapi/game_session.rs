@@ -35,7 +35,7 @@ impl<'context> GameNvapiSession<'context> {
     /// Enters the game mutation boundary, recovers pending work, then captures
     /// the authoritative game projection used by this session.
     pub fn open(context: &'context Context, game_id: GameId) -> Result<Self, ServiceError> {
-        let guard = game_mutation_lock::enter_game_mutation_boundary(context, &game_id)?;
+        let guard = crate::mutation_boundary::enter_game_mutation_boundary(context, &game_id)?;
         let game = load_game_with_context(context, game_id.as_str())?;
         let install_dir = Path::new(game.install_path().as_str());
         let setting_context =

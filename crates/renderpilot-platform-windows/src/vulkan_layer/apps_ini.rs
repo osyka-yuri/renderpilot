@@ -213,7 +213,8 @@ pub fn read_app_list_bytes(layer_dir: &Path) -> io::Result<Option<Vec<u8>>> {
 /// Adds `exe_path` to `ReShadeApps.ini` if not already present.
 /// Creates the file (and directory) if needed. The planner is deliberately
 /// applied only after the complete previous byte sequence has been read.
-pub fn register_app(layer_dir: &Path, exe_path: &Path) -> io::Result<()> {
+#[cfg(test)]
+pub(crate) fn register_app(layer_dir: &Path, exe_path: &Path) -> io::Result<()> {
     let raw = read_app_list_bytes(layer_dir)?;
     let plan = plan_register_app(raw.as_deref(), exe_path).map_err(plan_error_to_io)?;
     apply_plan(layer_dir, plan.change)
@@ -222,7 +223,8 @@ pub fn register_app(layer_dir: &Path, exe_path: &Path) -> io::Result<()> {
 /// Removes `exe_path` from `ReShadeApps.ini` and returns whether the resulting
 /// `Apps=` value is empty. Missing files and files without an `Apps=` key are
 /// left untouched and report `true`.
-pub fn unregister_app(layer_dir: &Path, exe_path: &Path) -> io::Result<bool> {
+#[cfg(test)]
+pub(crate) fn unregister_app(layer_dir: &Path, exe_path: &Path) -> io::Result<bool> {
     let raw = read_app_list_bytes(layer_dir)?;
     let plan = plan_unregister_app(raw.as_deref(), exe_path).map_err(plan_error_to_io)?;
     let is_empty = plan.resulting_list_is_empty();
@@ -230,6 +232,7 @@ pub fn unregister_app(layer_dir: &Path, exe_path: &Path) -> io::Result<bool> {
     Ok(is_empty)
 }
 
+#[cfg(test)]
 fn apply_plan(layer_dir: &Path, change: AppListChange) -> io::Result<()> {
     let AppListChange::Replacement(bytes) = change else {
         return Ok(());
@@ -241,6 +244,7 @@ fn apply_plan(layer_dir: &Path, change: AppListChange) -> io::Result<()> {
 /// Transaction staging and publication remain the responsibility of the
 /// orchestration layer; this helper only preserves the existing compatibility
 /// API's safe non-truncating write behavior.
+#[cfg(test)]
 fn write_app_list_bytes(layer_dir: &Path, bytes: &[u8]) -> io::Result<()> {
     let ini_path = layer_dir.join(APPS_INI_NAME);
     let tmp_path = layer_dir.join(format!("{APPS_INI_NAME}.tmp"));

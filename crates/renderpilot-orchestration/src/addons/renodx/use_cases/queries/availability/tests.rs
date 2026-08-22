@@ -17,6 +17,7 @@ use renderpilot_domain::{ExeGraphicsInfo, GraphicsApi, Launcher};
 use renderpilot_domain::{
     GameIdentity, GameInstallation, GameRuntime, InstalledAddon, PathRef, Platform,
 };
+#[cfg(windows)]
 use tempfile::tempdir;
 
 fn directx_facts() -> MatchFacts {

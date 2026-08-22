@@ -179,8 +179,11 @@ pub async fn renodx_apply_vulkan_layer(
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
-    let safety = renderpilot_orchestration::FileSafetyAuthority::new()
-        .shared_vulkan_permit(shared_vulkan_context_token.as_deref())?;
+    let authority = renderpilot_orchestration::FileSafetyAuthority::new();
+    let safety = shared_vulkan_context_token
+        .as_deref()
+        .map(|token| authority.shared_vulkan_permit(Some(token)))
+        .transpose()?;
     let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     to_json(
         renodx::use_cases::commands::shared_vulkan_layer::apply_vulkan_layer(
@@ -409,17 +412,22 @@ mod tests {
     }
 
     #[test]
-    fn shared_vulkan_apply_rejects_missing_global_context_before_async_prepare() {
+    fn shared_vulkan_apply_rejects_malformed_global_context_before_async_prepare() {
         let dir = tempfile::tempdir().expect("tempdir");
         let context = Context::open_at(dir.path().join("catalog.sqlite")).expect("context");
 
-        let error = poll_ready(renodx_apply_vulkan_layer(&context, "stable", None, None))
-            .expect_err("shared apply must require global context");
+        let error = poll_ready(renodx_apply_vulkan_layer(
+            &context,
+            "stable",
+            Some("not-a-token".to_owned()),
+            None,
+        ))
+        .expect_err("malformed shared context must fail closed");
 
         assert!(matches!(
             error,
             crate::ApiError::Service(ServiceError::SafetyContextMissing {
-                scope: SafetyScope::SharedVulkan
+                scope: SafetyScope::Unknown
             })
         ));
     }

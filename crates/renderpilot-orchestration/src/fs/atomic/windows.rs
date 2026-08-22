@@ -1,4 +1,4 @@
-//! Windows handle-relative no-replace publication.
+//! Windows no-replace moves and handle-relative publication.
 
 use std::{
     ffi::OsString,
@@ -26,7 +26,7 @@ use windows_sys::{
             DELETE, FILE_ATTRIBUTE_REPARSE_POINT, FILE_DISPOSITION_INFO,
             FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
             FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE,
-            FileDispositionInfo, SYNCHRONIZE, SetFileInformationByHandle,
+            FileDispositionInfo, MoveFileExW, SYNCHRONIZE, SetFileInformationByHandle,
         },
         System::{
             IO::IO_STATUS_BLOCK,
@@ -43,6 +43,35 @@ use super::{NoReplaceTestFault, no_replace_test_fault};
 use super::{
     NoReplaceWrite, PreparedNoReplaceWrite, sync_no_replace_temp_file, write_no_replace_temp_bytes,
 };
+
+#[expect(
+    unsafe_code,
+    reason = "calling the Windows filesystem API requires a small audited FFI boundary"
+)]
+pub(super) fn move_windows_no_replace(
+    source: &Path,
+    destination: &Path,
+) -> Result<(), ServiceError> {
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    // SAFETY: both buffers are stable, NUL-terminated UTF-16 paths for the
+    // duration of the call. Zero flags intentionally prohibit replacement.
+    if unsafe { MoveFileExW(source.as_ptr(), destination.as_ptr(), 0) } == 0 {
+        return Err(crate::failed(format!(
+            "failed to move durable mutation participant without replacement: {}",
+            io::Error::last_os_error()
+        )));
+    }
+    Ok(())
+}
 
 #[cfg(windows)]
 #[expect(

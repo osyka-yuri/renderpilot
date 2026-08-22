@@ -41,7 +41,9 @@ mod windows;
 use development::prepare_development_no_replace;
 #[cfg(target_os = "linux")]
 use linux::prepare_linux_no_replace;
-pub(crate) use replace::{copy_file_atomically, write_file_atomically};
+pub(crate) use replace::{
+    copy_file_atomically, move_file_no_replace, publish_staged_replace, write_file_atomically,
+};
 #[cfg(windows)]
 use windows::prepare_windows_no_replace;
 
