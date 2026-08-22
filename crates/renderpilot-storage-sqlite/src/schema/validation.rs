@@ -7,9 +7,9 @@ use crate::error::storage_error;
 
 use super::contract::{CONTRACT_TABLES, REQUIRED_INDEXES, REQUIRED_TABLES, REQUIRED_TRIGGERS};
 use super::ddl::pending_file_mutations;
+use super::ddl::pending_shared_vulkan_mutations;
 use super::ddl::portable_path_tags;
 use super::objects::{SchemaObjectKind, object_exists};
-use super::physical;
 
 pub(super) fn catalog_schema_is_valid(connection: &Connection) -> AppResult<bool> {
     if !validate_violations(connection, true, ConstraintValidation::Probe)?.is_empty() {
@@ -39,129 +39,6 @@ pub(in crate::schema) fn validate_catalog_schema_observational(
         true,
         ConstraintValidation::Observational,
     )
-}
-
-/// Exactly validates the released v15/v16 catalog shape without mutating it.
-///
-/// Those versions predate owner-scoped observations and still contain the weak
-/// file cache and source checkpoint tables. V16 additionally requires the
-/// portable path-tag contract introduced by its own released migration.
-pub(in crate::schema) fn validate_legacy_portable_catalog_observational(
-    connection: &Connection,
-    require_portable_path_tags: bool,
-) -> AppResult<()> {
-    const OBSERVATION_TABLES: &[&str] = &["catalog_scan_authority", "file_observations"];
-    const OBSERVATION_INDEXES: &[&str] = &[
-        "idx_catalog_scan_authority_readiness",
-        "idx_file_observations_game_path",
-        "idx_file_observations_artifact_path",
-    ];
-    const OBSERVATION_TRIGGERS: &[&str] = &["trg_games_create_scan_authority"];
-    const LEGACY_TABLES: &[&str] = &["file_hash_cache", "scan_source_checkpoints"];
-    const LEGACY_INDEXES: &[&str] = &["idx_file_hash_cache_updated_at"];
-    const LEGACY_TRIGGERS: &[&str] = &[
-        "trg_file_hash_cache_touch_updated_at",
-        "trg_scan_source_checkpoints_touch_updated_at",
-    ];
-
-    let mut violations = Vec::new();
-    for &table in REQUIRED_TABLES {
-        if OBSERVATION_TABLES.contains(&table)
-            || (!require_portable_path_tags && table == portable_path_tags::TABLE_NAME)
-        {
-            continue;
-        }
-        collect_missing_object_violations(
-            connection,
-            SchemaObjectKind::Table,
-            &[table],
-            true,
-            &mut violations,
-        )?;
-    }
-    collect_missing_object_violations(
-        connection,
-        SchemaObjectKind::Table,
-        LEGACY_TABLES,
-        true,
-        &mut violations,
-    )?;
-
-    for &index in REQUIRED_INDEXES {
-        if OBSERVATION_INDEXES.contains(&index) {
-            continue;
-        }
-        collect_missing_object_violations(
-            connection,
-            SchemaObjectKind::Index,
-            &[index],
-            true,
-            &mut violations,
-        )?;
-    }
-    collect_missing_object_violations(
-        connection,
-        SchemaObjectKind::Index,
-        LEGACY_INDEXES,
-        true,
-        &mut violations,
-    )?;
-
-    for &trigger in REQUIRED_TRIGGERS {
-        if OBSERVATION_TRIGGERS.contains(&trigger) {
-            continue;
-        }
-        collect_missing_object_violations(
-            connection,
-            SchemaObjectKind::Trigger,
-            &[trigger],
-            true,
-            &mut violations,
-        )?;
-    }
-    collect_missing_object_violations(
-        connection,
-        SchemaObjectKind::Trigger,
-        LEGACY_TRIGGERS,
-        true,
-        &mut violations,
-    )?;
-
-    for &(table, columns) in CONTRACT_TABLES {
-        if OBSERVATION_TABLES.contains(&table)
-            || (!require_portable_path_tags && table == portable_path_tags::TABLE_NAME)
-        {
-            continue;
-        }
-        collect_physical_column_mismatches(connection, table, columns, &mut violations)?;
-    }
-    collect_physical_column_mismatches(
-        connection,
-        "file_hash_cache",
-        physical::legacy_file_hash_cache::ALL,
-        &mut violations,
-    )?;
-    collect_physical_column_mismatches(
-        connection,
-        "scan_source_checkpoints",
-        physical::legacy_scan_source_checkpoints::ALL,
-        &mut violations,
-    )?;
-    violations.extend(constraint_mismatches(
-        connection,
-        ConstraintValidation::Observational,
-    )?);
-
-    if !violations.is_empty() {
-        return Err(storage_error(format!(
-            "sqlite legacy portable catalog validation failed: {}",
-            violations.join(", ")
-        )));
-    }
-    if require_portable_path_tags {
-        portable_path_tags::validate(connection)?;
-    }
-    Ok(())
 }
 
 fn validate_catalog_schema_with_portable_path_tags(
@@ -318,6 +195,18 @@ fn constraint_mismatches(
     if !allows_preparing {
         mismatches.push(
             "pending_file_mutations.state must accept 'preparing' (CHECK constraint)".to_owned(),
+        );
+    }
+    let shared_valid = match constraint_validation {
+        ConstraintValidation::Probe => pending_shared_vulkan_mutations::validates(connection)?,
+        ConstraintValidation::Observational => {
+            pending_shared_vulkan_mutations::validates_observational(connection)?
+        }
+    };
+    if !shared_valid {
+        mismatches.push(
+            "pending_shared_vulkan_mutations must enforce singleton scope, state, and JSON constraints"
+                .to_owned(),
         );
     }
     Ok(mismatches)

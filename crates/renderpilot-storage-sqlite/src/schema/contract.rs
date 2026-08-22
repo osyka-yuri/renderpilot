@@ -16,6 +16,7 @@ pub(super) const REQUIRED_TABLES: &[&str] = &[
     "component_backups",
     "installed_addons",
     "pending_file_mutations",
+    "pending_shared_vulkan_mutations",
     "shared_artifacts",
     "operations",
     "operation_items",
@@ -95,6 +96,10 @@ pub(super) const CONSOLIDATION_POLICIES: &[(&str, &str)] = &[
     ("component_backups", "component_rekey_destination_wins"),
     ("installed_addons", "destination_wins"),
     ("pending_file_mutations", "recover_before_consolidation"),
+    (
+        "pending_shared_vulkan_mutations",
+        "recover_before_consolidation",
+    ),
     ("operations", "reassign_game"),
     ("operation_items", "reassign_game_and_component"),
     ("nvapi_executable_overrides", "destination_wins"),

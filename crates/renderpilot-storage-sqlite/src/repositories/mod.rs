@@ -14,6 +14,7 @@ pub mod nvapi;
 mod observations;
 mod operations;
 mod pending_file_mutations;
+mod pending_shared_vulkan_mutations;
 mod profile_addon_capabilities;
 mod row_mapping;
 mod settings;
@@ -41,6 +42,12 @@ pub use pending_file_mutations::{
     BeginFileMutationPreparation, PendingFileMutationRow, PendingFileMutationState,
     PreparedMutationResolutionFence,
 };
+pub use pending_shared_vulkan_mutations::{
+    BeginSharedVulkanMutation, PendingSharedVulkanMutationRow, PendingSharedVulkanMutationState,
+    PreparedSharedVulkanMutationResolutionFence, SharedArtifactMutation,
+    SharedVulkanMutationCommit, SharedVulkanMutationReservation, SharedVulkanMutationScope,
+};
+pub use shared_artifacts::ConditionalSharedArtifactWrite;
 
 /// SQLite-backed storage adapter implementing application repository ports.
 #[derive(Debug)]

@@ -9,7 +9,8 @@ use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 
 use super::{
     CURRENT_PORTABLE_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION, MINIMUM_PORTABLE_SCHEMA_VERSION,
-    backup, ddl::portable_path_tags, steps, validation, version,
+    backup, ddl::portable_path_tags, released_catalog_contract::ReleasedPortableCatalogContract,
+    steps, validation, version,
 };
 
 const _: () =
@@ -141,8 +142,8 @@ pub fn inspect_portable_catalog_schema(path: &Path) -> Result<u32, PortableCatal
     let source_version = read_version(&connection)?;
     match source_version {
         CURRENT_PORTABLE_SCHEMA_VERSION => validate_current(&connection)?,
-        15 => validate_legacy_precondition(&connection, false)?,
-        16 => validate_legacy_precondition(&connection, true)?,
+        15 => validate_legacy_precondition(&connection, ReleasedPortableCatalogContract::V15)?,
+        16 => validate_legacy_precondition(&connection, ReleasedPortableCatalogContract::V16)?,
         version if supported_upgrade_source(version).is_some() => {
             validate_integrity_precondition(&connection)?;
         }
@@ -154,6 +155,69 @@ pub fn inspect_portable_catalog_schema(path: &Path) -> Result<u32, PortableCatal
         }
     }
     Ok(source_version)
+}
+
+/// Constructs an exact historical catalog through the real released migration
+/// chain. This is test instrumentation for cross-crate portable-runtime
+/// compatibility gates; production schema transitions never call it.
+#[cfg(feature = "test-instrumentation")]
+#[doc(hidden)]
+pub fn create_released_portable_catalog_fixture(
+    path: &Path,
+    target_version: u32,
+) -> Result<(), PortableCatalogSchemaError> {
+    let target_version = i32::try_from(target_version).map_err(|_| {
+        PortableCatalogSchemaError::message(
+            PortableCatalogSchemaErrorKind::UnsupportedVersion,
+            "released catalog fixture target exceeded SQLite version range",
+            "released catalog fixture target is not supported".to_owned(),
+        )
+    })?;
+    if target_version >= CURRENT_SCHEMA_VERSION || !steps::can_upgrade_from(target_version) {
+        return Err(PortableCatalogSchemaError::message(
+            PortableCatalogSchemaErrorKind::UnsupportedVersion,
+            "released catalog fixture requires an exact historical migration target",
+            format!("catalog schema version v{target_version} is not supported"),
+        ));
+    }
+
+    let connection = Connection::open(path).map_err(|error| {
+        PortableCatalogSchemaError::with_source(
+            PortableCatalogSchemaErrorKind::Open,
+            "could not create released catalog fixture",
+            error,
+        )
+    })?;
+    require_empty_fresh_catalog(&connection)?;
+    connection
+        .execute_batch(include_str!("../../tests/fixtures/catalog-v4.sql"))
+        .map_err(|error| {
+            PortableCatalogSchemaError::with_source(
+                PortableCatalogSchemaErrorKind::Ddl,
+                "could not apply released v4 catalog fixture",
+                error,
+            )
+        })?;
+    version::write(&connection, steps::MINIMUM_PORTABLE_SCHEMA_VERSION).map_err(|error| {
+        PortableCatalogSchemaError::with_source(
+            PortableCatalogSchemaErrorKind::Ddl,
+            "could not stamp released v4 catalog fixture",
+            error,
+        )
+    })?;
+    steps::run_to_for_test(
+        &connection,
+        steps::MINIMUM_PORTABLE_SCHEMA_VERSION,
+        target_version,
+    )
+    .map_err(|error| {
+        PortableCatalogSchemaError::with_source(
+            PortableCatalogSchemaErrorKind::Ddl,
+            "could not migrate released catalog fixture to its exact target",
+            error,
+        )
+    })?;
+    validate_integrity_precondition(&connection)
 }
 
 /// Runs one exact portable catalog schema operation against an existing catalog.
@@ -312,8 +376,8 @@ fn upgrade_after_snapshot(
     };
 
     match source_version {
-        15 => validate_legacy_precondition(&connection, false)?,
-        16 => validate_legacy_precondition(&connection, true)?,
+        15 => validate_legacy_precondition(&connection, ReleasedPortableCatalogContract::V15)?,
+        16 => validate_legacy_precondition(&connection, ReleasedPortableCatalogContract::V16)?,
         _ => validate_integrity_precondition(&connection)?,
     }
 
@@ -373,19 +437,26 @@ fn read_version(connection: &Connection) -> Result<u32, PortableCatalogSchemaErr
 
 fn validate_legacy_precondition(
     connection: &Connection,
-    require_portable_path_tags: bool,
+    contract: ReleasedPortableCatalogContract,
 ) -> Result<(), PortableCatalogSchemaError> {
-    validation::validate_legacy_portable_catalog_observational(
-        connection,
-        require_portable_path_tags,
-    )
-    .map_err(|error| {
-        PortableCatalogSchemaError::with_source(
-            PortableCatalogSchemaErrorKind::TransitionPrecondition,
-            "released legacy catalog does not satisfy its exact transition precondition",
-            error,
-        )
-    })?;
+    contract
+        .validate_observational(connection)
+        .map_err(|error| {
+            PortableCatalogSchemaError::with_source(
+                PortableCatalogSchemaErrorKind::TransitionPrecondition,
+                "released portable catalog does not satisfy its exact transition precondition",
+                error,
+            )
+        })?;
+    if contract == ReleasedPortableCatalogContract::V16 {
+        portable_path_tags::validate(connection).map_err(|error| {
+            PortableCatalogSchemaError::with_source(
+                PortableCatalogSchemaErrorKind::TransitionPrecondition,
+                "released v16 portable path tags do not satisfy their exact contract",
+                error,
+            )
+        })?;
+    }
     validation::validate_database_integrity(connection).map_err(|error| {
         PortableCatalogSchemaError::with_source(
             PortableCatalogSchemaErrorKind::TransitionPrecondition,

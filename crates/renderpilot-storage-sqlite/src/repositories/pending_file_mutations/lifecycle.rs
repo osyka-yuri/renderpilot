@@ -24,9 +24,17 @@ impl SqliteStorage {
         begin: &BeginFileMutationPreparation,
     ) -> AppResult<()> {
         validate_begin_preparation(begin)?;
-        self.with_connection(|connection| {
-            let now_ms = sqlite_clock::now_ms(connection)?;
-            connection
+        self.with_immediate_transaction(|transaction| {
+            super::super::pending_shared_vulkan_mutations::assert_no_shared_mutation_id_within_transaction(
+                transaction,
+                &begin.id,
+            )?;
+            super::super::pending_shared_vulkan_mutations::assert_no_shared_mutation_for_game_within_transaction(
+                transaction,
+                &begin.game_id,
+            )?;
+            let now_ms = sqlite_clock::now_ms(transaction)?;
+            transaction
                 .execute(
                     "
                     INSERT INTO pending_file_mutations
@@ -164,9 +172,17 @@ impl SqliteStorage {
     /// caller-selected state; they must use `begin_file_mutation_preparation`.
     #[cfg(test)]
     pub(crate) fn prepare_file_mutation(&self, row: &PendingFileMutationRow) -> AppResult<()> {
-        self.with_connection(|connection| {
-            let now_ms = sqlite_clock::now_ms(connection)?;
-            connection
+        self.with_immediate_transaction(|transaction| {
+            super::super::pending_shared_vulkan_mutations::assert_no_shared_mutation_id_within_transaction(
+                transaction,
+                &row.id,
+            )?;
+            super::super::pending_shared_vulkan_mutations::assert_no_shared_mutation_for_game_within_transaction(
+                transaction,
+                &row.game_id,
+            )?;
+            let now_ms = sqlite_clock::now_ms(transaction)?;
+            transaction
                 .execute(
                     "INSERT INTO pending_file_mutations
                      (id, game_id, feature, subject_id, state, manifest_json, created_at, updated_at)

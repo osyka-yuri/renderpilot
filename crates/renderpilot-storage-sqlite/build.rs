@@ -34,7 +34,7 @@ fn main() {
         contract.supervisor_capability == 3
             && contract.app_session_protocol == "renderpilot-portable-app-session-v2"
             && contract.minimum_portable_schema == 4
-            && contract.current_schema == 17,
+            && contract.current_schema == 18,
         "portable runtime release contract range must be valid"
     );
 

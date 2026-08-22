@@ -7,12 +7,21 @@ use renderpilot_application::{AppResult, SharedArtifactRepository};
 use renderpilot_domain::{
     PathRef, SharedArtifactKind, SharedArtifactOrigin, SharedArtifactRecord, SharedArtifactSource,
 };
-use rusqlite::{OptionalExtension, Row, named_params};
+use rusqlite::{OptionalExtension, Row, Transaction, named_params};
 
 use crate::error::{invalid_row, storage_error};
 use crate::{mapping, sqlite_clock};
 
 use super::SqliteStorage;
+
+/// Result of a non-owning advisory write at the shared-mutation boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConditionalSharedArtifactWrite {
+    /// The advisory row was written.
+    Applied,
+    /// A durable shared mutation owns the singleton, so nothing was written.
+    Deferred,
+}
 
 const UPSERT_SQL: &str = "
     INSERT INTO shared_artifacts
@@ -47,28 +56,7 @@ const GET_SQL: &str = "
 
 impl SharedArtifactRepository for SqliteStorage {
     fn upsert_shared_artifact(&self, record: &SharedArtifactRecord) -> AppResult<()> {
-        self.with_transaction(|transaction| {
-            let now_ms = sqlite_clock::now_ms(transaction)?;
-            transaction
-                .prepare_cached(UPSERT_SQL)
-                .map_err(storage_error)?
-                .execute(named_params! {
-                    ":kind": mapping::enum_to_text(&record.kind())?,
-                    ":install_dir": record.install_dir().as_str(),
-                    ":manifest_path": record.manifest_path().as_str(),
-                    ":dll_path": record.dll_path().as_str(),
-                    ":source_url": record.source_url(),
-                    ":source_etag": record.source_etag(),
-                    ":source_digest": record.source_digest(),
-                    ":source_last_modified": record.source_last_modified(),
-                    ":channel": record.channel(),
-                    ":origin": mapping::enum_to_text(&record.origin())?,
-                    ":created_files": mapping::serialize_json(record.created_files())?,
-                    ":now_ms": now_ms,
-                })
-                .map_err(storage_error)?;
-            Ok(())
-        })
+        self.with_transaction(|transaction| upsert_within_transaction(transaction, record))
     }
 
     fn get_shared_artifact(
@@ -90,16 +78,77 @@ impl SharedArtifactRepository for SqliteStorage {
     }
 
     fn delete_shared_artifact(&self, kind: SharedArtifactKind) -> AppResult<()> {
-        let kind_text = mapping::enum_to_text(&kind)?;
-        self.with_connection(|connection| {
-            connection
-                .prepare_cached("DELETE FROM shared_artifacts WHERE kind = :kind")
-                .map_err(storage_error)?
-                .execute(named_params! { ":kind": kind_text })
+        self.with_transaction(|transaction| delete_within_transaction(transaction, kind))
+    }
+}
+
+impl SqliteStorage {
+    /// Records advisory provenance only when no durable shared mutation owns
+    /// the singleton. The pending check and upsert share one immediate SQLite
+    /// transaction, so a reservation cannot appear between them.
+    pub fn try_upsert_shared_artifact_if_unreserved(
+        &self,
+        record: &SharedArtifactRecord,
+    ) -> AppResult<ConditionalSharedArtifactWrite> {
+        self.with_immediate_transaction(|transaction| {
+            let reserved = transaction
+                .query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM pending_shared_vulkan_mutations
+                         WHERE resource_key = ?1
+                    )",
+                    [super::pending_shared_vulkan_mutations::RESOURCE_KEY],
+                    |row| row.get::<_, bool>(0),
+                )
                 .map_err(storage_error)?;
-            Ok(())
+            if reserved {
+                return Ok(ConditionalSharedArtifactWrite::Deferred);
+            }
+            upsert_within_transaction(transaction, record)?;
+            Ok(ConditionalSharedArtifactWrite::Applied)
         })
     }
+}
+
+/// Reusable transaction-local shared artifact upsert.
+pub(super) fn upsert_within_transaction(
+    transaction: &Transaction<'_>,
+    record: &SharedArtifactRecord,
+) -> AppResult<()> {
+    let now_ms = sqlite_clock::now_ms(transaction)?;
+    transaction
+        .prepare_cached(UPSERT_SQL)
+        .map_err(storage_error)?
+        .execute(named_params! {
+            ":kind": mapping::enum_to_text(&record.kind())?,
+            ":install_dir": record.install_dir().as_str(),
+            ":manifest_path": record.manifest_path().as_str(),
+            ":dll_path": record.dll_path().as_str(),
+            ":source_url": record.source_url(),
+            ":source_etag": record.source_etag(),
+            ":source_digest": record.source_digest(),
+            ":source_last_modified": record.source_last_modified(),
+            ":channel": record.channel(),
+            ":origin": mapping::enum_to_text(&record.origin())?,
+            ":created_files": mapping::serialize_json(record.created_files())?,
+            ":now_ms": now_ms,
+        })
+        .map_err(storage_error)?;
+    Ok(())
+}
+
+/// Reusable transaction-local shared artifact delete.
+pub(super) fn delete_within_transaction(
+    transaction: &Transaction<'_>,
+    kind: SharedArtifactKind,
+) -> AppResult<()> {
+    let kind_text = mapping::enum_to_text(&kind)?;
+    transaction
+        .prepare_cached("DELETE FROM shared_artifacts WHERE kind = :kind")
+        .map_err(storage_error)?
+        .execute(named_params! { ":kind": kind_text })
+        .map_err(storage_error)?;
+    Ok(())
 }
 
 fn row_to_shared_artifact(row: &Row<'_>) -> AppResult<SharedArtifactRecord> {
@@ -271,6 +320,53 @@ mod tests {
             storage
                 .get_shared_artifact(SharedArtifactKind::RenoDxVulkanLayer)
                 .expect("get shared artifact")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn conditional_upsert_applies_without_a_shared_reservation() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        assert_eq!(
+            storage
+                .try_upsert_shared_artifact_if_unreserved(&record())
+                .expect("conditional upsert"),
+            ConditionalSharedArtifactWrite::Applied
+        );
+        assert!(
+            storage
+                .get_shared_artifact(SharedArtifactKind::RenoDxVulkanLayer)
+                .expect("artifact")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn conditional_upsert_defers_while_shared_mutation_is_reserved() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage
+            .try_begin_shared_vulkan_mutation(
+                &super::super::pending_shared_vulkan_mutations::BeginSharedVulkanMutation {
+                    id: "conditional-adoption-fence".to_owned(),
+                    scope: super::super::pending_shared_vulkan_mutations::SharedVulkanMutationScope::SharedOnly,
+                    game_id: None,
+                    feature: "test".to_owned(),
+                    initial_manifest_json: "{}".to_owned(),
+                    root_capabilities_json: "{}".to_owned(),
+                },
+            )
+            .expect("shared reservation");
+
+        assert_eq!(
+            storage
+                .try_upsert_shared_artifact_if_unreserved(&record())
+                .expect("conditional upsert"),
+            ConditionalSharedArtifactWrite::Deferred
+        );
+        assert!(
+            storage
+                .get_shared_artifact(SharedArtifactKind::RenoDxVulkanLayer)
+                .expect("artifact")
                 .is_none()
         );
     }

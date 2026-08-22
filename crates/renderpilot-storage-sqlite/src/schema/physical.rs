@@ -214,6 +214,32 @@ pub mod pending_file_mutations {
     ];
 }
 
+pub mod pending_shared_vulkan_mutations {
+    pub const RESOURCE_KEY: &str = "resource_key";
+    pub const ID: &str = "id";
+    pub const SCOPE: &str = "scope";
+    pub const GAME_ID: &str = "game_id";
+    pub const FEATURE: &str = "feature";
+    pub const STATE: &str = "state";
+    pub const MANIFEST_JSON: &str = "manifest_json";
+    pub const ROOT_CAPABILITIES_JSON: &str = "root_capabilities_json";
+    pub const CREATED_AT: &str = "created_at";
+    pub const UPDATED_AT: &str = "updated_at";
+
+    pub const ALL: &[&str] = &[
+        RESOURCE_KEY,
+        ID,
+        SCOPE,
+        GAME_ID,
+        FEATURE,
+        STATE,
+        MANIFEST_JSON,
+        ROOT_CAPABILITIES_JSON,
+        CREATED_AT,
+        UPDATED_AT,
+    ];
+}
+
 pub mod shared_artifacts {
     pub const KIND: &str = "kind";
     pub const INSTALL_DIR: &str = "install_dir";
@@ -317,36 +343,6 @@ pub mod file_observations {
     ];
 }
 
-/// Released v16 columns retained only for exact, read-only portable migration
-/// admission. Production CURRENT no longer creates this weak cache.
-pub mod legacy_file_hash_cache {
-    pub const PATH: &str = "path";
-    pub const SIZE: &str = "size";
-    pub const MODIFIED_AT: &str = "modified_at";
-    pub const SHA256: &str = "sha256";
-    pub const VERSION: &str = "version";
-    pub const CREATED_AT: &str = "created_at";
-    pub const UPDATED_AT: &str = "updated_at";
-    pub const ALL: &[&str] = &[
-        PATH,
-        SIZE,
-        MODIFIED_AT,
-        SHA256,
-        VERSION,
-        CREATED_AT,
-        UPDATED_AT,
-    ];
-}
-
-/// Released v16 columns retained only for exact, read-only portable migration
-/// admission. Production CURRENT no longer creates scan checkpoints.
-pub mod legacy_scan_source_checkpoints {
-    pub const SOURCE_KEY: &str = "source_key";
-    pub const FINGERPRINT: &str = "fingerprint";
-    pub const UPDATED_AT: &str = "updated_at";
-    pub const ALL: &[&str] = &[SOURCE_KEY, FINGERPRINT, UPDATED_AT];
-}
-
 pub mod nvapi_executable_overrides {
     pub const GAME_ID: &str = "game_id";
     pub const SELECTED_PATH: &str = "selected_path";
@@ -412,6 +408,10 @@ pub const CONTRACT_TABLES: &[(&str, &[&str])] = &[
     ("component_backups", component_backups::ALL),
     ("installed_addons", installed_addons::ALL),
     ("pending_file_mutations", pending_file_mutations::ALL),
+    (
+        "pending_shared_vulkan_mutations",
+        pending_shared_vulkan_mutations::ALL,
+    ),
     ("shared_artifacts", shared_artifacts::ALL),
     ("operations", operations::ALL),
     ("operation_items", operation_items::ALL),

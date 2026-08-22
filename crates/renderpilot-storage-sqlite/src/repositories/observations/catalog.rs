@@ -109,6 +109,33 @@ pub(in super::super) fn readiness_within_transaction(
     readiness_in_connection(transaction, game_id)
 }
 
+pub(in super::super) fn catalog_exists_within_transaction(
+    transaction: &Transaction<'_>,
+    game_id: &GameId,
+) -> AppResult<bool> {
+    let game_exists: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM games WHERE id = ?1)",
+            [game_id.as_str()],
+            |row| row.get(0),
+        )
+        .map_err(storage_error)?;
+    let authority_exists: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM catalog_scan_authority WHERE game_id = ?1)",
+            [game_id.as_str()],
+            |row| row.get(0),
+        )
+        .map_err(storage_error)?;
+    if game_exists != authority_exists {
+        return Err(storage_error(format!(
+            "game {} has incomplete catalog authority",
+            game_id.as_str()
+        )));
+    }
+    Ok(game_exists)
+}
+
 fn readiness_from_row(
     game_id: &GameId,
     (readiness, epoch, reason, token): (String, i64, Option<String>, Option<String>),
@@ -192,6 +219,10 @@ pub(in super::super) fn assert_no_pending_file_mutations_within_transaction(
             game_id.as_str()
         )));
     }
+    super::super::pending_shared_vulkan_mutations::assert_no_shared_mutation_for_game_within_transaction(
+        transaction,
+        game_id,
+    )?;
     Ok(())
 }
 

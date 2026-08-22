@@ -191,7 +191,7 @@ fn apply_backs_up_malformed_stamped_v10_before_post_upgrade_rebuild() {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.contains(".pre-migration-v17.") && name.ends_with(".bak"))
+                .is_some_and(|name| name.contains(".pre-migration-v18.") && name.ends_with(".bak"))
         })
         .collect();
     assert_eq!(
@@ -241,7 +241,7 @@ fn apply_backs_up_file_database_before_v15_and_v16_migrations() {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.contains(".pre-migration-v17.") && name.ends_with(".bak"))
+                .is_some_and(|name| name.contains(".pre-migration-v18.") && name.ends_with(".bak"))
         })
         .collect();
     assert_eq!(backups.len(), 1, "expected one pre-migration backup");

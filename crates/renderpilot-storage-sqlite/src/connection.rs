@@ -8,7 +8,7 @@ use std::{
 };
 
 use renderpilot_application::{AppError, AppResult};
-use rusqlite::{Connection, OpenFlags, Transaction};
+use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
 
 use crate::error::{storage_context, storage_error};
 use crate::repositories::SqliteStorage;
@@ -194,6 +194,35 @@ impl SqliteStorage {
             .commit()
             .map_err(|error| storage_context("failed to commit sqlite transaction", error))?;
 
+        Ok(value)
+    }
+
+    /// Runs one catalog operation behind SQLite's write reservation.
+    ///
+    /// Durable mutation reservation uses this boundary so the singleton
+    /// resource decision and its insert cannot race another writer.
+    pub(crate) fn with_immediate_transaction<T>(
+        &self,
+        operation: impl FnOnce(&Transaction<'_>) -> AppResult<T>,
+    ) -> AppResult<T> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| {
+                storage_context("failed to open immediate sqlite transaction", error)
+            })?;
+
+        let value = match operation(&transaction) {
+            Ok(value) => value,
+            Err(error) => {
+                drop(transaction);
+                return Err(error);
+            }
+        };
+
+        transaction.commit().map_err(|error| {
+            storage_context("failed to commit immediate sqlite transaction", error)
+        })?;
         Ok(value)
     }
 

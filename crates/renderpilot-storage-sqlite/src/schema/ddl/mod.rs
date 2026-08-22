@@ -12,6 +12,7 @@
 pub(super) mod common;
 pub(super) mod observations;
 pub(super) mod pending_file_mutations;
+pub(super) mod pending_shared_vulkan_mutations;
 pub(super) mod portable_path_tags;
 pub(super) mod profile_addon_capabilities;
 pub(super) mod scan_source_checkpoints;
@@ -39,6 +40,7 @@ const CORE_SQL: &str = include_str!("../../../migrations/fragments/core.sql");
 /// Composed CURRENT catalog DDL (idempotent CREATE IF NOT EXISTS).
 pub(super) fn compose_baseline() -> String {
     let pending = pending_file_mutations::baseline_sql();
+    let pending_shared = pending_shared_vulkan_mutations::create_table_sql();
     let shared_table = shared_artifacts::create_table_sql();
     let shared_trigger = shared_artifacts::touch_trigger_sql();
     let profile_capabilities = profile_addon_capabilities::baseline_sql();
@@ -49,6 +51,7 @@ pub(super) fn compose_baseline() -> String {
         BASELINE_HEADER.len()
             + CORE_SQL.len()
             + pending.len()
+            + pending_shared.len()
             + shared_table.len()
             + shared_trigger.len()
             + profile_capabilities.len()
@@ -61,6 +64,8 @@ pub(super) fn compose_baseline() -> String {
     sql.push_str(CORE_SQL);
     sql.push('\n');
     sql.push_str(&pending);
+    sql.push('\n');
+    sql.push_str(&pending_shared);
     sql.push('\n');
     sql.push_str(&shared_table);
     sql.push('\n');

@@ -29,9 +29,12 @@ pub(crate) mod physical;
 pub(crate) mod portable_catalog;
 mod pragmas;
 mod rebuild;
+mod released_catalog_contract;
 mod steps;
 mod validation;
 mod version;
+
+pub(crate) const SHARED_VULKAN_RESOURCE_KEY: &str = "renodx_vulkan_layer";
 
 #[cfg(test)]
 mod portable_catalog_tests;
@@ -63,6 +66,7 @@ use self::version::database_has_user_schema;
 //             rebased by catalog schema migration.
 //   16 → 17: replace weak global scan caches with owner-scoped observations and
 //             typed, fail-closed scan authority.
+//   17 → 18: add the singleton shared-Vulkan durable mutation fence.
 pub(super) fn pragma_column_names(
     connection: &Connection,
     table_name: &str,

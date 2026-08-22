@@ -78,6 +78,11 @@ updater-artifact-verify = ["portable"]
 [dev-dependencies]
 json-patch = "4.2.0"
 
+[target.'cfg(windows)'.dev-dependencies]
+renderpilot-storage-sqlite = { path = "../../../crates/renderpilot-storage-sqlite", features = [
+    "test-instrumentation",
+] }
+
 [lib]
 name = "renderpilot_desktop"
 path = "src/lib.rs"

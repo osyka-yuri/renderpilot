@@ -187,6 +187,51 @@ fn pending_mutation_aborts_the_whole_aggregate() {
 }
 
 #[test]
+fn pending_shared_vulkan_mutation_is_reported_by_its_own_policy() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let destination = game("game:destination", "C:/Games/Example");
+    let source = game("manual:child", "C:/Games/Example/D3D12");
+    storage.upsert_game(&destination).expect("destination");
+    storage.upsert_game(&source).expect("source");
+    storage
+        .connection()
+        .expect("connection")
+        .execute(
+            "INSERT INTO pending_shared_vulkan_mutations (
+                    resource_key, id, scope, game_id, feature, state,
+                    manifest_json, root_capabilities_json
+                ) VALUES (
+                    'renodx_vulkan_layer', 'shared:source', 'game_shared',
+                    'manual:child', 'test', 'prepared', '{}', '{}'
+                )",
+            [],
+        )
+        .expect("pending shared mutation");
+    let plan = ConsolidationPlan {
+        destination_game_id: destination.id().clone(),
+        sources: vec![ConsolidationSource {
+            source_game_id: source.id().clone(),
+            component_rekeys: Vec::new(),
+        }],
+    };
+
+    let conflicts = storage
+        .inspect_consolidation_conflicts(&plan)
+        .expect("conflict preview");
+
+    assert!(
+        conflicts
+            .blocking_tables
+            .contains(&"pending_shared_vulkan_mutations".to_owned())
+    );
+    assert!(
+        !conflicts
+            .blocking_tables
+            .contains(&"pending_file_mutations".to_owned())
+    );
+}
+
+#[test]
 fn ambiguous_managed_baselines_history_addons_and_nvapi_are_blocking() {
     let storage = SqliteStorage::in_memory().expect("storage");
     let destination = game("game:destination", "C:/Games/Example");

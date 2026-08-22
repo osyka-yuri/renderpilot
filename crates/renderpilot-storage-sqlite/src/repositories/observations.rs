@@ -230,7 +230,7 @@ mod test_support;
 mod tests;
 
 pub(super) use catalog::{
-    assert_no_pending_file_mutations_within_transaction,
+    assert_no_pending_file_mutations_within_transaction, catalog_exists_within_transaction,
     invalidate_game_authority_within_transaction, readiness_within_transaction,
     replace_game_observations_within_transaction,
 };

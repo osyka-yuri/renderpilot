@@ -11,6 +11,7 @@ mod v13_to_v14;
 mod v14_to_v15;
 mod v15_to_v16;
 mod v16_to_v17;
+mod v17_to_v18;
 mod v4_to_v8;
 mod v8_to_v9;
 mod v9_to_v10;
@@ -54,6 +55,11 @@ const STEPS: &[(i32, i32, StepFn)] = &[
         v16_to_v17::TARGET_VERSION,
         v16_to_v17::apply,
     ),
+    (
+        v17_to_v18::SOURCE_VERSION,
+        v17_to_v18::TARGET_VERSION,
+        v17_to_v18::apply,
+    ),
 ];
 
 /// Runs every step from the live `user_version` until CURRENT is reached.
@@ -74,6 +80,49 @@ pub(super) fn run_from(connection: &Connection, from: i32) -> AppResult<()> {
             )));
         }
         version = stamped;
+    }
+    Ok(())
+}
+
+/// Runs the real released migration chain to a bounded test target.
+///
+/// Production always uses [`run_from`] through CURRENT.  Tests use this only
+/// to construct an immutable v15/v16 released catalog without applying
+/// CURRENT and then reverse-engineering its objects.
+#[cfg(any(test, feature = "test-instrumentation"))]
+pub(super) fn run_to_for_test(connection: &Connection, from: i32, target: i32) -> AppResult<()> {
+    if target < from || target > super::CURRENT_SCHEMA_VERSION {
+        return Err(storage_error(format!(
+            "invalid bounded migration target {from}→{target}"
+        )));
+    }
+
+    let mut version = from;
+    while version < target {
+        let Some(&(step_from, step_to, apply)) = STEPS.iter().find(|(f, _, _)| *f == version)
+        else {
+            return Err(storage_error(format!(
+                "no catalog migration step from schema version {version}"
+            )));
+        };
+        if step_to > target {
+            return Err(storage_error(format!(
+                "schema version {target} is not an exact released migration target"
+            )));
+        }
+        apply(connection)?;
+        let stamped = version::read(connection)?;
+        if stamped != step_to {
+            return Err(storage_error(format!(
+                "catalog migration step {step_from}→{step_to} left user_version={stamped}"
+            )));
+        }
+        version = stamped;
+    }
+    if version != target {
+        return Err(storage_error(format!(
+            "bounded migration expected schema version {target}, found {version}"
+        )));
     }
     Ok(())
 }

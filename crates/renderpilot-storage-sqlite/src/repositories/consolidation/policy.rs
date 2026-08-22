@@ -72,6 +72,11 @@ pub(in crate::repositories) fn inspect_conflicts(
         {
             blocking.insert("pending_file_mutations".to_owned());
         }
+        if shared_mutation_exists(connection, destination)?
+            || shared_mutation_exists(connection, source_id)?
+        {
+            blocking.insert("pending_shared_vulkan_mutations".to_owned());
+        }
 
         if keyed_rows_differ(
             connection,
@@ -325,6 +330,19 @@ fn keyed_rows_differ(
                 error,
             )
         })
+}
+
+fn shared_mutation_exists(connection: &Connection, game_id: &str) -> AppResult<bool> {
+    connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pending_shared_vulkan_mutations
+                 WHERE scope = 'game_shared' AND game_id = :game_id
+            )",
+            named_params! { ":game_id": game_id },
+            |row| row.get(0),
+        )
+        .map_err(storage_error)
 }
 
 fn operation_component_ids(connection: &Connection, game_id: &str) -> AppResult<Vec<String>> {

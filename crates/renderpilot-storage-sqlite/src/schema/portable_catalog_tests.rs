@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, params};
 
 use crate::{
     PortableCatalogSchemaErrorKind, PortableCatalogSchemaTransition, SqliteStorage,
@@ -24,8 +24,6 @@ use super::{
 
 static NEXT_TEMP_CATALOG: AtomicU64 = AtomicU64::new(0);
 const RELEASED_V4_SCHEMA: &str = include_str!("../../tests/fixtures/catalog-v4.sql");
-const RELEASED_V16_SCAN_SCHEMA: &str =
-    include_str!("../../tests/fixtures/catalog-v16-scan-state.sql");
 
 struct TemporaryCatalog {
     directory: PathBuf,
@@ -176,6 +174,62 @@ fn v16_inspection_validates_released_weak_cache_shape_without_mutating_bytes() {
         before,
         "v16 inspection must be observational"
     );
+}
+
+#[test]
+fn released_schema_digest_rejects_semantic_corruption_without_writing_v15_or_v16() {
+    const CORRUPTIONS: [(&str, &str, &str, &str); 5] = [
+        (
+            "constraint",
+            "games",
+            "CHECK (length(trim(id)) > 0)",
+            "CHECK (length(trim(id)) >= 0)",
+        ),
+        (
+            "column type",
+            "games",
+            "title                      TEXT",
+            "title                      BLOB",
+        ),
+        ("column default", "game_ui_state", "DEFAULT 0", "DEFAULT 1"),
+        (
+            "index definition",
+            "idx_games_updated_at",
+            "ON games(updated_at DESC)",
+            "ON games(created_at DESC)",
+        ),
+        (
+            "trigger body",
+            "trg_games_touch_updated_at",
+            "WHEN NEW.updated_at = OLD.updated_at",
+            "WHEN NEW.updated_at >= OLD.updated_at",
+        ),
+    ];
+
+    for schema_version in [15, 16] {
+        for (label, object, needle, replacement) in CORRUPTIONS {
+            let catalog = TemporaryCatalog::new(&format!("v{schema_version}-{label}"));
+            if schema_version == 15 {
+                prepare_v15_catalog(&catalog.path);
+            } else {
+                prepare_v16_catalog(&catalog.path);
+            }
+            corrupt_schema_sql(&catalog.path, object, needle, replacement);
+            let before = fs::read(&catalog.path).expect("read corrupted catalog before inspection");
+
+            let error = inspect_portable_catalog_schema(&catalog.path)
+                .expect_err("semantic released schema corruption must be rejected");
+            assert_eq!(
+                error.kind(),
+                PortableCatalogSchemaErrorKind::TransitionPrecondition
+            );
+            assert_eq!(
+                fs::read(&catalog.path).expect("read corrupted catalog after inspection"),
+                before,
+                "{schema_version} {label} inspection must remain read-only"
+            );
+        }
+    }
 }
 
 #[test]
@@ -597,24 +651,51 @@ fn prepare_v4_catalog(path: &Path) {
 }
 
 fn prepare_v15_catalog(path: &Path) {
-    prepare_v16_catalog(path);
-    let connection = Connection::open(path).expect("open v16 catalog for v15 fixture");
+    let connection = Connection::open(path).expect("open released v4 catalog");
     connection
-        .execute_batch(&format!("DROP TABLE {};", portable_path_tags::TABLE_NAME))
-        .expect("remove v16-only path-tag table");
-    version::write(&connection, 15).expect("stamp v15 fixture");
+        .execute_batch(RELEASED_V4_SCHEMA)
+        .expect("apply released v4 schema");
+    version::write(&connection, steps::MINIMUM_PORTABLE_SCHEMA_VERSION)
+        .expect("stamp released v4 fixture");
+    steps::run_to_for_test(&connection, 4, 15).expect("migrate released v4 to v15");
 }
 
 fn prepare_v16_catalog(path: &Path) {
-    prepare_current_catalog(path);
-    let connection = Connection::open(path).expect("open current catalog for v16 fixture");
+    let connection = Connection::open(path).expect("open released v4 catalog");
     connection
-        .execute_batch(RELEASED_V16_SCAN_SCHEMA)
-        .expect("restore released v16 scan state");
-    version::write(&connection, 16).expect("stamp v16 fixture");
+        .execute_batch(RELEASED_V4_SCHEMA)
+        .expect("apply released v4 schema");
+    version::write(&connection, steps::MINIMUM_PORTABLE_SCHEMA_VERSION)
+        .expect("stamp released v4 fixture");
+    steps::run_to_for_test(&connection, 4, 16).expect("migrate released v4 to v16");
 }
 
 fn set_version(path: &Path, schema_version: i32) {
     let connection = Connection::open(path).expect("open catalog to set version");
     version::write(&connection, schema_version).expect("set fixture schema version");
+}
+
+fn corrupt_schema_sql(path: &Path, object: &str, needle: &str, replacement: &str) {
+    let connection = Connection::open(path).expect("open catalog to corrupt schema SQL");
+    connection
+        .pragma_update(None, "writable_schema", true)
+        .expect("enable writable_schema for corruption fixture");
+    let changed = connection
+        .execute(
+            "UPDATE sqlite_master
+             SET sql = replace(sql, ?2, ?3)
+             WHERE name = ?1",
+            params![object, needle, replacement],
+        )
+        .expect("corrupt schema SQL");
+    assert_eq!(changed, 1, "corruption fixture must find {object}");
+    let schema_version: i64 = connection
+        .query_row("PRAGMA schema_version", [], |row| row.get(0))
+        .expect("read schema version for corruption fixture");
+    connection
+        .pragma_update(None, "schema_version", schema_version + 1)
+        .expect("invalidate schema cache for corruption fixture");
+    connection
+        .pragma_update(None, "writable_schema", false)
+        .expect("disable writable_schema after corruption fixture");
 }

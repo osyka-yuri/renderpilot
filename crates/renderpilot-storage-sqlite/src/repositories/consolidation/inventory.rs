@@ -37,7 +37,10 @@ pub(in crate::repositories) fn recovery_file_paths(
              UNION ALL SELECT backed_up_files_json FROM installed_addons WHERE game_id = :game_id
              UNION ALL SELECT managed_files_json FROM installed_addons WHERE game_id = :game_id
              UNION ALL SELECT tracked_sources_json FROM installed_addons WHERE game_id = :game_id",
-            "SELECT manifest_json FROM pending_file_mutations WHERE game_id = :game_id",
+            "SELECT manifest_json FROM pending_file_mutations WHERE game_id = :game_id
+             UNION ALL
+             SELECT manifest_json FROM pending_shared_vulkan_mutations
+              WHERE scope = 'game_shared' AND game_id = :game_id",
             "SELECT metadata_json FROM operations
               WHERE game_id = :game_id AND metadata_json IS NOT NULL",
         ] {

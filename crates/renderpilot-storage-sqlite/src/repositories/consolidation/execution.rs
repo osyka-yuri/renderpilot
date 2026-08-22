@@ -131,8 +131,12 @@ fn ensure_no_pending_mutations(
 ) -> AppResult<()> {
     let pending: i64 = transaction
         .query_row(
-            "SELECT COUNT(*) FROM pending_file_mutations
-              WHERE game_id IN (:destination, :source)",
+            "SELECT
+                (SELECT COUNT(*) FROM pending_file_mutations
+                  WHERE game_id IN (:destination, :source))
+              + (SELECT COUNT(*) FROM pending_shared_vulkan_mutations
+                  WHERE scope = 'game_shared'
+                    AND game_id IN (:destination, :source))",
             named_params! {
                 ":destination": destination_game_id,
                 ":source": source_game_id,
@@ -142,7 +146,7 @@ fn ensure_no_pending_mutations(
         .map_err(storage_error)?;
     if pending != 0 {
         return Err(AppError::storage_failed(format!(
-            "cannot consolidate {source_game_id}: {pending} pending file mutation(s) remain after recovery"
+            "cannot consolidate {source_game_id}: {pending} pending mutation(s) remain after recovery"
         )));
     }
     Ok(())

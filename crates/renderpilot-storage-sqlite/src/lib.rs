@@ -15,13 +15,20 @@ pub use repositories::ScanWriteUnit;
 pub use repositories::game_covers::{DeletedGameInfo, GameCoverRecord};
 pub use repositories::game_ui_state::GameUiStateRow;
 pub use repositories::{
-    AuthorityCas, BeginFileMutationPreparation, CatalogReadiness, CatalogReadyProjection,
-    ComponentBaselineMutation, ComponentRekey, ConsolidatedScanWriteReport,
-    ConsolidationConflictSummary, ConsolidationPlan, ConsolidationReport, ConsolidationSource,
-    GameMutationCommit, InstalledAddonMutation, ObservationOwner, PendingFileMutationRow,
-    PendingFileMutationState, PreparedMutationResolutionFence, StoredFileObservation,
+    AuthorityCas, BeginFileMutationPreparation, BeginSharedVulkanMutation, CatalogReadiness,
+    CatalogReadyProjection, ComponentBaselineMutation, ComponentRekey,
+    ConditionalSharedArtifactWrite, ConsolidatedScanWriteReport, ConsolidationConflictSummary,
+    ConsolidationPlan, ConsolidationReport, ConsolidationSource, GameMutationCommit,
+    InstalledAddonMutation, ObservationOwner, PendingFileMutationRow, PendingFileMutationState,
+    PendingSharedVulkanMutationRow, PendingSharedVulkanMutationState,
+    PreparedMutationResolutionFence, PreparedSharedVulkanMutationResolutionFence,
+    SharedArtifactMutation, SharedVulkanMutationCommit, SharedVulkanMutationReservation,
+    SharedVulkanMutationScope, StoredFileObservation,
 };
 pub use repositories::{CompleteScanWriteUnit, ScanWriteReport, SqliteStorage};
+#[cfg(feature = "test-instrumentation")]
+#[doc(hidden)]
+pub use schema::portable_catalog::create_released_portable_catalog_fixture;
 pub use schema::portable_catalog::{
     PortableCatalogSchemaError, PortableCatalogSchemaErrorKind, PortableCatalogSchemaReport,
     PortableCatalogSchemaTransition, inspect_portable_catalog_schema,

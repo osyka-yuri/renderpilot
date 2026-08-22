@@ -11,6 +11,18 @@ use super::contract::{
 use super::physical;
 use super::{CURRENT_SCHEMA_VERSION, apply, ddl};
 
+const RELEASED_V16_SCAN_SCHEMA: &str =
+    include_str!("../../tests/fixtures/catalog-v16-scan-state.sql");
+
+fn restore_released_v16_scan_state(connection: &Connection) {
+    connection
+        .execute_batch(RELEASED_V16_SCAN_SCHEMA)
+        .expect("restore released v16 scan state");
+    connection
+        .pragma_update(None, "user_version", 16)
+        .expect("stamp v16 schema version");
+}
+
 const LEGACY_PENDING_WITHOUT_PREPARING: &str = r#"
 DROP TABLE IF EXISTS pending_file_mutations;
 CREATE TABLE pending_file_mutations (
@@ -112,20 +124,13 @@ END;
 PRAGMA user_version = 14;
 ";
 
-const RELEASED_V16_SCAN_SCHEMA: &str =
-    include_str!("../../tests/fixtures/catalog-v16-scan-state.sql");
-
-fn restore_released_v16_scan_state(connection: &Connection) {
+fn reduce_current_to_v14(connection: &Connection) {
     connection
         .execute_batch(RELEASED_V16_SCAN_SCHEMA)
         .expect("restore released v16 scan state");
     connection
         .pragma_update(None, "user_version", 16)
         .expect("stamp v16 schema version");
-}
-
-fn reduce_current_to_v14(connection: &Connection) {
-    restore_released_v16_scan_state(connection);
     connection
         .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
         .expect("reduce physical schema to v14");
@@ -136,6 +141,7 @@ mod legacy;
 mod schema_contract;
 mod v14;
 mod v16;
+mod v17;
 
 fn seed_v14_migration_aggregate(connection: &Connection) {
     connection
