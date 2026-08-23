@@ -59,7 +59,7 @@ jobs:
         run: rustup show
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@5b4d68e2e660441203ab128a23676f1e4faf1532 # v2.86.3
+        uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
           tool: nextest@0.9.143
           fallback: none
@@ -148,6 +148,17 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Locate pnpm verification cache
+        id: pnpm_verification_cache
+        working-directory: apps/desktop
+        run: echo "path=$(pnpm --silent cache path)/lockfile-verified.jsonl" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm lockfile verification
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm_verification_cache.outputs.path }}
+          key: pnpm-lockfile-verification-${{ runner.os }}-${{ hashFiles('apps/desktop/package.json', 'apps/desktop/pnpm-lock.yaml', 'apps/desktop/pnpm-workspace.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

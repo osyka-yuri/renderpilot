@@ -46,6 +46,20 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
+      - name: Locate pnpm verification cache
+        id: pnpm_verification_cache
+        shell: pwsh
+        working-directory: apps/desktop
+        run: >-
+          "path=$((pnpm --silent cache path))\lockfile-verified.jsonl" |
+          Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache pnpm lockfile verification
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm_verification_cache.outputs.path }}
+          key: pnpm-lockfile-verification-${{ runner.os }}-${{ hashFiles('apps/desktop/package.json', 'apps/desktop/pnpm-lock.yaml', 'apps/desktop/pnpm-workspace.yaml') }}
+
       # Install the Rust toolchain as specified in `rust-toolchain.toml`.
       - name: Install Rust toolchain
         run: rustup show
