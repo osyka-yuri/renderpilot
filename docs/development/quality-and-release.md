@@ -58,15 +58,15 @@ Success reports SHA-256 identities for the raw supervisor, public RPU, and signa
 
 Release publication runs in the dedicated GitHub `release-publication` environment with the workflow token scoped to repository contents. The publisher captures and rechecks the exact tag commit throughout publication and never deletes or repairs a conflicting release, asset, or tag. It does not depend on optional repository release or tag settings.
 
-## v1.9.0 download rollout
+## Stable installer download
 
-Until v1.9.0 is published, the README download action points to `releases/latest`. The v1.9.0 draft gains `RenderPilot-setup.exe` through the workflow. After publication, download both installer names and compare their SHA-256 values. Only after that manual review should the README main action switch to:
+The README main download action uses the stable installer alias created for every release:
 
 ```text
 https://github.com/osyka-yuri/renderpilot/releases/latest/download/RenderPilot-setup.exe
 ```
 
-External link availability can be checked during release review, but network checks are deliberately not required by documentation CI.
+Release review must confirm that the stable alias and versioned installer have identical SHA-256 values. External link availability can also be checked during release review, but network checks are deliberately not required by documentation CI.
 
 ## Sources of truth
 

@@ -3,7 +3,7 @@
   <h1>RenderPilot</h1>
   <p><strong>Keep PC game rendering libraries current, compatible, and reversible from one Windows app.</strong></p>
   <p>RenderPilot finds supported games, shows the rendering components they use, and helps you update, downgrade, or restore them without manually working through game folders.</p>
-  <h3><a href="https://github.com/osyka-yuri/renderpilot/releases/latest">Download for Windows</a></h3>
+  <h3><a href="https://github.com/osyka-yuri/renderpilot/releases/latest/download/RenderPilot-setup.exe">Download for Windows</a></h3>
   <p>
     <a href="https://github.com/osyka-yuri/renderpilot/releases/latest">Portable build</a>
     · <a href="https://github.com/osyka-yuri/renderpilot/releases">All releases</a>

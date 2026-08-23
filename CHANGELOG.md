@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0] - 2026-08-23
+
+### Added
+
+- **Complete update history**: Update notes now include changes from every skipped release instead of showing only the newest version.
+- **Localized Luma guidance for more games**: Added translated setup guidance for Destroy All Humans!, No More Heroes 3, RAD, Solar Ash, and SpongeBob SquarePants: The Cosmic Shake.
+
+### Changed
+
+- **Safer game-file changes**: Game Details now presents one clear multiplayer and anti-cheat notice for file-changing features. RenderPilot refreshes this safety assessment before supported installs, updates, channel changes, and library swaps, and stops if the game state changes before files are modified.
+- **Accessibility and keyboard navigation**: Improved keyboard operation, focus handling, screen-reader announcements, layout reflow at high zoom and in smaller windows, high-contrast presentation, and reduced-motion behavior across navigation, dialogs, filters, launcher ordering, Libraries, and Settings.
+- **Recoverable RenoDX Vulkan changes**: RenoDX now changes shared Vulkan layer files and registration through one recoverable operation, so supported interrupted changes can be restored safely without losing track of the games that use the layer.
+
 ## [1.9.5] - 2026-08-18
 
 ### Fixed
