@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ReleaseNotesInline as Segment } from '../model/release-notes';
+  import type { ReleaseNotesInline as Segment } from '@shared/model';
 
   type Props = {
     segments: Segment[];

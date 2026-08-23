@@ -16,4 +16,31 @@ describe('toOffer', () => {
       expect(toOffer(createHandle({ date })).releaseTimestamp).toBeNull();
     },
   );
+
+  it('maps only releases newer than the installed version into the UI offer', () => {
+    const releaseNotes = toOffer(
+      createHandle({
+        currentVersion: '1.9.0',
+        version: '1.9.2',
+        body: [
+          '## [1.9.2]',
+          '',
+          '- Latest.',
+          '',
+          '## [1.9.1]',
+          '',
+          '- Intermediate.',
+          '',
+          '## [1.9.0]',
+          '',
+          '- Installed.',
+        ].join('\n'),
+      }),
+    ).releaseNotes;
+
+    const serialized = JSON.stringify(releaseNotes);
+    expect(serialized).toContain('Latest.');
+    expect(serialized).toContain('Intermediate.');
+    expect(serialized).not.toContain('Installed.');
+  });
 });

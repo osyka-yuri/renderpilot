@@ -11,6 +11,11 @@ import { deflateRawSync } from 'node:zlib';
 
 import { assembleRpsx1 } from './portable-rpu.mjs';
 import {
+  APP_UPDATE_SESSION_ID_HEX_CHARS,
+  PORTABLE_PROTOCOL_MAX_FRAME_BYTES,
+  UPDATER_MANIFEST_MAX_BYTES,
+} from './release-contract.mjs';
+import {
   createReleaseArtifactSpecs,
   planCreateOnlyAssetUpload,
   validateExactReleaseAssetSet,
@@ -39,7 +44,9 @@ const COMMIT = 'a'.repeat(40);
 const GITHUB_SHA = 'b'.repeat(40);
 const RUN_ID = '123456789';
 const PUBLISHED_AT = '2026-08-05T12:34:56+00:00';
-const CHANGELOG = '## [1.9.0]\n\n- Portable updater support.';
+const RELEASE_NOTES = '## [1.9.0]\n\n- Portable updater support.';
+const UPDATER_CHANGELOG = `${RELEASE_NOTES}\n\n## [1.8.2]\n\n- Earlier fixes.`;
+const FULL_CHANGELOG = `# Changelog\n\n## [Unreleased]\n\n- Future work.\n\n${UPDATER_CHANGELOG}`;
 const INSTALLER_ASSET = `RenderPilot_${VERSION}_x64-setup.exe`;
 const INSTALLER_SIGNATURE_ASSET = `${INSTALLER_ASSET}.sig`;
 const PORTABLE_ASSET = `RenderPilot_${VERSION}_x64-portable.exe`;
@@ -52,9 +59,19 @@ const SCRIPT_PATH = fileURLToPath(new URL('./release-manifest.mjs', import.meta.
 const WORKFLOW_PATH = fileURLToPath(
   new URL('../../../.github/workflows/release.yml', import.meta.url),
 );
+const PROJECT_CHANGELOG_PATH = fileURLToPath(new URL('../../../CHANGELOG.md', import.meta.url));
 const PUBLISH_SCRIPT_PATH = fileURLToPath(new URL('./publish-release-assets.ps1', import.meta.url));
 const GITHUB_CLIENT_PATH = fileURLToPath(new URL('./release-github-client.psm1', import.meta.url));
 const TAURI_CONFIG_PATH = fileURLToPath(new URL('../src-tauri/tauri.conf.json', import.meta.url));
+const PORTABLE_FRAMING_PATH = fileURLToPath(
+  new URL('../src-tauri/src/portable_runtime/app_protocol/framing.rs', import.meta.url),
+);
+const SUPERVISOR_UPDATES_PATH = fileURLToPath(
+  new URL('../src-tauri/src/portable_runtime/supervisor_updates.rs', import.meta.url),
+);
+const APP_UPDATE_COMMAND_PATH = fileURLToPath(
+  new URL('../src-tauri/src/commands/app_update/mod.rs', import.meta.url),
+);
 const execFile = promisify(execFileCallback);
 const TAURI_SIGNATURE = Buffer.from(
   'untrusted comment: signature from tauri secret key\n' +
@@ -185,7 +202,7 @@ function assertZipRejects(
 
 function publicationSpec() {
   return createReleasePublicationSpec({
-    changelog: CHANGELOG,
+    changelog: FULL_CHANGELOG,
     commit: COMMIT,
     githubSha: GITHUB_SHA,
     publishedAt: PUBLISHED_AT,
@@ -270,9 +287,9 @@ function assertExecutableRunTextIsExpressionFree(workflow) {
   }
 }
 
-test('creates deterministic final updater metadata from only current-run local inputs', () => {
+test('derives deterministic updater history and current release notes from one changelog', () => {
   const inputs = {
-    changelog: CHANGELOG,
+    changelog: FULL_CHANGELOG,
     installerSignature: TAURI_SIGNATURE,
     portableRpuSignature: TAURI_SIGNATURE,
     publishedAt: PUBLISHED_AT,
@@ -286,7 +303,7 @@ test('creates deterministic final updater metadata from only current-run local i
   assert.deepEqual(retried, first);
   assert.deepEqual(first.manifest, {
     version: VERSION,
-    notes: CHANGELOG,
+    notes: UPDATER_CHANGELOG,
     pub_date: PUBLISHED_AT,
     platforms: {
       'windows-x86_64-nsis': {
@@ -299,6 +316,184 @@ test('creates deterministic final updater metadata from only current-run local i
       },
     },
   });
+  assert.ok(publicationSpec().final.body.startsWith(`${RELEASE_NOTES}\n\n`));
+  assert.doesNotMatch(publicationSpec().final.body, /Earlier fixes/);
+});
+
+test('rejects updater histories that cannot define one unambiguous newest-first range', () => {
+  const inputs = {
+    installerSignature: TAURI_SIGNATURE,
+    portableRpuSignature: TAURI_SIGNATURE,
+    publishedAt: PUBLISHED_AT,
+    repository: REPOSITORY,
+    tag: TAG,
+    version: VERSION,
+  };
+
+  assert.throws(
+    () => createLatestManifest({ ...inputs, changelog: '## [1.8.2]\n\n- Old.' }),
+    /does not contain a section for 1\.9\.0/,
+  );
+  for (const changelog of [
+    `## 1.9.1\n\n- Missing brackets.\n\n${RELEASE_NOTES}`,
+    `${RELEASE_NOTES}\n\n## 1.8.2\n\n- Missing brackets.`,
+    `  ## [1.9.1]\n\n- Indented heading.\n\n${RELEASE_NOTES}`,
+    `##[1.9.1]\n\n- Missing separator.\n\n${RELEASE_NOTES}`,
+  ]) {
+    assert.throws(
+      () => createLatestManifest({ ...inputs, changelog }),
+      /malformed level-two heading/,
+    );
+  }
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: `## [1.9.1]\n\n- Newer.\n\n${RELEASE_NOTES}`,
+      }),
+    /heading 1\.9\.1 is not an allowed release preamble/,
+  );
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: `## [1.9]\n\n- Typo.\n\n${RELEASE_NOTES}`,
+      }),
+    /heading 1\.9 is not an allowed release preamble/,
+  );
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: `## [Unreleased]\n\n- One.\n\n## [Unreleased]\n\n- Two.\n\n${RELEASE_NOTES}`,
+      }),
+    /heading Unreleased is not an allowed release preamble/,
+  );
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: `${RELEASE_NOTES}\n\n## [1.9.0]\n\n- Duplicate.`,
+      }),
+    /duplicate version 1\.9\.0/,
+  );
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: `${RELEASE_NOTES}\n\n## [1.9.1]\n\n- Out of order.`,
+      }),
+    /strictly newest-first/,
+  );
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: `${RELEASE_NOTES}\n\n## [1.08.2]\n\n- Invalid.`,
+      }),
+    /1\.08\.2 is not valid SemVer/,
+  );
+  assert.doesNotThrow(() =>
+    createLatestManifest({
+      ...inputs,
+      changelog: [
+        '## [2.0.0]',
+        '',
+        '- Stable.',
+        '',
+        '## [2.0.0-rc.10]',
+        '',
+        '- Later candidate.',
+        '',
+        '## [2.0.0-rc.2]',
+        '',
+        '- Earlier candidate.',
+      ].join('\n'),
+      tag: 'v2.0.0',
+      version: '2.0.0',
+    }),
+  );
+});
+
+test('enforces the lossless UI and serialized portable transport budgets at publication', () => {
+  const inputs = {
+    installerSignature: TAURI_SIGNATURE,
+    portableRpuSignature: TAURI_SIGNATURE,
+    publishedAt: PUBLISHED_AT,
+    repository: REPOSITORY,
+    tag: TAG,
+    version: VERSION,
+  };
+
+  assert.doesNotThrow(() =>
+    createLatestManifest({
+      ...inputs,
+      changelog: `${RELEASE_NOTES}\n\n${'a'.repeat(49_000)}`,
+    }),
+  );
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: `${RELEASE_NOTES}\n\n${'a'.repeat(50_001)}`,
+      }),
+    /lossless UI release-notes budget/,
+  );
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: [RELEASE_NOTES, ...Array.from({ length: 250 }, (_, i) => `### H${i}`)].join(
+          '\n\n',
+        ),
+      }),
+    /lossless UI release-notes budget/,
+  );
+  assert.throws(
+    () =>
+      createLatestManifest({
+        ...inputs,
+        changelog: `${RELEASE_NOTES}\n\n${'\u0001'.repeat(11_000)}`,
+      }),
+    /portable response.*protocol frame/,
+  );
+});
+
+test('publication transport limits stay synchronized with the portable readers', async () => {
+  const [framing, supervisorUpdates, appUpdateCommand] = await Promise.all([
+    readFile(PORTABLE_FRAMING_PATH, 'utf8'),
+    readFile(SUPERVISOR_UPDATES_PATH, 'utf8'),
+    readFile(APP_UPDATE_COMMAND_PATH, 'utf8'),
+  ]);
+
+  assert.equal(PORTABLE_PROTOCOL_MAX_FRAME_BYTES, 64 * 1024);
+  assert.match(framing, /pub const MAX_FRAME_BYTES: usize = 64 \* 1024;/);
+  assert.equal(UPDATER_MANIFEST_MAX_BYTES, 1024 * 1024);
+  assert.match(supervisorUpdates, /const MAX_MANIFEST_BYTES: u64 = 1024 \* 1024;/);
+  assert.equal(APP_UPDATE_SESSION_ID_HEX_CHARS, 32);
+  assert.match(appUpdateCommand, /let mut bytes = \[0_u8; 16\];/);
+  assert.match(appUpdateCommand, /String::with_capacity\(bytes\.len\(\) \* 2\)/);
+});
+
+test('the checked-in changelog satisfies the updater history contract', async () => {
+  const changelog = await readFile(PROJECT_CHANGELOG_PATH, 'utf8');
+  const version =
+    /^## \[(\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)\]/m.exec(
+      changelog,
+    )?.[1];
+  assert.ok(version, 'the changelog contains at least one released version');
+
+  const { manifest } = createLatestManifest({
+    changelog,
+    installerSignature: TAURI_SIGNATURE,
+    portableRpuSignature: TAURI_SIGNATURE,
+    publishedAt: PUBLISHED_AT,
+    repository: REPOSITORY,
+    tag: `v${version}`,
+    version,
+  });
+
+  assert.ok(manifest.notes.startsWith(`## [${version}]`));
 });
 
 test('CLI transform writes byte-identical current-run manifests on retry', async () => {
@@ -363,7 +558,7 @@ test('CLI transform writes byte-identical current-run manifests on retry', async
       writeFile(zipPath, createStoredZip(ZIP_ENTRY, raw)),
       writeFile(installerPath, Buffer.from('signed NSIS installer')),
       writeFile(installerSignaturePath, TAURI_SIGNATURE),
-      writeFile(changelogPath, CHANGELOG),
+      writeFile(changelogPath, FULL_CHANGELOG),
     ]);
     const { stdout } = await execFile(process.execPath, argumentsFor(outputOne));
     await execFile(process.execPath, argumentsFor(outputTwo));
@@ -893,6 +1088,8 @@ test('workflow and publisher enforce exact, non-destructive publication', async 
   assert.doesNotMatch(publisher, /Split-Path\s+-LiteralPath[^\r\n]*-Leaf/);
   assert.match(publisher, /\[IO\.Path\]::GetFileName\(\$Artifact\)/);
   assert.match(publisher, /\[IO\.Path\]::GetFileName\(\$_\)/);
+  assert.match(publisher, /transform[\s\S]*?--changelog \$ChangelogPath/);
+  assert.match(publisher, /publication-spec[\s\S]*?--changelog \$ChangelogPath/);
   assert.doesNotMatch(publisher, /Assert-RenderPilotReleaseAttestations/);
   assert.match(
     publisher,
@@ -965,6 +1162,11 @@ test('release workflow keeps refs out of executable interpolation and publishes 
     /RENDERPILOT_RELEASE_TAG:\s*\$\{\{\s*steps\.release_context\.outputs\.tag\s*\}\}/,
   );
   assert.match(publisher, /-Tag\s+\$env:RENDERPILOT_RELEASE_TAG/);
+  assert.match(
+    publisher,
+    /RENDERPILOT_RELEASE_CHANGELOG_PATH:\s*\$\{\{\s*github\.workspace\s*\}\}\/CHANGELOG\.md/,
+  );
+  assert.match(publisher, /-ChangelogPath\s+\$env:RENDERPILOT_RELEASE_CHANGELOG_PATH/);
   assert.doesNotMatch(executableRunScalars(publisher).join('\n'), /\$\{\{/);
 
   const injectedRefWorkflow =

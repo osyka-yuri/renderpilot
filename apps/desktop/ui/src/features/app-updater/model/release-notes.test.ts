@@ -9,7 +9,7 @@ import {
   MAX_RELEASE_NOTES_CHARS,
   parseInline,
   parseReleaseNotes,
-} from './release-notes';
+} from '@shared/model';
 
 const FIXTURE_DIR = import.meta.dirname;
 

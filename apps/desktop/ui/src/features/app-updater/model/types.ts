@@ -1,4 +1,4 @@
-import type { ReleaseNotesDocument } from './release-notes';
+import type { ReleaseNotesDocument } from '@shared/model';
 
 export type DownloadProgressView = {
   /** Completed fraction in the inclusive range 0..1, or null when the total is unknown. */

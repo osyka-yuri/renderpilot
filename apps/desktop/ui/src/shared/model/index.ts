@@ -7,6 +7,23 @@ export {
 export type { ExecutedD3d12ExecutableAction, OperationMetadata } from './operation-metadata';
 export { canonicalizePackageVersion, comparePackageVersions } from './package-version';
 export {
+  findReleaseHeadings,
+  type MalformedReleaseHeading,
+  type ReleaseHeading,
+  type VersionedReleaseHeading,
+} from './release-note-headings';
+export {
+  MAX_INLINE_SEGMENTS_PER_BLOCK,
+  MAX_LIST_ITEMS,
+  MAX_RELEASE_NOTES_BLOCKS,
+  MAX_RELEASE_NOTES_CHARS,
+  parseInline,
+  parseReleaseNotes,
+  type ReleaseNotesBlock,
+  type ReleaseNotesDocument,
+  type ReleaseNotesInline,
+} from './release-notes';
+export {
   type CatalogCandidateProvenance,
   type CatalogCandidatePackage,
   type CatalogPackageAvailability,

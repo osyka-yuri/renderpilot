@@ -1,5 +1,5 @@
 /**
- * Bounded release-notes parser for the project changelog subset.
+ * Shared bounded release-notes parser for the project changelog subset.
  *
  * Supports ## / ### headings, unordered lists, paragraphs, **strong**,
  * `code`, and Markdown links flattened to their visible label.

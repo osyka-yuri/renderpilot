@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '@shared/i18n';
-  import type { ReleaseNotesDocument } from '../model/release-notes';
+  import type { ReleaseNotesDocument } from '@shared/model';
   import ReleaseNotesInline from './ReleaseNotesInline.svelte';
 
   type Props = {
