@@ -89,7 +89,6 @@
         group?.version_report.kind === 'known'
           ? (group.version_report.catalog_release?.label ?? group.version_report.release_label)
           : null,
-      isDebug: false,
       unknownLabel: t('common.unknown'),
     }),
   );

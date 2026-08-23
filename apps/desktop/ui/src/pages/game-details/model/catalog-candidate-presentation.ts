@@ -22,7 +22,6 @@ export function presentCatalogCandidateOption(
     versionLabel: formatReleaseVersionLabel({
       version: release?.version ?? candidate.technical_version,
       releaseLabel: release === null ? candidate.release_label : release.label,
-      isDebug: candidate.is_debug,
       unknownLabel: labels.unknown,
     }),
     componentVersions: presentComponentVersions(release),

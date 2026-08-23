@@ -8,21 +8,29 @@ describe('formatReleaseVersionLabel', () => {
       formatReleaseVersionLabel({
         version: '1.1.3',
         releaseLabel: 'revision b',
-        isDebug: false,
         unknownLabel: 'Unknown',
       }),
     ).toBe('v1.1.3 (revision b)');
   });
 
-  it('keeps debug presentation generic and ordered after the release label', () => {
+  it('renders debug release labels directly from backend identity', () => {
     expect(
       formatReleaseVersionLabel({
-        version: '1.1.3',
-        releaseLabel: 'revision b',
-        isDebug: true,
+        version: '3.7.10',
+        releaseLabel: 'Debug',
         unknownLabel: 'Unknown',
       }),
-    ).toBe('v1.1.3 (revision b) (Debug)');
+    ).toBe('v3.7.10 (Debug)');
+  });
+
+  it('renders plain version without parentheses when no label is present', () => {
+    expect(
+      formatReleaseVersionLabel({
+        version: '3.8.0',
+        releaseLabel: null,
+        unknownLabel: 'Unknown',
+      }),
+    ).toBe('v3.8.0');
   });
 
   it('does not infer a version or label when the backend reports unknown', () => {
@@ -30,7 +38,6 @@ describe('formatReleaseVersionLabel', () => {
       formatReleaseVersionLabel({
         version: null,
         releaseLabel: 'revision b',
-        isDebug: false,
         unknownLabel: 'Unknown',
       }),
     ).toBe('Unknown');

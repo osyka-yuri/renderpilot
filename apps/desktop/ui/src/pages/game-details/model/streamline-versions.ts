@@ -101,7 +101,6 @@ function resolveOption(
     label: formatReleaseVersionLabel({
       version: option.release.version,
       releaseLabel: option.release.label,
-      isDebug: option.release.channel === 'debug',
       unknownLabel: option.release.version,
     }),
     items,
