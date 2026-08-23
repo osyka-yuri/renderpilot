@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.1] - 2026-08-24
+
+### Added
+
+- **Localized NVIDIA driver settings**: Added translations for the Ray Reconstruction "Preset F (Transformer Gen 2)" option across all seven supported languages.
+
+### Fixed
+
+- **Component version selector labels**: Fixed an issue where debug DLL versions in Game Details dropdowns could display a duplicate `(Debug)` tag (such as `v3.7.10 (Debug) (Debug)`).
+
 ## [1.10.0] - 2026-08-23
 
 ### Added
