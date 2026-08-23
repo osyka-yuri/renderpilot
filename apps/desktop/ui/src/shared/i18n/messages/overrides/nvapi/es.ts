@@ -98,6 +98,7 @@ const translations = {
     'Fuerza un preajuste específico de DLSS Reconstrucción de rayos.',
   'Preset D (Transformer Gen 1)': 'Preajuste D (Transformer Gen 1)',
   'Preset E (Transformer Gen 1)': 'Preajuste E (Transformer Gen 1)',
+  'Preset F (Transformer Gen 2)': 'Preajuste F (Transformer Gen 2)',
   'Overrides the in-game DLSS Ray Reconstruction quality selection.':
     'Anula el nivel de calidad de DLSS Reconstrucción de rayos seleccionado en el juego.',
   'Forces the game to use the latest DLSS-RR version installed system-wide. Supported by most Ray Reconstruction titles.':

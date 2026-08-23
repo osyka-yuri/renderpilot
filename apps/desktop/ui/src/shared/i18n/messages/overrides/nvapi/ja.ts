@@ -97,6 +97,7 @@ const translations = {
     '特定の DLSS レイ再構成プリセットを強制します。',
   'Preset D (Transformer Gen 1)': 'プリセット D（Transformer Gen 1）',
   'Preset E (Transformer Gen 1)': 'プリセット E（Transformer Gen 1）',
+  'Preset F (Transformer Gen 2)': 'プリセット F（Transformer Gen 2）',
   'Overrides the in-game DLSS Ray Reconstruction quality selection.':
     'ゲーム内で選択された DLSS レイ再構成の品質レベルを上書きします。',
   'Forces the game to use the latest DLSS-RR version installed system-wide. Supported by most Ray Reconstruction titles.':

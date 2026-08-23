@@ -97,6 +97,7 @@ const translations = {
     'Force un préréglage spécifique de DLSS Reconstruction de rayons.',
   'Preset D (Transformer Gen 1)': 'Préréglage D (Transformer Gen 1)',
   'Preset E (Transformer Gen 1)': 'Préréglage E (Transformer Gen 1)',
+  'Preset F (Transformer Gen 2)': 'Préréglage F (Transformer Gen 2)',
   'Overrides the in-game DLSS Ray Reconstruction quality selection.':
     'Remplace le niveau de qualité de DLSS Reconstruction de rayons sélectionné dans le jeu.',
   'Forces the game to use the latest DLSS-RR version installed system-wide. Supported by most Ray Reconstruction titles.':

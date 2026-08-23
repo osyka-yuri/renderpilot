@@ -92,7 +92,7 @@ export const NVAPI_SOURCE_CATALOG = {
   'nvapi.dlss_rr_render_preset.value.d': 'Preset D (Transformer Gen 1)',
   'nvapi.dlss_rr_render_preset.value.default': 'Off (game default)',
   'nvapi.dlss_rr_render_preset.value.e': 'Preset E (Transformer Gen 1)',
-  'nvapi.dlss_rr_render_preset.value.f': 'Preset F (unused)',
+  'nvapi.dlss_rr_render_preset.value.f': 'Preset F (Transformer Gen 2)',
   'nvapi.dlss_rr_render_preset.value.g': 'Preset G (unused)',
   'nvapi.dlss_rr_render_preset.value.h': 'Preset H (unused)',
   'nvapi.dlss_rr_render_preset.value.i': 'Preset I (unused)',

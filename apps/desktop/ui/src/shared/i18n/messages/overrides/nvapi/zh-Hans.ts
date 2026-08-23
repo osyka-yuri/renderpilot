@@ -94,6 +94,7 @@ const translations = {
   'Forces a specific DLSS Ray Reconstruction preset.': '强制使用指定的 DLSS 光线重建预设。',
   'Preset D (Transformer Gen 1)': '预设 D（Transformer Gen 1）',
   'Preset E (Transformer Gen 1)': '预设 E（Transformer Gen 1）',
+  'Preset F (Transformer Gen 2)': '预设 F（Transformer Gen 2）',
   'Overrides the in-game DLSS Ray Reconstruction quality selection.':
     '覆盖游戏内选择的 DLSS 光线重建质量级别。',
   'Forces the game to use the latest DLSS-RR version installed system-wide. Supported by most Ray Reconstruction titles.':

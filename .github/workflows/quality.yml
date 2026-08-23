@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  RENDERPILOT_LIBRARIES_CONTRACT_REF: cf0781a42a8634a7618685f7c108b0c650431723
+  RENDERPILOT_LIBRARIES_CONTRACT_REF: b51fe8858f9a111e95d669a4c8a648374fe2c1d1
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   # Deny rustc warnings for workspace packages (Cargo 1.97+). Prefer this over

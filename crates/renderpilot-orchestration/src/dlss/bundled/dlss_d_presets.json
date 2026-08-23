@@ -3,25 +3,32 @@
   "schema_version": 1,
   "library_family": "nvngx_dlssd",
   "dll_kind": "rr",
-  "generated_at": "2026-05-25T00:00:00Z",
+  "generated_at": "2026-08-23T00:00:00Z",
   "presets": {
     "0": { "label": "Default (Game Controlled)" },
     "1": { "label": "Preset A", "deprecated": true },
     "2": { "label": "Preset B", "deprecated": true },
     "3": { "label": "Preset C", "deprecated": true },
     "4": { "label": "Preset D" },
-    "5": { "label": "Preset E" }
+    "5": { "label": "Preset E" },
+    "6": { "label": "Preset F" }
   },
   "version_support": [
     {
       "version": "3.5.0.0",
       "supported_presets": [0, 4, 5],
       "label": "DLSS Ray Reconstruction (3.5+)"
+    },
+    {
+      "version": "310.7.128.0",
+      "supported_presets": [0, 4, 5, 6],
+      "label": "DLSS Ray Reconstruction 4.5 / 310.7.128+ (adds Preset F)"
     }
   ],
   "notes": [
     "Ray Reconstruction (nvngx_dlssd.dll) was introduced with DLSS 3.5 (Sept 2023) — earlier versions don't ship this DLL.",
     "Presets A/B/C are marked deprecated in DLSS Swapper data and not exposed in supported_presets.",
+    "DLSS 4.5 (310.7.128.0+) introduced 2nd-gen Transformer preset F for Ray Reconstruction.",
     "Inheritance: for an unknown DLL version V, the largest entry with version <= V applies (semver compare)."
   ]
 }

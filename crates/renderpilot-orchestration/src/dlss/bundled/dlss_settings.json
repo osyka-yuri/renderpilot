@@ -299,7 +299,11 @@
           "wire": "e",
           "dword": "0x00000005"
         },
-        { "label": "Preset F (unused)", "wire": "f", "dword": "0x00000006" },
+        {
+          "label": "Preset F (Transformer Gen 2)",
+          "wire": "f",
+          "dword": "0x00000006"
+        },
         { "label": "Preset G (unused)", "wire": "g", "dword": "0x00000007" },
         { "label": "Preset H (unused)", "wire": "h", "dword": "0x00000008" },
         { "label": "Preset I (unused)", "wire": "i", "dword": "0x00000009" },

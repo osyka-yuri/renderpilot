@@ -339,6 +339,22 @@ mod tests {
     }
 
     #[test]
+    fn rr_dlss_4_5_resolves_to_310_7_128_entry_and_supports_preset_f() {
+        let m = bundled_manifest(DlssDllKind::RayReconstruction);
+
+        // Older Ray Reconstruction versions (3.5+) inherit [0, 4, 5] without Preset F.
+        let older = DlssVersion::new(3, 7, 10, 0);
+        assert_eq!(supported_presets_for(m, &older), &[0, 4, 5]);
+
+        // DLSS 4.5 (310.7.128.0+) introduces Preset F (dword 6).
+        let v = DlssVersion::new(310, 7, 128, 0);
+        let entry = resolve_entry(m, &v).expect("should resolve");
+        assert_eq!(entry.version, "310.7.128.0");
+        assert_eq!(entry.supported_presets, &[0, 4, 5, 6]);
+        assert_eq!(supported_presets_for(m, &v), &[0, 4, 5, 6]);
+    }
+
+    #[test]
     fn sr_dlss_4_resolves_to_310_entry() {
         let m = bundled_manifest(DlssDllKind::Sr);
         let v = DlssVersion::new(310, 1, 0, 0);
