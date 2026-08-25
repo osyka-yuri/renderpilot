@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.2] - 2026-08-25
+
+### Security
+
+- **Build provenance and artifact attestations**: Official release binaries, installer aliases, portable packages, signatures, and updater manifests now include cryptographically signed SLSA build provenance through GitHub Artifact Attestations. Downloaded release assets can be independently verified against the official RenderPilot repository and release workflow using `gh attestation verify`.
+
+### Fixed
+
+- **Portable startup and interface reloads**: Fixed an issue where reloading the portable application interface (such as via WebView refresh) could trigger a duplicate activation handshake over the single-use IPC control channel and fail startup. Activation is now serialized and idempotent, safely ignoring redundant initialization requests once committed.
+
 ## [1.10.1] - 2026-08-24
 
 ### Added
