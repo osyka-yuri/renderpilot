@@ -87,6 +87,63 @@ export function validateExactReleaseAssetSet({ assets, expectedAssets }) {
   }
 }
 
+export function validateExactLocalArtifactSet({ actualAssets, expectedAssets }) {
+  if (!Array.isArray(actualAssets) || actualAssets.length === 0) {
+    fail('Actual local release assets must be a non-empty array.');
+  }
+  if (!Array.isArray(expectedAssets) || expectedAssets.length === 0) {
+    fail('Expected release assets must be a non-empty array.');
+  }
+
+  const expectedByName = new Map();
+  for (const expected of expectedAssets) {
+    const specification = createReleaseArtifactSpec(expected);
+    if (expectedByName.has(specification.name)) {
+      fail(`Expected release artifact ${specification.name} was provided more than once.`);
+    }
+    expectedByName.set(specification.name, specification);
+  }
+
+  if (actualAssets.length !== expectedByName.size) {
+    const expectedCount = expectedByName.size;
+    fail(
+      `Local artifact set has ${actualAssets.length} assets; expected exactly ${expectedCount} release artifacts.`,
+    );
+  }
+
+  const actualByName = new Map();
+  for (const actual of actualAssets) {
+    const specification = createReleaseArtifactSpec(actual);
+    if (actualByName.has(specification.name)) {
+      fail(`Local release artifact ${specification.name} was provided more than once.`);
+    }
+    actualByName.set(specification.name, specification);
+  }
+
+  for (const [name, expected] of expectedByName) {
+    const actual = actualByName.get(name);
+    if (!actual) {
+      fail(`Local release artifact set is missing expected artifact ${name}.`);
+    }
+    if (actual.size !== expected.size) {
+      fail(
+        `Local release artifact ${name} size (${actual.size}) does not match the publication specification (${expected.size}).`,
+      );
+    }
+    if (actual.digest !== expected.digest) {
+      fail(
+        `Local release artifact ${name} SHA-256 (${actual.digest}) does not match the publication specification (${expected.digest}).`,
+      );
+    }
+  }
+
+  for (const name of actualByName.keys()) {
+    if (!expectedByName.has(name)) {
+      fail(`Local release contains unexpected artifact ${name}.`);
+    }
+  }
+}
+
 /**
  * Plans exactly one create-only asset upload.  A matching byte-for-byte asset
  * is an idempotent retry; every collision with different bytes fails closed.

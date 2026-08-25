@@ -54,9 +54,32 @@ node apps/desktop/scripts/portable-rpu.mjs validate --raw <raw.exe> --rpu <paylo
 
 Success reports SHA-256 identities for the raw supervisor, public RPU, and signature. The command is local-only and does not modify configured production credentials.
 
-`publish-release-assets.ps1` deterministically generates the final `latest.json` from those local NSIS artifacts, portable raw/RPU artifacts, the exact changelog section, and the tagged commit timestamp. It creates or resumes only a private staging draft identified by the authenticated run ID and a provenance marker. Every asset upload is create-only by the exact release ID: a byte-identical existing asset is skipped, while a duplicate, changed, or unexpected asset fails closed. The complete digest-checked asset set is verified while the release is still a draft, then one PATCH publishes the final tag and metadata. A pre-existing final tag is read-only success only when its commit, metadata, and exact asset set all match; legacy drafts and mismatches require manual cleanup rather than automatic repair. The publisher captures the remote peeled tag target before staging and re-reads it immediately before and after that final PATCH, so a tag move fails closed. The portable ZIP entry must equal the signed raw supervisor, which must embed the exact public RPU and signature. Interactive UAC approve/cancel and protected-root behavior remain Windows release-machine checks because hosted CI cannot drive the secure desktop.
+`prepare-release-assets.ps1` deterministically generates the final `latest.json` from those local NSIS artifacts, portable raw/RPU artifacts, the exact changelog section, and the tagged commit timestamp, creates the stable `RenderPilot-setup.exe` alias, and verifies all three release artifact signatures. The workflow then invokes `actions/attest` to generate and persist signed SLSA build provenance for all nine distribution assets in GitHub's attestation store before any assets are uploaded.
 
-Release publication runs in the dedicated GitHub `release-publication` environment with the workflow token scoped to repository contents. The publisher captures and rechecks the exact tag commit throughout publication and never deletes or repairs a conflicting release, asset, or tag. It does not depend on optional repository release or tag settings.
+In the GitHub release workflow, `publish-release-assets.ps1` consumes the pre-prepared, attested distribution assets without mutating them. It creates or resumes only a private staging draft identified by the authenticated run ID and a provenance marker. Every asset upload is create-only by the exact release ID: a byte-identical existing asset is skipped, while a duplicate, changed, or unexpected asset fails closed. The complete digest-checked asset set is verified while the release is still a draft, then one PATCH publishes the final tag and metadata. A pre-existing final tag is read-only success only when its commit, metadata, and exact asset set all match; legacy drafts and mismatches require manual cleanup rather than automatic repair. The publisher captures the remote peeled tag target before staging and re-reads it immediately before and after that final PATCH, so a tag move fails closed. The portable ZIP entry must equal the signed raw supervisor, which must embed the exact public RPU and signature. Interactive UAC approve/cancel and protected-root behavior remain Windows release-machine checks because hosted CI cannot drive the secure desktop.
+
+Release publication runs in the dedicated GitHub `release-publication` environment with the workflow token scoped to least privilege (`contents: write`, `id-token: write`, `attestations: write`). The publisher captures and rechecks the exact tag commit throughout publication and never deletes or repairs a conflicting release, asset, or tag. It does not depend on optional repository release or tag settings.
+
+## Build provenance and artifact attestations
+
+Artifact attestations allow downstream consumers to verify that a downloaded release artifact is cryptographically linked to a GitHub Actions build in the RenderPilot repository. Consumers that require the exact release identity can additionally enforce the release tag, source commit, and signer workflow. Artifact attestations are generated for every release published by the current release workflow.
+
+Artifact attestation establishes provenance and integrity; it does not by itself assert that an artifact is vulnerability-free or otherwise safe.
+
+```powershell
+# Basic provenance verification against the RenderPilot repository
+gh attestation verify RenderPilot-setup.exe --repo osyka-yuri/renderpilot
+
+# Strict policy enforcing the exact release tag, commit SHA, and signer workflow
+# Replace with the specific release version and its full 40-character commit SHA.
+$version = "<RELEASE_VERSION>"       # e.g., "1.10.0"
+$commitSha = "<RELEASE_COMMIT_SHA>"  # e.g., "7f8b9c..."
+gh attestation verify RenderPilot-setup.exe `
+  --repo osyka-yuri/renderpilot `
+  --source-ref "refs/tags/v$version" `
+  --source-digest $commitSha `
+  --signer-workflow osyka-yuri/renderpilot/.github/workflows/release.yml
+```
 
 ## Stable installer download
 

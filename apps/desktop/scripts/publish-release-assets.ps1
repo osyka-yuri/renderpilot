@@ -294,78 +294,68 @@ foreach ($required in @($versionedInstaller, $installerSignature)) {
 $installerAlias = Join-Path $artifactPath "RenderPilot-setup.exe"
 $outputManifest = Join-Path $artifactPath "latest.json"
 $publicationSpecificationPath = Join-Path $artifactPath "publication-spec.json"
-foreach ($output in @($installerAlias, $outputManifest, $publicationSpecificationPath)) {
-    if (Test-Path -LiteralPath $output) {
-        throw "Release publication output path already exists: $output"
-    }
+
+$alreadyPrepared = (Test-Path -LiteralPath $installerAlias -PathType Leaf) -and `
+    (Test-Path -LiteralPath $outputManifest -PathType Leaf) -and `
+    (Test-Path -LiteralPath $publicationSpecificationPath -PathType Leaf)
+
+$artifactPaths = @(
+    $versionedInstaller,
+    $installerSignature,
+    $installerAlias,
+    $PortableRaw,
+    $PortableRawSignature,
+    $PortableRpu,
+    $PortableRpuSignature,
+    $PortableZip,
+    $outputManifest
+)
+$artifactNames = @($artifactPaths | ForEach-Object { [IO.Path]::GetFileName($_) })
+if (($artifactNames | Select-Object -Unique).Count -ne $artifactNames.Count) {
+    throw "The release asset set contains duplicate filenames."
 }
-Copy-RenderPilotFileCreateNew -Source $versionedInstaller -Destination $installerAlias
+
+if (-not $alreadyPrepared) {
+    & (Join-Path $PSScriptRoot "prepare-release-assets.ps1") `
+        -Version $Version `
+        -Tag $Tag `
+        -Repository $Repository `
+        -Commit $Commit `
+        -GitHubSha $GitHubSha `
+        -RunId $RunId `
+        -PublishedAt $PublishedAt `
+        -ChangelogPath $ChangelogPath `
+        -TauriArtifactPathsJson $TauriArtifactPathsJson `
+        -RepositoryRoot $RepositoryRoot `
+        -ArtifactDirectory $ArtifactDirectory `
+        -PortableRaw $PortableRaw `
+        -PortableRawSignature $PortableRawSignature `
+        -PortableRpu $PortableRpu `
+        -PortableRpuSignature $PortableRpuSignature `
+        -PortableZip $PortableZip
+}
+
 if ((Get-RenderPilotSha256 -Path $installerAlias) -ne (Get-RenderPilotSha256 -Path $versionedInstaller)) {
     throw "Stable installer alias does not match the versioned installer SHA-256."
 }
+$verifyArgs = @(
+    $releaseManifestScript,
+    "verify-local-artifacts",
+    "--spec", $publicationSpecificationPath
+)
+foreach ($artifact in $artifactPaths) {
+    $verifyArgs += @("--artifact", $artifact)
+}
+& node @verifyArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Verifying local release distribution artifacts against frozen publication specification failed with exit code $LASTEXITCODE."
+}
+Write-Host "Verified cryptographic digest lock for all $($artifactPaths.Count) release distribution assets."
+
+$publication = (Get-Content -LiteralPath $publicationSpecificationPath -Raw -Encoding utf8) | ConvertFrom-Json
 
 Push-Location $repositoryPath
 try {
-    Invoke-RenderPilotCheckedCommand -Description "Generating deterministic updater metadata" -Command {
-        node $releaseManifestScript transform `
-            --output $outputManifest `
-            --version $Version `
-            --repository $Repository `
-            --tag $Tag `
-            --changelog $ChangelogPath `
-            --published-at $PublishedAt `
-            --installer $versionedInstaller `
-            --installer-signature $installerSignature `
-            --portable-raw $PortableRaw `
-            --portable-raw-signature $PortableRawSignature `
-            --portable-rpu $PortableRpu `
-            --portable-rpu-signature $PortableRpuSignature `
-            --portable-zip $PortableZip `
-            --zip-entry "RenderPilot/renderpilot-desktop.exe"
-    }
-    Invoke-RenderPilotCheckedCommand -Description "Verifying NSIS installer signature" -Command {
-        cargo run --quiet --package renderpilot-desktop --features updater-artifact-verify `
-            --example verify_updater_signature -- $versionedInstaller $installerSignature
-    }
-    Invoke-RenderPilotCheckedCommand -Description "Verifying public portable RPU signature" -Command {
-        cargo run --quiet --package renderpilot-desktop --features updater-artifact-verify `
-            --example verify_updater_signature -- $PortableRpu $PortableRpuSignature
-    }
-    Invoke-RenderPilotCheckedCommand -Description "Verifying raw portable supervisor signature" -Command {
-        cargo run --quiet --package renderpilot-desktop --features updater-artifact-verify `
-            --example verify_updater_signature -- $PortableRaw $PortableRawSignature
-    }
-
-    $artifactPaths = @(
-        $versionedInstaller,
-        $installerSignature,
-        $installerAlias,
-        $PortableRaw,
-        $PortableRawSignature,
-        $PortableRpu,
-        $PortableRpuSignature,
-        $PortableZip,
-        $outputManifest
-    )
-    $artifactNames = @($artifactPaths | ForEach-Object { [IO.Path]::GetFileName($_) })
-    if (($artifactNames | Select-Object -Unique).Count -ne $artifactNames.Count) {
-        throw "The release asset set contains duplicate filenames."
-    }
-
-    $publicationJson = & node $releaseManifestScript publication-spec `
-        --changelog $ChangelogPath `
-        --commit $Commit `
-        --github-sha $GitHubSha `
-        --published-at $PublishedAt `
-        --repository $Repository `
-        --run-id $RunId `
-        --tag $Tag `
-        --version $Version
-    if ($LASTEXITCODE -ne 0) {
-        throw "Constructing release publication specification failed with exit code $LASTEXITCODE."
-    }
-    $publicationJson | Set-Content -LiteralPath $publicationSpecificationPath -Encoding utf8 -NoNewline
-    $publication = $publicationJson | ConvertFrom-Json
     $initialTagCommit = Assert-RenderPilotGitHubPeeledTagCommit `
         -Repository $Repository `
         -Tag $Tag `

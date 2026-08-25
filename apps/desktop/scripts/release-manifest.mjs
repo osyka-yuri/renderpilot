@@ -6,6 +6,7 @@ import {
   createReleaseArtifactSpecs,
   parseReleaseAssets,
   planCreateOnlyAssetUpload,
+  validateExactLocalArtifactSet,
   validateUploadedReleaseAssets,
 } from './release-manifest-github-assets.mjs';
 import {
@@ -170,9 +171,13 @@ async function runPlanUpload(args) {
 }
 
 async function runPublicationSpec(args) {
-  const options = parseOptions(args);
+  const options = parseOptions(args, { repeatable: ['--artifact'] });
   const changelog = await readFile(options.get('--changelog'), 'utf8');
+  const artifactPaths = options.getAll('--artifact');
+  const artifacts =
+    artifactPaths.length > 0 ? await createReleaseArtifactSpecs(artifactPaths) : undefined;
   const specification = createReleasePublicationSpec({
+    artifacts,
     changelog,
     commit: options.get('--commit'),
     githubSha: options.get('--github-sha'),
@@ -183,6 +188,24 @@ async function runPublicationSpec(args) {
     version: options.get('--version'),
   });
   process.stdout.write(`${JSON.stringify(specification)}\n`);
+}
+
+async function runVerifyLocalArtifacts(args) {
+  const options = parseOptions(args, { repeatable: ['--artifact'] });
+  const artifactPaths = options.getAll('--artifact');
+  if (artifactPaths.length === 0) {
+    fail('Verifying local artifacts requires at least one --artifact.');
+  }
+  const specification = await readJson(options.get('--spec'), 'Publication specification JSON');
+  if (!Array.isArray(specification.artifacts) || specification.artifacts.length === 0) {
+    fail('Publication specification does not contain the required frozen artifact digests.');
+  }
+  const actualAssets = await createReleaseArtifactSpecs(artifactPaths);
+  validateExactLocalArtifactSet({
+    actualAssets,
+    expectedAssets: specification.artifacts,
+  });
+  process.stdout.write(`${JSON.stringify({ count: actualAssets.length, verified: true })}\n`);
 }
 
 async function runAssertPublicationState(args) {
@@ -258,6 +281,10 @@ async function main() {
     await runPublicationSpec(args);
     return;
   }
+  if (command === 'verify-local-artifacts') {
+    await runVerifyLocalArtifacts(args);
+    return;
+  }
   if (command === 'assert-publication-state') {
     await runAssertPublicationState(args);
     return;
@@ -272,7 +299,7 @@ async function main() {
   }
   fail(
     'Usage: release-manifest.mjs ' +
-      '<transform|verify-upload|plan-upload|publication-spec|assert-publication-state|classify-publication-state|select-tauri-artifacts> [options].',
+      '<transform|verify-upload|plan-upload|publication-spec|verify-local-artifacts|assert-publication-state|classify-publication-state|select-tauri-artifacts> [options].',
   );
 }
 

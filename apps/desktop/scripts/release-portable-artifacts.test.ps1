@@ -258,6 +258,23 @@ try {
         $zipStream.Dispose()
     }
 
+    $releaseScriptNames = @(
+        "prepare-release-assets.ps1",
+        "publish-release-assets.ps1",
+        "release-portable-artifacts.ps1",
+        "release-helpers.ps1",
+        "release-github-client.psm1"
+    )
+    foreach ($scriptName in $releaseScriptNames) {
+        $scriptPath = Join-Path $PSScriptRoot $scriptName
+        $tokens = $null
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$errors) | Out-Null
+        if ($errors.Count -ne 0) {
+            throw "PowerShell script $scriptName contains syntax errors: $(($errors | ForEach-Object { $_.Message }) -join '; ')"
+        }
+    }
+
     Write-Output "Portable artifact helper tests passed."
 }
 finally {

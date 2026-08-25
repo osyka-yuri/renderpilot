@@ -18,6 +18,7 @@ import {
 import {
   createReleaseArtifactSpecs,
   planCreateOnlyAssetUpload,
+  validateExactLocalArtifactSet,
   validateExactReleaseAssetSet,
 } from './release-manifest-github-assets.mjs';
 import {
@@ -60,6 +61,7 @@ const WORKFLOW_PATH = fileURLToPath(
   new URL('../../../.github/workflows/release.yml', import.meta.url),
 );
 const PROJECT_CHANGELOG_PATH = fileURLToPath(new URL('../../../CHANGELOG.md', import.meta.url));
+const PREPARE_SCRIPT_PATH = fileURLToPath(new URL('./prepare-release-assets.ps1', import.meta.url));
 const PUBLISH_SCRIPT_PATH = fileURLToPath(new URL('./publish-release-assets.ps1', import.meta.url));
 const GITHUB_CLIENT_PATH = fileURLToPath(new URL('./release-github-client.psm1', import.meta.url));
 const TAURI_CONFIG_PATH = fileURLToPath(new URL('../src-tauri/tauri.conf.json', import.meta.url));
@@ -1068,9 +1070,10 @@ test('accepts an identical published retry and fails final-tag collisions closed
 });
 
 test('workflow and publisher enforce exact, non-destructive publication', async () => {
-  const [workflow, publisher, githubClient] = await Promise.all([
+  const [workflow, publisher, prepareScript, githubClient] = await Promise.all([
     readFile(WORKFLOW_PATH, 'utf8'),
     readFile(PUBLISH_SCRIPT_PATH, 'utf8'),
+    readFile(PREPARE_SCRIPT_PATH, 'utf8'),
     readFile(GITHUB_CLIENT_PATH, 'utf8'),
   ]);
   assert.match(workflow, /uploadUpdaterJson:\s*false/);
@@ -1088,8 +1091,9 @@ test('workflow and publisher enforce exact, non-destructive publication', async 
   assert.doesNotMatch(publisher, /Split-Path\s+-LiteralPath[^\r\n]*-Leaf/);
   assert.match(publisher, /\[IO\.Path\]::GetFileName\(\$Artifact\)/);
   assert.match(publisher, /\[IO\.Path\]::GetFileName\(\$_\)/);
-  assert.match(publisher, /transform[\s\S]*?--changelog \$ChangelogPath/);
-  assert.match(publisher, /publication-spec[\s\S]*?--changelog \$ChangelogPath/);
+  assert.match(prepareScript, /transform[\s\S]*?--changelog \$ChangelogPath/);
+  assert.match(prepareScript, /publication-spec[\s\S]*?--changelog \$ChangelogPath/);
+  assert.match(publisher, /prepare-release-assets\.ps1/);
   assert.doesNotMatch(publisher, /Assert-RenderPilotReleaseAttestations/);
   assert.match(
     publisher,
@@ -1143,9 +1147,14 @@ test('release workflow keeps refs out of executable interpolation and publishes 
   const workflow = await readFile(WORKFLOW_PATH, 'utf8');
   const releaseContext =
     /- name: Read release context[\s\S]*?(?=\n\s*- name: Cache Rust build)/.exec(workflow)?.[0];
+  const preparer =
+    /- name: Prepare release distribution assets[\s\S]*?(?=\n\s*- name: Generate artifact attestations)/.exec(
+      workflow,
+    )?.[0];
   const publisher = /- name: Publish and verify release assets[\s\S]*$/.exec(workflow)?.[0];
 
   assert.ok(releaseContext, 'release context step is present');
+  assert.ok(preparer, 'preparer step is present');
   assert.ok(publisher, 'publisher step is present');
   assertExecutableRunTextIsExpressionFree(workflow);
   assert.match(releaseContext, /RENDERPILOT_RAW_REF_NAME:\s*\$\{\{\s*github\.ref_name\s*\}\}/);
@@ -1158,6 +1167,11 @@ test('release workflow keeps refs out of executable interpolation and publishes 
   );
   assert.match(releaseContext, /"tag=\$actualTag"\s*\|\s*Out-File/);
   assert.match(
+    preparer,
+    /RENDERPILOT_RELEASE_TAG:\s*\$\{\{\s*steps\.release_context\.outputs\.tag\s*\}\}/,
+  );
+  assert.match(preparer, /-Tag\s+\$env:RENDERPILOT_RELEASE_TAG/);
+  assert.match(
     publisher,
     /RENDERPILOT_RELEASE_TAG:\s*\$\{\{\s*steps\.release_context\.outputs\.tag\s*\}\}/,
   );
@@ -1167,6 +1181,7 @@ test('release workflow keeps refs out of executable interpolation and publishes 
     /RENDERPILOT_RELEASE_CHANGELOG_PATH:\s*\$\{\{\s*github\.workspace\s*\}\}\/CHANGELOG\.md/,
   );
   assert.match(publisher, /-ChangelogPath\s+\$env:RENDERPILOT_RELEASE_CHANGELOG_PATH/);
+  assert.doesNotMatch(executableRunScalars(preparer).join('\n'), /\$\{\{/);
   assert.doesNotMatch(executableRunScalars(publisher).join('\n'), /\$\{\{/);
 
   const injectedRefWorkflow =
@@ -1176,4 +1191,342 @@ test('release workflow keeps refs out of executable interpolation and publishes 
     /must not interpolate an expression/,
     'a crafted $() ref would be rejected before it can reach shell interpolation',
   );
+});
+
+test('validateExactLocalArtifactSet enforces strict digest lock across exact expected artifacts', () => {
+  const validArtifacts = [
+    { digest: `sha256:${'1'.repeat(64)}`, name: 'setup.exe', size: 100 },
+    { digest: `sha256:${'2'.repeat(64)}`, name: 'setup.exe.sig', size: 50 },
+    { digest: `sha256:${'3'.repeat(64)}`, name: 'RenderPilot-setup.exe', size: 100 },
+    { digest: `sha256:${'4'.repeat(64)}`, name: 'portable.exe', size: 200 },
+    { digest: `sha256:${'5'.repeat(64)}`, name: 'portable.exe.sig', size: 50 },
+    { digest: `sha256:${'6'.repeat(64)}`, name: 'portable.rpu', size: 150 },
+    { digest: `sha256:${'7'.repeat(64)}`, name: 'portable.rpu.sig', size: 50 },
+    { digest: `sha256:${'8'.repeat(64)}`, name: 'portable.zip', size: 300 },
+    { digest: `sha256:${'9'.repeat(64)}`, name: 'latest.json', size: 80 },
+  ];
+
+  // Exact matching set passes
+  validateExactLocalArtifactSet({
+    actualAssets: validArtifacts,
+    expectedAssets: validArtifacts,
+  });
+
+  // Missing one artifact (8 instead of 9) fails closed
+  assert.throws(
+    () =>
+      validateExactLocalArtifactSet({
+        actualAssets: validArtifacts.slice(0, 8),
+        expectedAssets: validArtifacts,
+      }),
+    /expected exactly 9 release artifacts/,
+  );
+
+  // Extra unexpected artifact (10 instead of 9) fails closed
+  assert.throws(
+    () =>
+      validateExactLocalArtifactSet({
+        actualAssets: [
+          ...validArtifacts,
+          { digest: `sha256:${'a'.repeat(64)}`, name: 'extra.bin', size: 10 },
+        ],
+        expectedAssets: validArtifacts,
+      }),
+    /expected exactly 9 release artifacts/,
+  );
+
+  // Duplicate filename in actual assets fails closed
+  assert.throws(
+    () =>
+      validateExactLocalArtifactSet({
+        actualAssets: [
+          ...validArtifacts.slice(0, 8),
+          { digest: `sha256:${'1'.repeat(64)}`, name: 'setup.exe', size: 100 },
+        ],
+        expectedAssets: validArtifacts,
+      }),
+    /provided more than once/,
+  );
+
+  // Duplicate filename in expected assets fails closed
+  assert.throws(
+    () =>
+      validateExactLocalArtifactSet({
+        actualAssets: validArtifacts,
+        expectedAssets: [
+          ...validArtifacts.slice(0, 8),
+          { digest: `sha256:${'1'.repeat(64)}`, name: 'setup.exe', size: 100 },
+        ],
+      }),
+    /provided more than once/,
+  );
+
+  // Wrong SHA-256 digest fails closed
+  assert.throws(
+    () =>
+      validateExactLocalArtifactSet({
+        actualAssets: [
+          { digest: `sha256:${'f'.repeat(64)}`, name: 'setup.exe', size: 100 },
+          ...validArtifacts.slice(1),
+        ],
+        expectedAssets: validArtifacts,
+      }),
+    /SHA-256 \(sha256:f.*\) does not match the publication specification/,
+  );
+
+  // Wrong size fails closed
+  assert.throws(
+    () =>
+      validateExactLocalArtifactSet({
+        actualAssets: [
+          { digest: `sha256:${'1'.repeat(64)}`, name: 'setup.exe', size: 999 },
+          ...validArtifacts.slice(1),
+        ],
+        expectedAssets: validArtifacts,
+      }),
+    /size \(999\) does not match the publication specification/,
+  );
+
+  // Malformed SHA-256 fails closed
+  assert.throws(
+    () =>
+      validateExactLocalArtifactSet({
+        actualAssets: [
+          { digest: 'not-a-sha', name: 'setup.exe', size: 100 },
+          ...validArtifacts.slice(1),
+        ],
+        expectedAssets: validArtifacts,
+      }),
+    /must include a SHA-256 digest/,
+  );
+});
+
+test('CLI publication-spec and verify-local-artifacts enforce cryptographic digest lock and fail closed on tampered bytes or missing specification', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'renderpilot-digest-lock-'));
+  const changelogPath = path.join(directory, 'CHANGELOG.md');
+  const specPath = path.join(directory, 'publication-spec.json');
+  const fileAPath = path.join(directory, 'fileA.bin');
+  const fileBPath = path.join(directory, 'fileB.bin');
+
+  try {
+    await Promise.all([
+      writeFile(changelogPath, FULL_CHANGELOG),
+      writeFile(fileAPath, Buffer.from('hello world A')),
+      writeFile(fileBPath, Buffer.from('hello world B')),
+    ]);
+
+    // Generate publication spec with artifacts
+    const { stdout: specStdout } = await execFile(process.execPath, [
+      SCRIPT_PATH,
+      'publication-spec',
+      '--changelog',
+      changelogPath,
+      '--commit',
+      COMMIT,
+      '--github-sha',
+      GITHUB_SHA,
+      '--published-at',
+      PUBLISHED_AT,
+      '--repository',
+      REPOSITORY,
+      '--run-id',
+      RUN_ID,
+      '--tag',
+      TAG,
+      '--version',
+      VERSION,
+      '--artifact',
+      fileAPath,
+      '--artifact',
+      fileBPath,
+    ]);
+    await writeFile(specPath, specStdout);
+
+    // Verify local artifacts succeeds on exact matching files
+    const { stdout: verifyStdout } = await execFile(process.execPath, [
+      SCRIPT_PATH,
+      'verify-local-artifacts',
+      '--spec',
+      specPath,
+      '--artifact',
+      fileAPath,
+      '--artifact',
+      fileBPath,
+    ]);
+    assert.deepEqual(JSON.parse(verifyStdout), { count: 2, verified: true });
+
+    // Modifying a single byte with same size triggers SHA-256 mismatch
+    await writeFile(fileAPath, Buffer.from('hello world X'));
+    await assert.rejects(
+      execFile(process.execPath, [
+        SCRIPT_PATH,
+        'verify-local-artifacts',
+        '--spec',
+        specPath,
+        '--artifact',
+        fileAPath,
+        '--artifact',
+        fileBPath,
+      ]),
+      (error) => {
+        assert.match(error.stderr, /SHA-256/);
+        return true;
+      },
+    );
+
+    // Modifying size triggers size mismatch
+    await writeFile(fileAPath, Buffer.from('different length bytes'));
+    await assert.rejects(
+      execFile(process.execPath, [
+        SCRIPT_PATH,
+        'verify-local-artifacts',
+        '--spec',
+        specPath,
+        '--artifact',
+        fileAPath,
+        '--artifact',
+        fileBPath,
+      ]),
+      (error) => {
+        assert.match(error.stderr, /size/);
+        return true;
+      },
+    );
+
+    // Restoring file bytes allows verification to pass again
+    await writeFile(fileAPath, Buffer.from('hello world A'));
+
+    // Spec without artifacts fails closed
+    const specWithoutArtifacts = JSON.parse(specStdout);
+    delete specWithoutArtifacts.artifacts;
+    const invalidSpecPath = path.join(directory, 'spec-no-artifacts.json');
+    await writeFile(invalidSpecPath, JSON.stringify(specWithoutArtifacts));
+
+    await assert.rejects(
+      execFile(process.execPath, [
+        SCRIPT_PATH,
+        'verify-local-artifacts',
+        '--spec',
+        invalidSpecPath,
+        '--artifact',
+        fileAPath,
+        '--artifact',
+        fileBPath,
+      ]),
+      (error) => {
+        assert.match(error.stderr, /does not contain the required frozen artifact digests/);
+        return true;
+      },
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('release workflow enforces immutable actions/attest build provenance before publication', async () => {
+  const [workflow, prepareScript, publishScript] = await Promise.all([
+    readFile(WORKFLOW_PATH, 'utf8'),
+    readFile(PREPARE_SCRIPT_PATH, 'utf8'),
+    readFile(PUBLISH_SCRIPT_PATH, 'utf8'),
+  ]);
+
+  // Least privilege permissions scoped strictly to the release job
+  const releaseJob = /\n {2}release:\s*\n[\s\S]*?(?=\n {2}[a-zA-Z0-9_-]+:\s*\n|$)/.exec(
+    workflow,
+  )?.[0];
+  assert.ok(releaseJob, 'release job must be present in workflow');
+  const releasePermissions = /\n {4}permissions:\s*\n([\s\S]*?)(?=\n {4}[a-zA-Z0-9_-]+:)/.exec(
+    releaseJob,
+  )?.[1];
+  assert.ok(releasePermissions, 'release job permissions must be present');
+  const permissionsList = releasePermissions
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  assert.deepEqual(
+    permissionsList,
+    ['contents: write', 'id-token: write', 'attestations: write'],
+    'release job must declare exact least-privilege permissions',
+  );
+
+  // Exact pinned immutable action SHA with v4 comment (disallow unpinned tags or outdated actions)
+  const attestUses = [...workflow.matchAll(/uses:\s*actions\/attest@([^\s#]+)/g)];
+  assert.equal(attestUses.length, 1, 'workflow must contain exactly one actions/attest reference');
+  assert.match(
+    attestUses[0][1],
+    /^[0-9a-f]{40}$/,
+    'actions/attest must be pinned by a full 40-character commit SHA',
+  );
+  assert.match(workflow, /uses:\s*actions\/attest@[0-9a-f]{40}\s+#\s*v4\.\d+\.\d+/);
+  assert.doesNotMatch(workflow, /actions\/attest-build-provenance/);
+  assert.doesNotMatch(workflow, /uses:\s*actions\/attest@v\d+/);
+
+  // Verify step ordering: prepare -> attest -> publish
+  const prepareIndex = workflow.indexOf('name: Prepare release distribution assets');
+  const attestIndex = workflow.indexOf('name: Generate artifact attestations');
+  const publishIndex = workflow.indexOf('name: Publish and verify release assets');
+
+  assert.ok(prepareIndex >= 0, 'Prepare release distribution assets step must exist');
+  assert.ok(attestIndex >= 0, 'Generate artifact attestations step must exist');
+  assert.ok(publishIndex >= 0, 'Publish and verify release assets step must exist');
+  assert.ok(prepareIndex < attestIndex, 'Preparation must strictly precede attestation');
+  assert.ok(attestIndex < publishIndex, 'Attestation must strictly precede publication');
+
+  // Exact 9 subjects parsed from multiline block scalar without wildcards or loose globs
+  const attestStep =
+    /- name: Generate artifact attestations[\s\S]*?(?=\n\s*- name: Publish and verify release assets)/.exec(
+      workflow,
+    )?.[0];
+  assert.ok(attestStep, 'Generate artifact attestations step must exist');
+
+  const subjectPathMatch = /subject-path:\s*\|([\s\S]*?)(?=\n\s*[a-zA-Z0-9_-]+:|$)/.exec(
+    attestStep,
+  );
+  assert.ok(subjectPathMatch, 'subject-path multiline block must exist');
+
+  const subjects = subjectPathMatch[1]
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  const expectedSubjects = [
+    'target/release/bundle/nsis/RenderPilot_${{ steps.release_context.outputs.version }}_x64-setup.exe',
+    'target/release/bundle/nsis/RenderPilot_${{ steps.release_context.outputs.version }}_x64-setup.exe.sig',
+    '${{ env.RENDERPILOT_PORTABLE_DIR }}/RenderPilot-setup.exe',
+    '${{ env.RENDERPILOT_PORTABLE_DIR }}/RenderPilot_${{ steps.release_context.outputs.version }}_x64-portable.exe',
+    '${{ env.RENDERPILOT_PORTABLE_DIR }}/RenderPilot_${{ steps.release_context.outputs.version }}_x64-portable.exe.sig',
+    '${{ env.RENDERPILOT_PORTABLE_DIR }}/RenderPilot_${{ steps.release_context.outputs.version }}_x64-portable.rpu',
+    '${{ env.RENDERPILOT_PORTABLE_DIR }}/RenderPilot_${{ steps.release_context.outputs.version }}_x64-portable.rpu.sig',
+    '${{ env.RENDERPILOT_PORTABLE_DIR }}/RenderPilot_${{ steps.release_context.outputs.version }}_x64-portable.zip',
+    '${{ env.RENDERPILOT_PORTABLE_DIR }}/latest.json',
+  ];
+
+  assert.equal(subjects.length, 9, 'must contain exactly 9 attestation subjects');
+  assert.deepEqual(
+    subjects,
+    expectedSubjects,
+    'attestation subjects must match the exact expected set in order',
+  );
+  for (const subject of subjects) {
+    assert.doesNotMatch(
+      subject,
+      /[*?[\]]/,
+      `subject path must not contain wildcard syntax: ${subject}`,
+    );
+  }
+
+  // Immutability invariant: publisher enforces 9-artifact cryptographic digest-lock via JS policy CLI
+  assert.match(
+    workflow,
+    /release-portable-artifacts\.ps1\s*`\s*\n\s*-Version\s+\$env:RENDERPILOT_RELEASE_VERSION/,
+  );
+  assert.match(
+    workflow,
+    /prepare-release-assets\.ps1\s*`\s*\n\s*-Version\s+\$env:RENDERPILOT_RELEASE_VERSION/,
+  );
+  assert.match(publishScript, /\$alreadyPrepared\s*=/);
+  assert.match(prepareScript, /publication-spec[\s\S]*?--artifact/);
+  assert.match(publishScript, /verify-local-artifacts[\s\S]*?--spec/);
+  assert.match(prepareScript, /Copy-RenderPilotFileCreateNew/);
+  assert.match(prepareScript, /node \$releaseManifestScript transform/);
 });

@@ -1,5 +1,8 @@
 import { fail, requireObject, requireText } from './release-manifest-common.mjs';
-import { validateExactReleaseAssetSet } from './release-manifest-github-assets.mjs';
+import {
+  createReleaseArtifactSpec,
+  validateExactReleaseAssetSet,
+} from './release-manifest-github-assets.mjs';
 import {
   APP_UPDATE_SESSION_ID_HEX_CHARS,
   NSIS_PLATFORM,
@@ -263,6 +266,7 @@ function provenanceMarker(provenance) {
  * retry eligible only for the same authenticated GitHub Actions run.
  */
 export function createReleasePublicationSpec({
+  artifacts,
   changelog,
   commit,
   githubSha,
@@ -296,7 +300,7 @@ export function createReleasePublicationSpec({
     tag_name: tag,
     target_commitish: targetCommit,
   };
-  return {
+  const publication = {
     final,
     final_request: { ...final, make_latest: 'true' },
     marker,
@@ -311,6 +315,10 @@ export function createReleasePublicationSpec({
       target_commitish: targetCommit,
     },
   };
+  if (Array.isArray(artifacts) && artifacts.length > 0) {
+    publication.artifacts = artifacts.map(createReleaseArtifactSpec);
+  }
+  return publication;
 }
 
 function assertReleaseMetadata(release, expected, state) {
