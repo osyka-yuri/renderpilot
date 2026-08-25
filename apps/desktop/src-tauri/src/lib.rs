@@ -133,6 +133,10 @@ fn create_desktop_builder() -> DesktopBuilder {
 /// the supervisor's durable CommitPermit, never during TrialReadOnly.
 #[cfg(all(windows, feature = "portable"))]
 pub(crate) fn complete_portable_activation(app: &tauri::AppHandle) -> Result<(), String> {
+    if portable_runtime::activation::is_committed() {
+        return Ok(());
+    }
+
     let result = portable_runtime::activation::prove_visible_and_commit(app, |catalog| {
         let context = Arc::new(match catalog {
             portable_runtime::app_catalog_migration::CatalogClassification::Fresh => {

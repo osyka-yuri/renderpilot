@@ -1,10 +1,19 @@
-use std::io::Cursor;
+use std::{
+    io::Cursor,
+    sync::{
+        Arc, Barrier, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+};
 
 use renderpilot_orchestration::portable::RuntimePathsV1;
 
 use super::{error_code, hash, temp_root};
 use crate::portable_runtime::{
-    activation::{accept_activation_permit, accept_commit_permit},
+    activation::{
+        accept_activation_permit, accept_commit_permit, ensure_committed, is_committed,
+        require_committed,
+    },
     app_process::schema_observation_supported,
     app_protocol::{
         AppControlMessage, AppStatusMessage, PortableAppSessionV2, PortableUpdateRequest,
@@ -207,4 +216,79 @@ fn portable_update_requests_remain_serializable_dtos() {
         String::from_utf8(wire).expect("UTF-8 JSON DTO"),
         "{\"action\":\"apply\"}\n"
     );
+}
+
+#[test]
+fn activation_concurrency_serializes_and_ensures_single_handshake() {
+    let exchange = Arc::new(Mutex::new(()));
+    let committed_gate = Arc::new(AtomicBool::new(false));
+    let handshake_count = Arc::new(AtomicUsize::new(0));
+
+    let barrier = Arc::new(Barrier::new(2));
+
+    // Thread A: simulates Call A, acquiring the exchange lock and holding it during handshake
+    let exchange_a = Arc::clone(&exchange);
+    let gate_a = Arc::clone(&committed_gate);
+    let count_a = Arc::clone(&handshake_count);
+    let barrier_a = Arc::clone(&barrier);
+
+    let handle_a = std::thread::spawn(move || {
+        ensure_committed(&exchange_a, &gate_a, || {
+            // Signal thread B that Thread A has entered the handshake (holding exchange lock)
+            barrier_a.wait();
+            // Simulate brief protocol delay
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            count_a.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+    });
+
+    // Thread B: simulates Call B (e.g. rapid F5), starts while Thread A holds the lock
+    let exchange_b = Arc::clone(&exchange);
+    let gate_b = Arc::clone(&committed_gate);
+    let count_b = Arc::clone(&handshake_count);
+    let barrier_b = Arc::clone(&barrier);
+
+    let handle_b = std::thread::spawn(move || {
+        // Wait until Thread A is inside the handshake holding exchange lock
+        barrier_b.wait();
+        ensure_committed(&exchange_b, &gate_b, || {
+            count_b.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+    });
+
+    let res_a = handle_a.join().expect("thread A join");
+    let res_b = handle_b.join().expect("thread B join");
+
+    assert!(res_a.is_ok(), "Call A must succeed");
+    assert!(res_b.is_ok(), "Call B must succeed as idempotent no-op");
+    assert_eq!(
+        handshake_count.load(Ordering::SeqCst),
+        1,
+        "Handshake closure must execute exactly once"
+    );
+    assert!(
+        committed_gate.load(Ordering::Acquire),
+        "Gate must be committed"
+    );
+
+    // Sequential Call C: fast-path / second no-op
+    let count_c = Arc::clone(&handshake_count);
+    let res_c = ensure_committed(&exchange, &committed_gate, || {
+        count_c.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    });
+    assert!(res_c.is_ok(), "Call C must succeed as idempotent no-op");
+    assert_eq!(
+        handshake_count.load(Ordering::SeqCst),
+        1,
+        "Sequential call must not re-execute handshake"
+    );
+}
+
+#[test]
+fn standalone_desktop_without_portable_session_remains_ungated() {
+    assert!(!is_committed());
+    assert!(require_committed().is_ok());
 }

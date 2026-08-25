@@ -72,118 +72,134 @@ pub fn is_committed() -> bool {
 /// window. The method checks the authenticated paths and query-only catalog
 /// before it emits TrialReady, then the supervisor alone controls Activation
 /// and Commit permits.
-pub fn prove_visible_and_commit<T>(
+pub fn prove_visible_and_commit(
     app: &AppHandle,
-    commit: impl FnOnce(CatalogClassification) -> Result<T>,
-) -> Result<T> {
+    commit: impl FnOnce(CatalogClassification) -> Result<()>,
+) -> Result<()> {
     let session = session()?;
-    let _exchange = session.exchange.lock().map_err(|_| {
-        PortableRuntimeError::new("portable_activation", "portable protocol exchange poisoned")
-    })?;
-    let catalog = query_only_catalog()?;
-    let schema_observed = catalog.schema_observed();
-    let paths = runtime_paths::current()?;
-    std::fs::create_dir_all(&paths.webview2_root)?;
-    let window = app.get_webview_window("main").ok_or_else(|| {
-        PortableRuntimeError::new("portable_activation", "main WebView window was absent")
-    })?;
-    if !window
-        .is_visible()
-        .map_err(|error| PortableRuntimeError::new("portable_activation", error.to_string()))?
-    {
-        return Err(PortableRuntimeError::new(
-            "portable_activation",
-            "main WebView window was not visible",
-        ));
-    }
-    window
-        .eval("window.__renderpilotPortableTrialReady = true;")
-        .map_err(|error| PortableRuntimeError::new("portable_activation", error.to_string()))?;
-    {
-        let mut status = session.status.lock().map_err(|_| {
-            PortableRuntimeError::new("portable_activation", "status pipe poisoned")
+    ensure_committed(&session.exchange, &COMMITTED, || {
+        let catalog = query_only_catalog()?;
+        let schema_observed = catalog.schema_observed();
+        let paths = runtime_paths::current()?;
+        std::fs::create_dir_all(&paths.webview2_root)?;
+        let window = app.get_webview_window("main").ok_or_else(|| {
+            PortableRuntimeError::new("portable_activation", "main WebView window was absent")
         })?;
-        write_message(
-            &mut *status,
-            &AppStatusMessage::trial_ready(TrialReady {
-                transcript_sha256: session.startup.transcript_sha256()?,
-                runtime_paths_sha256: session.startup.runtime_paths_sha256()?,
-                schema_observed,
-                db_query_only: true,
-                webview_profile_ready: true,
-                ui_bundle_ready: true,
-                visible_window_ready: true,
-                event_loop_roundtrip: true,
-                supervisor_session_transcript_sha256: session
-                    .startup
-                    .supervisor_session_transcript_sha256
-                    .clone(),
-            }),
-        )?;
-    }
-    if let CatalogClassification::Existing { schema } = catalog {
-        let mut control = session.control.lock().map_err(|_| {
-            PortableRuntimeError::new("portable_activation", "control pipe poisoned")
-        })?;
-        let mut status = session.status.lock().map_err(|_| {
-            PortableRuntimeError::new("portable_activation", "status pipe poisoned")
-        })?;
-        exchange_catalog_migration(
-            &session.startup,
-            &paths.catalog_db_path,
-            schema,
-            &mut *control,
-            &mut *status,
-        )?;
-    }
+        if !window
+            .is_visible()
+            .map_err(|error| PortableRuntimeError::new("portable_activation", error.to_string()))?
+        {
+            return Err(PortableRuntimeError::new(
+                "portable_activation",
+                "main WebView window was not visible",
+            ));
+        }
+        window
+            .eval("window.__renderpilotPortableTrialReady = true;")
+            .map_err(|error| PortableRuntimeError::new("portable_activation", error.to_string()))?;
+        {
+            let mut status = session.status.lock().map_err(|_| {
+                PortableRuntimeError::new("portable_activation", "status pipe poisoned")
+            })?;
+            write_message(
+                &mut *status,
+                &AppStatusMessage::trial_ready(TrialReady {
+                    transcript_sha256: session.startup.transcript_sha256()?,
+                    runtime_paths_sha256: session.startup.runtime_paths_sha256()?,
+                    schema_observed,
+                    db_query_only: true,
+                    webview_profile_ready: true,
+                    ui_bundle_ready: true,
+                    visible_window_ready: true,
+                    event_loop_roundtrip: true,
+                    supervisor_session_transcript_sha256: session
+                        .startup
+                        .supervisor_session_transcript_sha256
+                        .clone(),
+                }),
+            )?;
+        }
+        if let CatalogClassification::Existing { schema } = catalog {
+            let mut control = session.control.lock().map_err(|_| {
+                PortableRuntimeError::new("portable_activation", "control pipe poisoned")
+            })?;
+            let mut status = session.status.lock().map_err(|_| {
+                PortableRuntimeError::new("portable_activation", "status pipe poisoned")
+            })?;
+            exchange_catalog_migration(
+                &session.startup,
+                &paths.catalog_db_path,
+                schema,
+                &mut *control,
+                &mut *status,
+            )?;
+        }
 
-    let activation_permit = accept_activation_permit(read_control(session)?, &session.startup)?;
-    let activation_nonce = activation_permit.activation_nonce;
-    let selection_record_sha256 = activation_permit.selection_record_sha256;
-    let journal_sequence = activation_permit.journal_sequence;
-    {
+        let activation_permit = accept_activation_permit(read_control(session)?, &session.startup)?;
+        let activation_nonce = activation_permit.activation_nonce;
+        let selection_record_sha256 = activation_permit.selection_record_sha256;
+        let journal_sequence = activation_permit.journal_sequence;
+        {
+            let mut status = session.status.lock().map_err(|_| {
+                PortableRuntimeError::new("portable_activation", "status pipe poisoned")
+            })?;
+            write_message(
+                &mut *status,
+                &AppStatusMessage::activation_ack(
+                    activation_nonce,
+                    selection_record_sha256.clone(),
+                    true,
+                    true,
+                    session.startup.supervisor_session_transcript_sha256.clone(),
+                ),
+            )?;
+        }
+        let commit_permit = accept_commit_permit(
+            read_control(session)?,
+            &selection_record_sha256,
+            journal_sequence,
+            &session.startup,
+        )?;
+        let committed_journal_sequence = commit_permit.committed_journal_sequence;
+        let permit_nonce = commit_permit.permit_nonce;
+
+        // The permit authorizes durable App initialization, but observation is
+        // truthful only after that initialization succeeds. Ordinary commands
+        // remain gated until the exact Context is installed and the ack is flushed.
+        commit(catalog)?;
         let mut status = session.status.lock().map_err(|_| {
             PortableRuntimeError::new("portable_activation", "status pipe poisoned")
         })?;
         write_message(
             &mut *status,
-            &AppStatusMessage::activation_ack(
-                activation_nonce,
-                selection_record_sha256.clone(),
-                true,
-                true,
+            &AppStatusMessage::commit_ack(
+                selection_record_sha256,
+                committed_journal_sequence,
+                permit_nonce,
                 session.startup.supervisor_session_transcript_sha256.clone(),
             ),
         )?;
-    }
-    let commit_permit = accept_commit_permit(
-        read_control(session)?,
-        &selection_record_sha256,
-        journal_sequence,
-        &session.startup,
-    )?;
-    let committed_journal_sequence = commit_permit.committed_journal_sequence;
-    let permit_nonce = commit_permit.permit_nonce;
+        Ok(())
+    })
+}
 
-    // The permit authorizes durable App initialization, but observation is
-    // truthful only after that initialization succeeds. Ordinary commands
-    // remain gated until the exact Context is installed and the ack is flushed.
-    let committed = commit(catalog)?;
-    let mut status = session
-        .status
-        .lock()
-        .map_err(|_| PortableRuntimeError::new("portable_activation", "status pipe poisoned"))?;
-    write_message(
-        &mut *status,
-        &AppStatusMessage::commit_ack(
-            selection_record_sha256,
-            committed_journal_sequence,
-            permit_nonce,
-            session.startup.supervisor_session_transcript_sha256.clone(),
-        ),
-    )?;
-    COMMITTED.store(true, Ordering::Release);
-    Ok(committed)
+pub(in crate::portable_runtime) fn ensure_committed(
+    exchange: &Mutex<()>,
+    committed_gate: &AtomicBool,
+    perform_handshake: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    let _exchange = exchange.lock().map_err(|_| {
+        PortableRuntimeError::new("portable_activation", "portable protocol exchange poisoned")
+    })?;
+    // Another invocation may have completed activation while this one
+    // was waiting for the protocol exchange lock. Treat that as a
+    // successful idempotent no-op instead of starting a second handshake.
+    if committed_gate.load(Ordering::Acquire) {
+        return Ok(());
+    }
+    perform_handshake()?;
+    committed_gate.store(true, Ordering::Release);
+    Ok(())
 }
 
 pub fn require_committed() -> Result<()> {
