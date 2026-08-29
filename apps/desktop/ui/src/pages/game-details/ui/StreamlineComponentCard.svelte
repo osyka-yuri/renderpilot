@@ -136,7 +136,7 @@
             onValueChange={handleBulkChange}
           >
             <SelectTrigger size="sm" class="w-60">
-              <span class="truncate">{triggerLabel}</span>
+              <span class="truncate text-foreground">{triggerLabel}</span>
             </SelectTrigger>
             <SelectContent>
               <!--
