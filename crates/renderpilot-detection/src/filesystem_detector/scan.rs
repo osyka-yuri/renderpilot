@@ -445,4 +445,46 @@ mod tests {
         assert!(names[0].contains("/real/"));
         assert!(!names[0].contains("/linked/"));
     }
+
+    #[test]
+    fn walker_skips_dotted_and_development_directories() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp.path();
+
+        let shipping = root
+            .join("Plugins")
+            .join("DLSS")
+            .join("Binaries")
+            .join("ThirdParty")
+            .join("Win64");
+        let dev = shipping.join("Development");
+        let dev_upper = root.join("DEVELOPMENT");
+        let git_dir = root.join(".git");
+        let vs_dir = root.join(".vs");
+
+        fs::create_dir_all(&shipping).expect("shipping dir");
+        fs::create_dir_all(&dev).expect("dev dir");
+        fs::create_dir_all(&dev_upper).expect("upper dev dir");
+        fs::create_dir_all(&git_dir).expect("git dir");
+        fs::create_dir_all(&vs_dir).expect("vs dir");
+
+        fs::write(shipping.join("nvngx_dlss.dll"), b"shipping-dlss").expect("shipping dll");
+        fs::write(dev.join("nvngx_dlss.dll"), b"dev-dlss").expect("dev dll");
+        fs::write(dev_upper.join("nvngx_dlss.dll"), b"dev-upper-dll").expect("dev upper dll");
+        fs::write(git_dir.join("nvngx_dlss.dll"), b"git-dll").expect("git dll");
+        fs::write(vs_dir.join("nvngx_dlss.dll"), b"vs-dll").expect("vs dll");
+
+        let collected = collect_files_filtered(root, Some(10), |name: &str| {
+            name.to_ascii_lowercase().ends_with(".dll")
+        })
+        .expect("walk should succeed")
+        .into_files();
+
+        assert_eq!(collected.len(), 1, "only shipping DLL should be collected");
+        assert_eq!(
+            collected[0].parent().unwrap(),
+            shipping.as_path(),
+            "collected DLL must be from the shipping directory"
+        );
+    }
 }

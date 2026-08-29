@@ -777,14 +777,12 @@ mod tests {
     }
 
     #[test]
-    fn skips_dotted_and_backup_directories() {
+    fn skips_dotted_and_non_runtime_directories() {
         let tmp = TempDir::new().unwrap();
         write_file(&tmp.path().join("Game.exe"), &[0u8; 1024]);
         write_file(&tmp.path().join(".git/Decoy.exe"), &[0u8; 1024]);
-        write_file(
-            &tmp.path().join("_renderpilot_backups/Decoy.exe"),
-            &[0u8; 1024],
-        );
+        write_file(&tmp.path().join(".cache/Decoy.exe"), &[0u8; 1024]);
+        write_file(&tmp.path().join("Development/Decoy.exe"), &[0u8; 1024]);
 
         let results = detect_executable_candidates(tmp.path());
         assert_eq!(results.len(), 1);

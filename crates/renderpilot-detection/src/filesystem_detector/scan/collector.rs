@@ -306,7 +306,8 @@ impl<'filesystem, F: FileNameFilter, C: Fn() -> bool> FileCollector<'filesystem,
             }
             return true;
         }
-        is_skipped_directory(path, self.mode)
+        // Name-based directory exclusion policy applies to descendant directories only.
+        depth > 0 && is_skipped_directory(path, self.mode)
     }
 
     fn record_error(&mut self, path: &Path, error: &renderpilot_application::AppError) {
