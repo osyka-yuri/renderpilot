@@ -3,9 +3,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushSync, mount, tick, unmount } from 'svelte';
+import { flushSync, mount, tick } from 'svelte';
 
 import { t } from '@shared/i18n';
+import { closeAndUnmountBitsOverlay, type MountedComponent } from '@shared/testing';
 import type { AddGameConfirmation, AddGameInspection } from '../model/add-game';
 import type { AddGameDialogState } from '../model/add-game-flow.svelte';
 import AddGameDialog from './AddGameDialog.svelte';
@@ -20,7 +21,7 @@ type DialogTestProps = {
 
 describe('AddGameDialog', () => {
   let target: HTMLDivElement;
-  let component: Record<string, never> | undefined;
+  let component: MountedComponent | undefined;
   let initialBodyStyle: string;
 
   beforeEach(() => {
@@ -42,7 +43,7 @@ describe('AddGameDialog', () => {
     component = undefined;
     try {
       if (mountedComponent) {
-        await closeAndUnmountDialog(mountedComponent, initialBodyStyle);
+        await closeAndUnmountBitsOverlay(mountedComponent, initialBodyStyle);
       }
     } finally {
       vi.unstubAllGlobals();
@@ -587,26 +588,6 @@ describe('AddGameDialog', () => {
 async function render(): Promise<void> {
   flushSync();
   await tick();
-}
-
-async function closeAndUnmountDialog(
-  component: Record<string, never>,
-  initialBodyStyle: string,
-): Promise<void> {
-  try {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    flushSync();
-    // bits-ui restores its body scroll lock asynchronously after the dialog closes.
-    await waitForBodyStyle(initialBodyStyle);
-  } finally {
-    await unmount(component);
-  }
-}
-
-async function waitForBodyStyle(expectedCssText: string): Promise<void> {
-  await vi.waitFor(() => {
-    expect(document.body.style.cssText).toBe(expectedCssText);
-  });
 }
 
 function inspection(overrides: Partial<AddGameInspection> = {}): AddGameInspection {

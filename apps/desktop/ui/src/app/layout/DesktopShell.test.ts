@@ -6,17 +6,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 
 import { setLanguageMode } from '@shared/i18n';
+import { closeAndUnmountBitsOverlay, type MountedComponent } from '@shared/testing';
 
 import DesktopShellTestHost from './DesktopShell.test-host.svelte';
 
 describe('DesktopShell navigation intent', () => {
   let target: HTMLDivElement;
-  let component: object | undefined;
+  let component: MountedComponent | undefined;
+  let initialBodyStyle: string;
 
   function mockViewport(isMobile: boolean): void {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      value: vi.fn((query: string) => ({
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
         matches: isMobile,
         media: query,
         onchange: null,
@@ -26,7 +28,7 @@ describe('DesktopShell navigation intent', () => {
         removeEventListener: vi.fn(),
         dispatchEvent: vi.fn(() => false),
       })),
-    });
+    );
   }
 
   function requireElement<T extends Element>(element: T | null, label: string): T {
@@ -40,25 +42,32 @@ describe('DesktopShell navigation intent', () => {
   beforeEach(async () => {
     await setLanguageMode('en');
     mockViewport(false);
-    Object.defineProperty(window, 'ResizeObserver', {
-      configurable: true,
-      value: class ResizeObserverMock {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class ResizeObserverMock {
         observe = vi.fn();
         unobserve = vi.fn();
         disconnect = vi.fn();
       },
-    });
+    );
     target = document.createElement('div');
     document.body.append(target);
+    initialBodyStyle = document.body.style.cssText;
   });
 
   afterEach(async () => {
-    if (component) {
-      await unmount(component);
-      component = undefined;
+    const mountedComponent = component;
+    component = undefined;
+    try {
+      if (mountedComponent) {
+        await closeAndUnmountBitsOverlay(mountedComponent, initialBodyStyle);
+      }
+    } finally {
+      target.remove();
+      document.body.replaceChildren();
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
     }
-    target.remove();
-    vi.restoreAllMocks();
   });
 
   it('does not move focus on initial mount or on locale and title-only updates', async () => {
