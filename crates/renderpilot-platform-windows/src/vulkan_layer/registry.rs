@@ -266,7 +266,7 @@ impl LayerRegistry for WindowsLayerRegistry {
 }
 
 #[cfg(windows)]
-fn validate_canonical_manifest(manifest_path: &Path) -> io::Result<&std::ffi::OsStr> {
+fn validate_canonical_manifest(manifest_path: &Path) -> io::Result<PathBuf> {
     let layer_dir = super::reshade_common_dir().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -283,7 +283,7 @@ fn validate_canonical_manifest(manifest_path: &Path) -> io::Result<&std::ffi::Os
             ),
         ));
     }
-    Ok(manifest_path.as_os_str())
+    Ok(expected)
 }
 
 #[cfg(windows)]
@@ -361,11 +361,25 @@ mod canonical_registration_tests {
 
         assert_eq!(
             validate_canonical_manifest(&manifest).expect("canonical manifest"),
-            manifest.as_os_str()
+            manifest
         );
         assert!(
             validate_canonical_manifest(&layer_dir.join("foreign").join(LAYER_JSON_NAME)).is_err(),
             "a matching basename outside the standard layer directory is not canonical"
+        );
+    }
+
+    #[test]
+    fn validate_canonical_manifest_accepts_verbatim_dos_path() {
+        let Some(layer_dir) = super::super::reshade_common_dir() else {
+            return;
+        };
+        let manifest = layer_dir.join(LAYER_JSON_NAME);
+        let verbatim = PathBuf::from(format!(r"\\?\{}", manifest.display()));
+
+        assert_eq!(
+            validate_canonical_manifest(&verbatim).expect("canonical verbatim manifest"),
+            manifest
         );
     }
 }

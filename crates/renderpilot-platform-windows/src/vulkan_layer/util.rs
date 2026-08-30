@@ -33,11 +33,24 @@ pub(crate) fn same_path(a: &Path, b: &Path) -> bool {
 /// Canonicalizes when possible (resolves `.`/`..` and symlinks); falls back to
 /// the path as given when it doesn't exist yet, which is routine here — e.g.
 /// comparing a registered manifest path against one we're about to write.
+/// Strips Windows verbatim prefixes (`\\?\` / `\\?\UNC\`) via domain path normalization.
 fn canonicalize_best_effort(path: &Path) -> String {
-    path.canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .replace('/', "\\")
-        .trim_end_matches('\\')
-        .to_ascii_lowercase()
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    renderpilot_domain::normalized_path_key(&canonical.to_string_lossy())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_path_unifies_verbatim_dos_and_regular_dos_paths_for_nonexistent_files() {
+        let dos = Path::new(r"C:\ProgramData\ReShade\NonExistentReShade64.json");
+        let verbatim = Path::new(r"\\?\C:\ProgramData\ReShade\NonExistentReShade64.json");
+        let forward = Path::new("c:/programdata/reshade/nonexistentreshade64.json");
+
+        assert!(same_path(dos, verbatim));
+        assert!(same_path(verbatim, dos));
+        assert!(same_path(verbatim, forward));
+    }
 }
