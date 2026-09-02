@@ -2,15 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.3] - 2026-09-02
+
+### Changed
+
+- **Scan and verification performance**: Optimized file detection and hashing routines, improving background library scans and catalog startup responsiveness.
+- **Dependency updates**: Refreshed underlying application libraries and runtime dependencies for improved stability and security.
+
+### Fixed
+
+- **Shared Vulkan layer path detection**: Fixed an issue where extended Windows path formats (`\\?\`) could fail validation in the Vulkan layer registry.
+- **Game directory scanning exclusions**: Prevented redundant scans of hidden dot-folders and non-runtime development files packaged in engine plugins (such as Unreal Engine DLSS and Streamline tools).
+- **Streamline trigger label contrast**: Fixed text color on Streamline action triggers for improved contrast and readability.
+
 ## [1.10.2] - 2026-08-25
 
 ### Security
 
-- **Build provenance and artifact attestations**: Official release binaries, installer aliases, portable packages, signatures, and updater manifests now include cryptographically signed SLSA build provenance through GitHub Artifact Attestations. Downloaded release assets can be independently verified against the official RenderPilot repository and release workflow using `gh attestation verify`.
+- **Verified release builds**: Official release binaries and portable packages now include signed build provenance through GitHub Artifact Attestations. Downloaded assets can be independently verified against the official RenderPilot repository using the GitHub CLI (`gh attestation verify`).
 
 ### Fixed
 
-- **Portable startup and interface reloads**: Fixed an issue where reloading the portable application interface (such as via WebView refresh) could trigger a duplicate activation handshake over the single-use IPC control channel and fail startup. Activation is now serialized and idempotent, safely ignoring redundant initialization requests once committed.
+- **Portable interface reloads**: Fixed an issue where refreshing the portable application window could cause startup to fail. Redundant initialization requests are now safely ignored.
 
 ## [1.10.1] - 2026-08-24
 
