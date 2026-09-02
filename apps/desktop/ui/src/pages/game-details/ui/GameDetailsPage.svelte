@@ -7,6 +7,7 @@
   } from '../model/game-details-tabs';
   import { Tabs, Card, CardContent, CardDescription, CardTitle, ScrollArea } from '@shared/ui';
   import { t } from '@shared/i18n';
+  import { track } from '@shared/reactivity';
   import { DesktopCommandError, isFileSafetyContextError, reportClientError } from '@shared/errors';
   import { sumDownloadFractions } from '@shared/lib';
   import { publishPresentedErrorNotification } from '@shared/notifications';
@@ -308,7 +309,7 @@
     //   - dlssFingerprint:       re-load after any DLSS DLL swap
     const id = gameId;
     const shouldLoad = hasNvidiaTab;
-    void dlssFingerprint;
+    track(dlssFingerprint);
 
     untrack(() => {
       if (!id || !shouldLoad) {

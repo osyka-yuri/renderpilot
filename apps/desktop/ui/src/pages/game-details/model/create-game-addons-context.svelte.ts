@@ -1,5 +1,6 @@
 import { untrack } from 'svelte';
 
+import { track } from '@shared/reactivity';
 import { createExclusiveAddonStores } from '@entities/addon';
 import {
   ALL_ADDON_CAPABILITIES,
@@ -83,7 +84,7 @@ export function createGameAddonsContext(options: CreateGameAddonsContextOptions)
   // A primitive key prevents unrelated same-game details updates from repeating probes.
   const activationSignature = $derived(JSON.stringify([gameId, ...capabilities]));
   $effect(() => {
-    void activationSignature;
+    track(activationSignature);
     untrack(() => {
       if (destroyed) {
         return;

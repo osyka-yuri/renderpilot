@@ -15,6 +15,8 @@ import {
 import type { TableReactivityBindings } from '@tanstack/table-core/reactivity';
 import { untrack } from 'svelte';
 
+import { track } from '@shared/reactivity';
+
 type SvelteTableOptions<TFeatures extends TableFeatures, TData extends RowData> = Omit<
   TableOptions<TFeatures, TData>,
   'features'
@@ -43,8 +45,7 @@ export function createSvelteTable<TFeatures extends TableFeatures, TData extends
   let revision = $state(0);
 
   $effect(() => {
-    void optionSnapshot.current;
-    void stateSnapshot.current;
+    track(optionSnapshot.current, stateSnapshot.current);
     revision = untrack(() => revision) + 1;
   });
 
@@ -62,7 +63,7 @@ export function createSvelteTable<TFeatures extends TableFeatures, TData extends
       // Reading through the table facade subscribes the caller to both option
       // publication and feature-state writes through the official Svelte store
       // bridge, while the underlying table instance remains stable.
-      void revision;
+      track(revision);
 
       const value: unknown = Reflect.get(target, key, target);
       if (typeof value !== 'function') {

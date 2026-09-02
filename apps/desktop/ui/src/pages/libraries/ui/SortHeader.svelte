@@ -3,6 +3,7 @@
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
+  import { track } from '@shared/reactivity';
   import { Button, type SortableTableFeatures } from '@shared/ui';
   import { useSelector } from '@tanstack/svelte-store';
   import type { Column } from '@tanstack/table-core';
@@ -19,7 +20,7 @@
 
   const tableState = useSelector(untrack(() => column.table.store));
   const sortState = $derived.by(() => {
-    void tableState.current;
+    track(tableState.current);
     return column.getIsSorted();
   });
   const canSort = $derived(column.getCanSort());
