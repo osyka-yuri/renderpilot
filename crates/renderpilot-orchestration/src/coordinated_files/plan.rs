@@ -65,9 +65,24 @@ pub(crate) enum CoordinatedFilePlan {
         source: PathBuf,
     },
     /// Create/verify sidecar for live, then delete the live file.
+    #[allow(dead_code)]
     ArchiveLiveToSidecarAndRemove {
         path: PathBuf,
         expected_live: Sha256Hash,
+    },
+    /// Catalog transition archive: the immutable original must still be live
+    /// and its sidecar must be absent.  Unlike the retry-oriented legacy
+    /// variant, this never adopts an already-existing `.bak` as ownership.
+    CreateVerifiedArchiveAndRemove {
+        path: PathBuf,
+        expected_live: Sha256Hash,
+    },
+    /// Catalog transition proof that a previous committed mutation owns an
+    /// immutable sidecar.  It mutates nothing, but rejects a recreated live
+    /// file or an arbitrary/mismatched sidecar before a later overlay.
+    RequireOwnedArchive {
+        path: PathBuf,
+        expected_baseline: Sha256Hash,
     },
     /// Restore live from sidecar without removing the sidecar. When the sidecar
     /// is absent, live must already match `baseline_sha256` (retry-safe no-op).
@@ -239,6 +254,14 @@ fn execute_file_plan_into(
             ensure_baseline_sidecar(path, expected_live, log)?;
             crate::fs::remove_file_if_exists(path)
         }
+        CoordinatedFilePlan::CreateVerifiedArchiveAndRemove {
+            path,
+            expected_live,
+        } => create_verified_archive_and_remove(path, expected_live, log),
+        CoordinatedFilePlan::RequireOwnedArchive {
+            path,
+            expected_baseline,
+        } => require_owned_archive(path, expected_baseline),
         CoordinatedFilePlan::RestorePreservingSidecar {
             path,
             baseline_sha256,
@@ -284,6 +307,29 @@ fn ensure_baseline_sidecar(
     crate::fs::create_sidecar(path, &sidecar)?;
     log.created_sidecars.push((path.to_path_buf(), sidecar));
     Ok(())
+}
+
+fn create_verified_archive_and_remove(
+    path: &Path,
+    expected_live: &Sha256Hash,
+    log: &mut FilePlanBatchLog,
+) -> Result<(), crate::ServiceError> {
+    require_live_hash(path, std::slice::from_ref(expected_live))?;
+    let sidecar = plan_sidecar(path)?;
+    require_absent(&sidecar, "baseline sidecar")?;
+    crate::fs::create_sidecar(path, &sidecar)?;
+    crate::fs::verify_sidecar(&sidecar, expected_live).map_err(map_sidecar_verify_error)?;
+    log.created_sidecars.push((path.to_path_buf(), sidecar));
+    crate::fs::remove_file_if_exists(path)
+}
+
+fn require_owned_archive(
+    path: &Path,
+    expected_baseline: &Sha256Hash,
+) -> Result<(), crate::ServiceError> {
+    require_absent(path, "reserved live original")?;
+    let sidecar = plan_sidecar(path)?;
+    crate::fs::verify_sidecar(&sidecar, expected_baseline).map_err(map_sidecar_verify_error)
 }
 
 fn restore_preserving_sidecar(

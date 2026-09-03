@@ -41,7 +41,9 @@ pub use types::{
 #[cfg(test)]
 use apply::apply_mutation_paths;
 pub(crate) use fs_ops::revert_to_baseline_fs;
-use fs_ops::{perform_apply_fs, release_baseline_sidecars, restore_baseline_preserving_sidecars};
+use fs_ops::{
+    perform_transition_apply_fs, release_baseline_sidecars, restore_baseline_preserving_sidecars,
+};
 pub(crate) use journal::{
     JournalEntryItem, JournalEntryParams, component_file_item_count,
     journal_item_is_component_file, record_operation_journal_entry,
@@ -51,14 +53,14 @@ pub(crate) use managed_rollback::{
     orphaned_rollback_affected_files, release_redundant_component_baseline_locked,
     rollback_managed_component_locked,
 };
-use planning::rebuild_component_set_after_overlay;
+use planning::rebuild_component_set_after_transition;
 use prepare::prepare_apply_swap;
 pub(crate) use rollback::{
     ROLLBACK_TARGET_LABEL, build_rollback_plan_locked, mutation_paths_from_component_files,
     rollback_component_locked,
 };
 use rollback::{rollback_executable_assessment, rollback_mutation_paths};
-use source_integrity::rebind_planned_files_for_technology;
+use source_integrity::rebind_transition_writes_for_technology;
 #[cfg(test)]
 use test_hooks::{
     D3d12ApplyFailurePoint, D3d12RollbackFailurePoint, inject_d3d12_apply_failure,

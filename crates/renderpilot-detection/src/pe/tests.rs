@@ -1,8 +1,28 @@
-use super::{read_windows_file_version_from_bytes, version_info::parse_version_text};
+use super::{
+    PeImportError, PeImportInspection, PeInspection, inspect_pe_bytes,
+    read_windows_file_version_from_bytes, version_info::parse_version_text,
+};
 
 #[test]
 fn non_pe_bytes_have_no_version() {
     assert_eq!(read_windows_file_version_from_bytes(b"not a PE file"), None);
+}
+
+#[test]
+fn import_inspection_preserves_not_pe_and_malformed_outcomes_without_reparsing() {
+    assert_eq!(
+        inspect_pe_bytes(b"not a PE file").import_inspection(),
+        PeImportInspection::NotPe
+    );
+
+    let malformed = PeInspection {
+        import_profile: Some(Err(PeImportError)),
+        ..Default::default()
+    };
+    assert_eq!(
+        malformed.import_inspection(),
+        PeImportInspection::Malformed(PeImportError)
+    );
 }
 
 #[test]

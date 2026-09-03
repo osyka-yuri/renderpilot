@@ -9,8 +9,7 @@ use renderpilot_domain::{ComponentId, GameId};
 
 use crate::catalog::swap::ReadySwapPreflight;
 
-use super::planning::{fsr_members_to_remove, planned_target_files, resolve_target_dir};
-use super::types::{PreparedApplySwap, PreparedD3d12Execution};
+use super::types::{PreparedApplySwap, PreparedD3d12Execution, writes_from_transition};
 
 pub(super) fn prepare_apply_swap(
     game_id: &GameId,
@@ -24,6 +23,8 @@ pub(super) fn prepare_apply_swap(
         baseline,
         rollback_baseline,
         first_swap,
+        transition,
+        xiph_import_proof,
         operation_plan,
         target_profile,
     } = preflight;
@@ -45,13 +46,10 @@ pub(super) fn prepare_apply_swap(
         }
     };
 
-    let target_dir = resolve_target_dir(&component)?;
-    let planned = planned_target_files(&artifact, &target_dir, &component)?;
-
-    // Membership removals are planned against the baseline before any FS/DB
-    // mutation. The post-apply component set is rebuilt after the overlay so
-    // installed PE version / hash can be re-read from disk.
-    let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
+    let transition = transition.ok_or_else(|| {
+        AppError::invalid_input("cannot apply a swap without a resolved transition")
+    })?;
+    let writes = writes_from_transition(&transition);
 
     Ok(PreparedApplySwap {
         game_id: game_id.clone(),
@@ -60,8 +58,9 @@ pub(super) fn prepare_apply_swap(
         artifact,
         baseline,
         rollback_baseline,
-        planned,
-        removed,
+        transition,
+        writes,
+        xiph_import_proof,
         first_swap,
         d3d12,
     })

@@ -1,17 +1,19 @@
 //! Xiph member topology derived from strict PE import profiles.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::ComponentFile;
 
-use super::naming::{XiphMember, XiphNameStyle, XiphNamingProfile, classify_file_name};
+use super::naming::{XiphMember, XiphNameStyle, XiphNamingProfile, parse_runtime_file_name};
 use super::release::XiphReleaseAxes;
+use super::topology::{XiphTopology, is_allowed_edge};
 
 /// A validated set of Xiph members and its exact internal import graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XiphLayout {
     names: BTreeMap<XiphMember, String>,
     dependencies: BTreeMap<XiphMember, BTreeSet<XiphMember>>,
+    topology: XiphTopology,
     naming_profile: XiphNamingProfile,
     release_axes: XiphReleaseAxes,
 }
@@ -32,6 +34,12 @@ impl XiphLayout {
     #[must_use]
     pub fn dependencies(&self, member: XiphMember) -> Option<&BTreeSet<XiphMember>> {
         self.dependencies.get(&member)
+    }
+
+    /// Returns the validated semantic topology represented by this layout.
+    #[must_use]
+    pub const fn topology(&self) -> &XiphTopology {
+        &self.topology
     }
 
     /// Returns the normalized DLL naming profile of this deployment.
@@ -62,8 +70,42 @@ pub fn detect_layout(files: &[ComponentFile]) -> Option<XiphLayout> {
 pub fn detect_layout_with_file_names<'a>(
     files: impl IntoIterator<Item = (&'a str, &'a ComponentFile)>,
 ) -> Option<XiphLayout> {
-    let files = files.into_iter().collect::<Vec<_>>();
-    if files.is_empty() || files.len() > XiphMember::ALL.len() {
+    // Parse every member before deciding whether this is a hybrid deployment.
+    // A canonical member may precede a vendor member in the input, so deciding
+    // the hybrid rule while iterating would make validity order-dependent.
+    let parsed_files = files
+        .into_iter()
+        .map(|(runtime_name, file)| {
+            parse_runtime_file_name(runtime_name)
+                .ok()
+                .flatten()
+                .map(|parsed| (file, parsed))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if parsed_files.is_empty() || parsed_files.len() > XiphMember::ALL.len() {
+        return None;
+    }
+
+    let mut vendor_axis = None;
+    let mut has_nonplain_canonical_member = false;
+    for (_, parsed) in &parsed_files {
+        if parsed.is_vendor() {
+            let axis = (parsed.vendor_suffix(), parsed.base_style());
+            if let Some(expected) = vendor_axis {
+                if axis != expected {
+                    return None;
+                }
+            } else {
+                vendor_axis = Some(axis);
+            }
+        } else if parsed.base_style() != XiphNameStyle::Plain {
+            has_nonplain_canonical_member = true;
+        }
+    }
+    if vendor_axis.is_some() && has_nonplain_canonical_member {
+        // Canonical names participate only in a real vendor/canonical hybrid;
+        // those canonical participants must be the plain artifact names. An
+        // all-vendor closure remains valid for every reviewed base style.
         return None;
     }
 
@@ -71,9 +113,10 @@ pub fn detect_layout_with_file_names<'a>(
     let mut name_styles = Vec::<XiphNameStyle>::new();
     let mut members_by_name = HashMap::new();
     let mut files_by_member = HashMap::new();
-    for (runtime_name, file) in &files {
-        let name = runtime_name.to_ascii_lowercase();
-        let (member, style) = classify_file_name(&name)?;
+    for (file, parsed) in parsed_files {
+        let name = parsed.normalized_name().to_owned();
+        let member = parsed.member();
+        let style = parsed.base_style();
         if names.insert(member, name.clone()).is_some()
             || members_by_name.insert(name, member).is_some()
         {
@@ -88,11 +131,14 @@ pub fn detect_layout_with_file_names<'a>(
         let imports = file.pe_compatibility()?.imports()?;
         let mut imported_members = BTreeSet::new();
         for imported in imports.regular.names().iter().chain(imports.delay.names()) {
-            let Some((imported_member, _)) = classify_file_name(imported) else {
+            let imported_runtime = parse_runtime_file_name(imported).ok()?;
+            let Some(imported_runtime) = imported_runtime else {
                 continue;
             };
-            if members_by_name.get(imported.as_str()) != Some(&imported_member)
-                || !edge_is_allowed(member, imported_member)
+            let imported_member = imported_runtime.member();
+            let imported_name = imported_runtime.normalized_name();
+            if members_by_name.get(imported_name) != Some(&imported_member)
+                || !is_allowed_edge(member, imported_member)
                 || !imported_members.insert(imported_member)
             {
                 return None;
@@ -101,48 +147,19 @@ pub fn detect_layout_with_file_names<'a>(
         dependencies.insert(member, imported_members);
     }
 
-    if files.len() > 1 && !is_connected(&names, &dependencies) {
-        return None;
-    }
+    let topology = XiphTopology::new(
+        names.keys().copied(),
+        dependencies
+            .iter()
+            .flat_map(|(source, targets)| targets.iter().map(move |target| (*source, *target))),
+    )
+    .ok()?;
 
     Some(XiphLayout {
         naming_profile: XiphNamingProfile::from_styles(name_styles),
         release_axes: XiphReleaseAxes::from_members(names.keys().copied()),
         names,
         dependencies,
+        topology,
     })
-}
-
-const fn edge_is_allowed(source: XiphMember, target: XiphMember) -> bool {
-    matches!(
-        (source, target),
-        (XiphMember::Vorbis, XiphMember::Ogg)
-            | (XiphMember::VorbisFile, XiphMember::Vorbis | XiphMember::Ogg)
-            | (XiphMember::VorbisEnc, XiphMember::Vorbis | XiphMember::Ogg)
-    )
-}
-
-fn is_connected(
-    names: &BTreeMap<XiphMember, String>,
-    dependencies: &BTreeMap<XiphMember, BTreeSet<XiphMember>>,
-) -> bool {
-    let Some(start) = names.keys().next().copied() else {
-        return false;
-    };
-    let mut visited = HashSet::from([start]);
-    let mut pending = vec![start];
-    while let Some(current) = pending.pop() {
-        for candidate in names.keys().copied() {
-            let adjacent = dependencies
-                .get(&current)
-                .is_some_and(|values| values.contains(&candidate))
-                || dependencies
-                    .get(&candidate)
-                    .is_some_and(|values| values.contains(&current));
-            if adjacent && visited.insert(candidate) {
-                pending.push(candidate);
-            }
-        }
-    }
-    visited.len() == names.len()
 }

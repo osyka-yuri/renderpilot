@@ -1,7 +1,8 @@
 use renderpilot_application::{
-    AppError, AppErrorKind, AppResult, ArtifactRepository, ComponentRepository, GameRepository,
-    InstalledAddonRepository, build_swap_operation_plan, d3d12_confirmation_token,
-    find_replacement_candidates, replacement_executable_action,
+    AppError, AppErrorKind, AppResult, ArtifactRepository, ComponentRepository,
+    ExternalAliasRequirements, GameRepository, InstalledAddonRepository, ResolvedTransition,
+    build_swap_operation_plan, build_swap_operation_plan_for_transition, d3d12_confirmation_token,
+    find_replacement_candidates, replacement_executable_action, resolve_transition,
 };
 use renderpilot_domain::{
     ArtifactId, ComponentFile, ComponentId, GameId, GameInstallation, LibraryArtifact,
@@ -57,12 +58,14 @@ pub fn build_swap_plan(
     // preamble: pending-transaction recovery and legacy reconciliation can
     // change both game files and SQLite state.
     let _guard = crate::game_mutation_lock::blocking_lock(game_id);
+    let mut xiph_import_cache = super::xiph_import_proof::XiphImportProofCache::default();
     let preflight = match load_swap_preflight(
         context,
         game_id,
         component_id,
         artifact_id,
         SwapPreflightMode::Preview,
+        &mut xiph_import_cache,
     )? {
         SwapPreflight::Ready(preflight) => preflight,
         SwapPreflight::UnusableSource { .. } => {
@@ -82,6 +85,10 @@ pub(super) struct ReadySwapPreflight {
     pub(super) baseline: Vec<ComponentFile>,
     pub(super) rollback_baseline: Option<renderpilot_domain::ComponentRollbackBaseline>,
     pub(super) first_swap: bool,
+    /// The single typed transition consumed by preparation and mutation.
+    pub(super) transition: Option<ResolvedTransition>,
+    /// Exact external loader bindings proved for a vendor Xiph transition.
+    pub(super) xiph_import_proof: Option<super::xiph_import_proof::XiphImportProof>,
     pub(super) operation_plan: renderpilot_application::OperationPlan,
     pub(super) target_profile: super::runtime_compatibility::TargetProfileAssessment,
 }
@@ -143,6 +150,7 @@ pub(super) fn load_swap_preflight(
     component_id: &ComponentId,
     artifact_id: &ArtifactId,
     mode: SwapPreflightMode,
+    xiph_import_cache: &mut super::xiph_import_proof::XiphImportProofCache,
 ) -> Result<SwapPreflight, ServiceError> {
     let stale_confirmation_is_mismatch = mode.stale_state_is_confirmation_mismatch();
     let storage = context.storage();
@@ -170,6 +178,18 @@ pub(super) fn load_swap_preflight(
                 .into());
             }
         };
+    if let Some(recorded_baseline) = recorded_baseline.as_ref() {
+        super::xiph_baseline_reservations::verify_vendor_xiph_baseline_reservations(
+            recorded_baseline,
+        )
+        .map_err(|error| {
+            if stale_confirmation_is_mismatch {
+                AppError::confirmation_token_mismatch()
+            } else {
+                error
+            }
+        })?;
+    }
     let installed_addon = storage.get_installed_addon(game_id)?;
     let managed_files = crate::coordinated_files::managed_files_of(installed_addon.as_ref());
     let component = crate::coordinated_files::current_component_snapshot(&component, managed_files)
@@ -208,7 +228,34 @@ pub(super) fn load_swap_preflight(
         (component.technology() == LibraryTechnology::D3D12Agility).then_some(&component),
     )
     .map_err(|error| mode.map_assessment_error(error))?;
-    let mut operation_plan = build_swap_operation_plan(&component, &artifact)?;
+    // A technology mismatch remains inspectable as a blocked legacy plan.  A
+    // real transition, by contrast, is always resolved once from immutable
+    // baseline + whole-root alias proof before any preview/apply plan exists.
+    let game_root = std::path::Path::new(game.install_path().as_str());
+    let (transition, xiph_import_proof, mut operation_plan) = if component.technology()
+        == artifact.technology()
+    {
+        let xiph_import_proof = super::xiph_import_proof::prove_external_aliases(
+            game_root,
+            &component,
+            &baseline,
+            xiph_import_cache,
+        )?;
+        let aliases = xiph_import_proof
+            .as_ref()
+            .map_or(ExternalAliasRequirements::NotRequired, |proof| {
+                proof.requirements()
+            });
+        let transition = resolve_transition(&component, &artifact, &baseline, &aliases)?;
+        let plan = build_swap_operation_plan_for_transition(&component, &artifact, &transition)?;
+        (Some(transition), xiph_import_proof, plan)
+    } else {
+        (
+            None,
+            None,
+            build_swap_operation_plan(&component, &artifact)?,
+        )
+    };
     if let Some(action) = replacement_executable_action(&artifact, &target_profile.profile)
         .map_err(|error| {
             AppError::invalid_input(format!("runtime artifact is incompatible: {error}"))
@@ -239,6 +286,8 @@ pub(super) fn load_swap_preflight(
             baseline,
             rollback_baseline: recorded_baseline,
             first_swap,
+            transition,
+            xiph_import_proof,
             operation_plan,
             target_profile,
         })));
@@ -253,12 +302,21 @@ pub(super) fn load_swap_preflight(
         });
     }
 
-    super::runtime_compatibility::ensure_transition_compatible(
-        &component,
-        &artifact,
-        &target_profile,
-    )
-    .map_err(|error| mode.map_assessment_error(error))?;
+    // Xiph's transition was already validated above with the exact external
+    // alias proof.  The generic compatibility entry point always supplies
+    // `NotRequired`, so repeating it here would reject a valid vendor-suffixed
+    // deployment after its proof-aware transition has been accepted.
+    if transition
+        .as_ref()
+        .is_none_or(|transition| transition.xiph().is_none())
+    {
+        super::runtime_compatibility::ensure_transition_compatible(
+            &component,
+            &artifact,
+            &target_profile,
+        )
+        .map_err(|error| mode.map_assessment_error(error))?;
+    }
     if validate_materialized_source
         && let ArtifactSourceAssessment::Unusable(issue) =
             assess_artifact_runtime_metadata(&artifact)
@@ -281,6 +339,8 @@ pub(super) fn load_swap_preflight(
         baseline,
         rollback_baseline: recorded_baseline,
         first_swap,
+        transition,
+        xiph_import_proof,
         operation_plan,
         target_profile,
     })))

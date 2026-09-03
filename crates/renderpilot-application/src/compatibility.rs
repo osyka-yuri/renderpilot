@@ -13,6 +13,10 @@ pub use d3d12::{
     replacement_executable_action,
 };
 pub use xiph::is_allowed_xiph_system_import;
+pub(crate) use xiph::{
+    ensure_candidate_compatible_without_alias_proof,
+    ensure_transition_compatible_with_external_aliases,
+};
 
 #[cfg(test)]
 use microsoft::{D3D12_PACKAGE_ID, DXC_PACKAGE_ID};
@@ -72,6 +76,18 @@ pub enum SwapCompatibilityError {
     NamingFamilyMismatch,
     /// A Xiph package or installed component has an invalid member shape.
     IncompleteXiphPackage,
+    /// Vendor-suffixed Xiph layouts require a complete external importer proof.
+    ExternalAliasProofRequired,
+    /// An external importer proof contained an alias that is not one of the
+    /// detected vendor-suffixed Xiph members.
+    InvalidExternalAliasRequirement,
+    /// An alias proof was supplied for a canonical Xiph deployment.
+    UnexpectedExternalAliasRequirement,
+    /// Vendor deployments may only use plain canonical catalog artifacts.
+    VendorCandidateMustUsePlainNames,
+    /// Preserving one vendor alias would leave a canonical DLL imported by the
+    /// candidate unavailable at runtime.
+    ConflictingExternalAliasRequirement,
     /// This runtime requires the installed component as compatibility context.
     ComponentContextRequired,
     /// Component and replacement artifact technologies differ.
@@ -141,6 +157,21 @@ impl std::fmt::Display for SwapCompatibilityError {
                 "Xiph candidate does not preserve the installed DLL aliases"
             }
             Self::IncompleteXiphPackage => "Xiph package does not cover the installed members",
+            Self::ExternalAliasProofRequired => {
+                "vendor-suffixed Xiph deployment requires a complete external alias proof"
+            }
+            Self::InvalidExternalAliasRequirement => {
+                "external alias proof does not match an installed vendor Xiph DLL"
+            }
+            Self::UnexpectedExternalAliasRequirement => {
+                "external alias proof was supplied for a canonical Xiph deployment"
+            }
+            Self::VendorCandidateMustUsePlainNames => {
+                "vendor-suffixed Xiph deployment requires plain canonical candidate DLL names"
+            }
+            Self::ConflictingExternalAliasRequirement => {
+                "required vendor alias conflicts with a canonical candidate dependency"
+            }
             Self::ComponentContextRequired => {
                 "runtime compatibility requires installed component context"
             }

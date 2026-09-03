@@ -24,6 +24,18 @@ pub(super) fn recover_orphaned_backups(
         // disk. Merely having a DB row is not enough to skip validation.
         match crate::coordinated_files::load_component_backup_availability(storage, component)? {
             crate::coordinated_files::ComponentBackupAvailability::Available(baseline) => {
+                if crate::catalog::xiph_baseline_reservations::is_vendor_xiph_baseline(&baseline)
+                    && crate::catalog::xiph_baseline_reservations::verify_vendor_xiph_baseline_reservations(
+                        &baseline,
+                    )
+                    .is_err()
+                {
+                    log::info!(
+                        "recovery: leaving indeterminate vendor Xiph baseline blocked for {}",
+                        component.id()
+                    );
+                    continue;
+                }
                 crate::coordinated_files::resolve_component_baseline(
                     game_root,
                     component.technology(),
@@ -31,7 +43,11 @@ pub(super) fn recover_orphaned_backups(
                     Some(baseline.files()),
                     crate::coordinated_files::managed_files_of(installed_addon.as_ref()),
                 )?;
-                if baseline.expected_active_files().is_empty() {
+                if baseline.expected_active_files().is_empty()
+                    && !crate::catalog::xiph_baseline_reservations::is_vendor_xiph_baseline(
+                        &baseline,
+                    )
+                {
                     let current = crate::coordinated_files::current_component_snapshot(
                         component,
                         crate::coordinated_files::managed_files_of(installed_addon.as_ref()),

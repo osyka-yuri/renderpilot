@@ -58,7 +58,33 @@ pub struct PeInspection {
     pub import_profile: Option<Result<PeImportProfile, PeImportError>>,
 }
 
+/// The complete outcome of strict PE import inspection.
+///
+/// This preserves the distinction between a readable non-PE image and a PE
+/// image whose import directory is malformed. Callers that need to reason
+/// about loader aliases must not collapse either result into an empty import
+/// set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PeImportInspection {
+    /// The image was not a supported PE.
+    NotPe,
+    /// Both regular and delay-load imports were parsed completely.
+    Complete(PeImportProfile),
+    /// The image was a PE but its import directory was malformed or unsafe.
+    Malformed(PeImportError),
+}
+
 impl PeInspection {
+    /// Returns the strict import-inspection outcome without reparsing bytes.
+    #[must_use]
+    pub fn import_inspection(&self) -> PeImportInspection {
+        match &self.import_profile {
+            None => PeImportInspection::NotPe,
+            Some(Ok(profile)) => PeImportInspection::Complete(profile.clone()),
+            Some(Err(error)) => PeImportInspection::Malformed(*error),
+        }
+    }
+
     /// Builds a complete export-surface compatibility profile.
     ///
     /// A readable architecture with missing, empty, duplicate, or malformed

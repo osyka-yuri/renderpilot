@@ -37,9 +37,9 @@ pub use pattern::{
     PatternPlatform,
 };
 pub use pe::{
-    PeExportedU32, PeImportError, PeInspection, VersionIdentityStrings, analyze_executable,
-    analyze_executable_bytes, inspect_pe, inspect_pe_bytes, parse_windows_version_text,
-    pe_exported_u32_from_bytes, read_pe_architecture_from_bytes, read_pe_export_names,
-    read_pe_exported_u32, read_windows_file_version, read_windows_version_strings,
-    replace_pe_exported_u32_in_bytes,
+    PeExportedU32, PeImportError, PeImportInspection, PeInspection, VersionIdentityStrings,
+    analyze_executable, analyze_executable_bytes, inspect_pe, inspect_pe_bytes,
+    parse_windows_version_text, pe_exported_u32_from_bytes, read_pe_architecture_from_bytes,
+    read_pe_export_names, read_pe_exported_u32, read_windows_file_version,
+    read_windows_version_strings, replace_pe_exported_u32_in_bytes,
 };

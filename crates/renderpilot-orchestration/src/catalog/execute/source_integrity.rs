@@ -8,7 +8,7 @@ use renderpilot_application::{AppError, AppResult};
 use renderpilot_detection::{inspect_pe_bytes, sha256_bytes};
 use renderpilot_domain::{ComponentFile, LibraryTechnology};
 
-use super::types::PlannedFile;
+use super::types::TransitionWrite;
 
 /// Verifies each installed target still matches the planned artifact bytes,
 /// then re-reads PE metadata for persistence.
@@ -19,16 +19,19 @@ use super::types::PlannedFile;
 /// A source can change after preflight but before `copy`; hashing the target
 /// closes that TOCTOU window. Unreadable PE metadata stays unknown instead of
 /// inheriting a manifest label that was never observed on the installed file.
-pub(super) fn rebind_planned_files_for_technology(
-    planned: &mut [PlannedFile],
+pub(super) fn rebind_transition_writes_for_technology(
+    planned: &mut [TransitionWrite],
     technology: LibraryTechnology,
 ) -> AppResult<()> {
     planned
         .iter_mut()
-        .try_for_each(|plan| rebind_planned_file(plan, technology))
+        .try_for_each(|plan| rebind_transition_write(plan, technology))
 }
 
-fn rebind_planned_file(plan: &mut PlannedFile, technology: LibraryTechnology) -> AppResult<()> {
+fn rebind_transition_write(
+    plan: &mut TransitionWrite,
+    technology: LibraryTechnology,
+) -> AppResult<()> {
     let target = plan.target();
     let Some(expected) = plan.file.sha256() else {
         return Err(AppError::stale_replacement_source());
@@ -65,8 +68,8 @@ mod tests {
         LibraryTechnology, PathRef, PeCompatibilityProfile, PeExportSet, Sha256Hash, Version,
     };
 
-    use super::rebind_planned_files_for_technology;
-    use crate::catalog::execute::types::PlannedFile;
+    use super::rebind_transition_writes_for_technology;
+    use crate::catalog::execute::types::TransitionWrite;
     use crate::catalog::source_assessment::{
         ArtifactSourceAssessment, ArtifactSourceIssue, assess_artifact_runtime_metadata,
         assess_artifact_sources,
@@ -208,7 +211,7 @@ mod tests {
         write(&target, b"observed-non-pe-bytes");
         let target_ref = PathRef::new(target.to_string_lossy().as_ref()).expect("path");
         let expected = renderpilot_detection::sha256_file(&target).expect("hash");
-        let mut planned = [PlannedFile {
+        let mut planned = [TransitionWrite {
             source: target,
             file: ComponentFile::new(target_ref)
                 .with_sha256(expected.clone())
@@ -217,8 +220,11 @@ mod tests {
                 .with_version(Version::parse("310.7.0.0").expect("version")),
         }];
 
-        rebind_planned_files_for_technology(&mut planned, LibraryTechnology::DlssSuperResolution)
-            .expect("matching target rebinds");
+        rebind_transition_writes_for_technology(
+            &mut planned,
+            LibraryTechnology::DlssSuperResolution,
+        )
+        .expect("matching target rebinds");
         assert_eq!(planned[0].file.sha256(), Some(&expected));
         assert_eq!(
             planned[0].file.version(),
@@ -236,11 +242,11 @@ mod tests {
         let expected = renderpilot_detection::sha256_file(&target).expect("hash");
 
         write(&target, b"mutated-after-copy");
-        let mut planned = [PlannedFile {
+        let mut planned = [TransitionWrite {
             source: target,
             file: ComponentFile::new(target_ref).with_sha256(expected),
         }];
-        let error = rebind_planned_files_for_technology(
+        let error = rebind_transition_writes_for_technology(
             &mut planned,
             LibraryTechnology::DlssSuperResolution,
         )
@@ -261,15 +267,16 @@ mod tests {
         let exports =
             PeExportSet::from_canonical_names(vec!["VR_InitInternal".into()]).expect("exports");
         let profile = PeCompatibilityProfile::new(Architecture::X64, exports);
-        let mut planned = [PlannedFile {
+        let mut planned = [TransitionWrite {
             source: target,
             file: ComponentFile::new(target_ref)
                 .with_sha256(expected)
                 .with_pe_compatibility(profile),
         }];
 
-        let error = rebind_planned_files_for_technology(&mut planned, LibraryTechnology::OpenVr)
-            .expect_err("OpenVR requires an observed profile");
+        let error =
+            rebind_transition_writes_for_technology(&mut planned, LibraryTechnology::OpenVr)
+                .expect_err("OpenVR requires an observed profile");
         assert_eq!(
             error.kind(),
             &renderpilot_application::AppErrorKind::StaleReplacementSource
@@ -287,7 +294,7 @@ mod tests {
             PeExportSet::from_canonical_names(vec!["ogg_sync_init".into()]).expect("exports");
         let profile = PeCompatibilityProfile::new(Architecture::X64, exports)
             .with_imports(renderpilot_domain::PeImportProfile::default());
-        let mut planned = [PlannedFile {
+        let mut planned = [TransitionWrite {
             source: target,
             file: ComponentFile::new(target_ref)
                 .with_sha256(expected)
@@ -295,7 +302,7 @@ mod tests {
         }];
 
         let error =
-            rebind_planned_files_for_technology(&mut planned, LibraryTechnology::XiphVorbis)
+            rebind_transition_writes_for_technology(&mut planned, LibraryTechnology::XiphVorbis)
                 .expect_err("Xiph requires an observed complete profile");
         assert_eq!(
             error.kind(),

@@ -35,6 +35,7 @@ pub use info::{AppInfo, app_info};
 pub use operation_plan::{
     OperationPlan, OperationPlanBlocker, OperationPlanFile, OperationPlanFileAction,
     OperationPlanRiskLevel, OperationPlanWarning, build_swap_operation_plan,
+    build_swap_operation_plan_for_transition,
 };
 
 pub use persistence::{
@@ -47,5 +48,8 @@ pub use ports::{
     InstalledAddonRepository, OperationRepository, SharedArtifactRepository,
 };
 pub use transition::{
-    resolve_transition_install_target, resolve_transition_members, resolve_transition_removals,
+    ArchiveMode, ExternalAliasRequirements, ResolvedArchiveAndRemove, ResolvedPathDisposition,
+    ResolvedRemove, ResolvedTransition, ResolvedUntouchedBaseline, ResolvedWrite,
+    ResolvedXiphTransition, resolve_transition, resolve_transition_install_target,
+    resolve_transition_members, resolve_transition_removals,
 };

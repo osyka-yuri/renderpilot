@@ -5,6 +5,8 @@ use renderpilot_application::{AppError, AppResult};
 thread_local! {
     static BEFORE_COPY_HOOK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
         const { std::cell::RefCell::new(None) };
+    static BEFORE_TRANSITION_COMMIT_HOOK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
     static D3D12_APPLY_FAILURE_POINT: std::cell::Cell<Option<D3d12ApplyFailurePoint>> =
         const { std::cell::Cell::new(None) };
     static D3D12_ROLLBACK_FAILURE_POINT: std::cell::Cell<Option<D3d12RollbackFailurePoint>> =
@@ -34,6 +36,43 @@ pub(super) fn set_before_copy_hook(hook: impl FnOnce() + 'static) -> BeforeCopyH
 
 pub(super) fn run_before_copy_hook() {
     BEFORE_COPY_HOOK.with(|slot| {
+        if let Some(hook) = slot.borrow_mut().take() {
+            hook();
+        }
+    });
+}
+
+/// Test-only seam for a write that races the last reservation check.
+///
+/// It is intentionally specific to the Xiph transition commit boundary: a
+/// generic "before commit" hook could accidentally be reused for unrelated
+/// transaction timing assertions and weaken this regression's placement
+/// guarantee.
+pub(super) struct BeforeTransitionCommitHookGuard;
+
+impl Drop for BeforeTransitionCommitHookGuard {
+    fn drop(&mut self) {
+        BEFORE_TRANSITION_COMMIT_HOOK.with(|slot| {
+            slot.borrow_mut().take();
+        });
+    }
+}
+
+pub(super) fn set_before_transition_commit_hook(
+    hook: impl FnOnce() + 'static,
+) -> BeforeTransitionCommitHookGuard {
+    BEFORE_TRANSITION_COMMIT_HOOK.with(|slot| {
+        let previous = slot.replace(Some(Box::new(hook)));
+        assert!(
+            previous.is_none(),
+            "before-transition-commit test hook already installed"
+        );
+    });
+    BeforeTransitionCommitHookGuard
+}
+
+pub(super) fn run_before_transition_commit_hook() {
+    BEFORE_TRANSITION_COMMIT_HOOK.with(|slot| {
         if let Some(hook) = slot.borrow_mut().take() {
             hook();
         }

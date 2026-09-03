@@ -1,10 +1,12 @@
+use std::collections::BTreeMap;
+
 use renderpilot_domain::{
     Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, CatalogPackageReceiptV1,
     CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile,
     ComponentId, ComponentKind, D3d12ExecutableIdentity, GameId, LibraryArtifact, LibraryComponent,
     LibraryTechnology, PackageRelease, PackageVersion, PathRef, PeCompatibilityProfile,
-    PeExportSet, ReleaseChannel, RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability,
-    UpstreamPackage, UpstreamPackageProvider, Version,
+    PeExportSet, PeImportProfile, PeImportSet, ReleaseChannel, RuntimeCompatibility, RuntimeTarget,
+    Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider, Version,
 };
 
 use crate::{
@@ -70,6 +72,182 @@ fn selects_only_same_technology_candidates() {
         groups[0].candidates()[0].comparison(),
         CandidateComparison::NewerVersion
     );
+}
+
+#[test]
+fn vendor_xiph_candidates_are_listed_and_catalog_release_is_retained() {
+    let member = |name: &str, imports: &[&str], export: &str, hash: u8| {
+        ComponentFile::new(PathRef::new(format!("C:/Runtime/{name}")).expect("path"))
+            .with_sha256(Sha256Hash::new(format!("{hash:02x}").repeat(32)).expect("hash"))
+            .with_pe_compatibility(
+                PeCompatibilityProfile::new(
+                    Architecture::X64,
+                    PeExportSet::from_observed_names(vec![export.to_owned()]).expect("exports"),
+                )
+                .with_imports(PeImportProfile {
+                    regular: PeImportSet::from_observed_names(
+                        imports.iter().map(|name| (*name).to_owned()).collect(),
+                    )
+                    .expect("imports"),
+                    delay: PeImportSet::default(),
+                }),
+            )
+    };
+    let component = [
+        member(
+            "vorbisfile_vs2010_x64_rwdi.dll",
+            &["vorbis_vs2010_x64_rwdi.dll", "ogg_vs2010_x64_rwdi.dll"],
+            "ov_open",
+            1,
+        ),
+        member(
+            "vorbis_vs2010_x64_rwdi.dll",
+            &["ogg_vs2010_x64_rwdi.dll"],
+            "vorbis_info_init",
+            2,
+        ),
+        member("ogg_vs2010_x64_rwdi.dll", &[], "ogg_sync_init", 3),
+    ]
+    .into_iter()
+    .fold(
+        LibraryComponent::new(
+            ComponentId::new("component:game:dide:xiph").expect("component id"),
+            GameId::new("game:dide").expect("game id"),
+            ComponentKind::NativeLibrary,
+            LibraryTechnology::XiphVorbis,
+            Swappability::BundleOnly,
+        ),
+        |component, file| component.with_file(file),
+    );
+    let artifact = LibraryArtifact::new(
+        ArtifactId::new("artifact:xiph-dide").expect("artifact id"),
+        LibraryTechnology::XiphVorbis,
+        "vorbisfile.dll",
+        vec![
+            member("vorbisfile.dll", &["vorbis.dll", "ogg.dll"], "ov_open", 16)
+                .with_version(Version::parse("1.3.6").expect("version")),
+            member("vorbis.dll", &["ogg.dll"], "vorbis_info_init", 17),
+            member(
+                "vorbisenc.dll",
+                &["vorbis.dll", "ogg.dll"],
+                "vorbis_encode_init",
+                20,
+            ),
+            member("ogg.dll", &[], "ogg_sync_init", 18),
+        ],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("artifact")
+    .with_metadata(
+        ArtifactMetadata::default()
+            .with_runtime_target(RuntimeTarget::new(Architecture::X64))
+            .with_catalog_package_receipt({
+                let mut receipt = test_catalog_receipt("xiph-vorbis", "xiph_vorbis", "1.3.7", None);
+                receipt.release.components = BTreeMap::from([
+                    (
+                        "ogg".to_owned(),
+                        PackageVersion::parse("1.3.6").expect("Ogg version"),
+                    ),
+                    (
+                        "vorbis".to_owned(),
+                        PackageVersion::parse("1.3.7").expect("Vorbis version"),
+                    ),
+                ]);
+                receipt
+            }),
+    );
+
+    let groups = find_replacement_candidates(
+        std::slice::from_ref(&component),
+        std::slice::from_ref(&artifact),
+        &CandidateContext::new(
+            std::collections::HashSet::new(),
+            active_catalog_for(std::slice::from_ref(&artifact)),
+        ),
+    );
+
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].candidates().len(), 1);
+    assert_eq!(groups[0].candidates()[0].artifact_id(), artifact.id());
+
+    let post_transition_component = |ogg_hash| {
+        [
+            member(
+                "vorbisfile_vs2010_x64_rwdi.dll",
+                &["vorbis.dll", "ogg.dll"],
+                "ov_open",
+                16,
+            )
+            .with_version(Version::parse("1.3.6").expect("version")),
+            member("vorbis.dll", &["ogg.dll"], "vorbis_info_init", 17),
+            member("ogg.dll", &[], "ogg_sync_init", ogg_hash),
+        ]
+        .into_iter()
+        .fold(
+            LibraryComponent::new(
+                ComponentId::new("component:game:dide:xiph").expect("component id"),
+                GameId::new("game:dide").expect("game id"),
+                ComponentKind::NativeLibrary,
+                LibraryTechnology::XiphVorbis,
+                Swappability::BundleOnly,
+            ),
+            |component, file| component.with_file(file),
+        )
+    };
+    let installed_component = post_transition_component(18);
+    let installed_groups = find_replacement_candidates(
+        std::slice::from_ref(&installed_component),
+        std::slice::from_ref(&artifact),
+        &CandidateContext::new(
+            std::collections::HashSet::new(),
+            active_catalog_for(std::slice::from_ref(&artifact)),
+        ),
+    );
+
+    assert_eq!(
+        installed_groups[0].installed_release(),
+        &InstalledReleaseState::Known {
+            technical_version: Some(Version::parse("1.3.6").expect("technical version")),
+            release_label: None,
+            catalog_release: Some(PackageRelease {
+                version: PackageVersion::parse("1.3.7").expect("package version"),
+                channel: ReleaseChannel::Stable,
+                label: None,
+                components: BTreeMap::from([
+                    (
+                        "ogg".to_owned(),
+                        PackageVersion::parse("1.3.6").expect("Ogg version"),
+                    ),
+                    (
+                        "vorbis".to_owned(),
+                        PackageVersion::parse("1.3.7").expect("Vorbis version"),
+                    ),
+                ]),
+            }),
+        },
+        "the package release, rather than the wrapper DLL PE version, is the installed label"
+    );
+    assert!(
+        installed_groups[0].candidates().is_empty(),
+        "a catalog-installed vendor Xiph package remains visible only as its current release, even when the game uses only its required members"
+    );
+
+    let modified_component = post_transition_component(19);
+    let modified_groups = find_replacement_candidates(
+        std::slice::from_ref(&modified_component),
+        std::slice::from_ref(&artifact),
+        &CandidateContext::new(
+            std::collections::HashSet::new(),
+            active_catalog_for(std::slice::from_ref(&artifact)),
+        ),
+    );
+    assert!(!matches!(
+        modified_groups[0].installed_release(),
+        InstalledReleaseState::Known {
+            catalog_release: Some(_),
+            ..
+        }
+    ));
 }
 
 #[test]

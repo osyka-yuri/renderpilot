@@ -9,7 +9,7 @@ mod plan;
 #[cfg(test)]
 mod tests;
 
-pub use builder::build_swap_operation_plan;
+pub use builder::{build_swap_operation_plan, build_swap_operation_plan_for_transition};
 pub use findings::{OperationPlanBlocker, OperationPlanRiskLevel, OperationPlanWarning};
 pub use plan::{OperationPlan, OperationPlanFile, OperationPlanFileAction};
 

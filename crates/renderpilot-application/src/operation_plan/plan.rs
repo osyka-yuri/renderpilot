@@ -235,6 +235,11 @@ pub enum OperationPlanFileAction {
     Replace,
     /// A new file is added at an install target the component did not have.
     Add,
+    /// Preserve an immutable original in its sidecar, then remove the live
+    /// target from the active component.
+    ArchiveAndRemove,
+    /// Remove a current unowned addition without creating a baseline sidecar.
+    Remove,
     /// Patch the inline `D3D12SDKVersion` value in the main EXE.
     PatchExecutable,
     /// Restore the original main EXE from its immutable backup.
@@ -247,6 +252,8 @@ impl OperationPlanFileAction {
         match self {
             Self::Replace => "replace",
             Self::Add => "add",
+            Self::ArchiveAndRemove => "archive_and_remove",
+            Self::Remove => "remove",
             Self::PatchExecutable => "patch_executable",
             Self::RestoreExecutable => "restore_executable",
         }
@@ -289,6 +296,34 @@ impl OperationPlanFile {
             replacement_version: artifact_file.version().cloned(),
             original_sha256: None,
             replacement_sha256: artifact_file.sha256().cloned(),
+        }
+    }
+
+    /// An immutable original is sidecar-preserved and removed from the active
+    /// set. There is intentionally no replacement source.
+    pub(crate) fn archive_and_remove(target_path: PathRef, original: &ComponentFile) -> Self {
+        Self {
+            action: OperationPlanFileAction::ArchiveAndRemove,
+            target_path,
+            replacement_path: None,
+            original_version: original.version().cloned(),
+            replacement_version: None,
+            original_sha256: original.sha256().cloned(),
+            replacement_sha256: None,
+        }
+    }
+
+    /// A current addition with no immutable original is removed. There is
+    /// intentionally no replacement source.
+    pub(crate) fn remove(target_path: PathRef, current: &ComponentFile) -> Self {
+        Self {
+            action: OperationPlanFileAction::Remove,
+            target_path,
+            replacement_path: None,
+            original_version: current.version().cloned(),
+            replacement_version: None,
+            original_sha256: current.sha256().cloned(),
+            replacement_sha256: None,
         }
     }
 

@@ -30,6 +30,12 @@ pub(super) fn is_skipped_directory(path: &Path, mode: InstallWalkMode) -> bool {
         return false;
     };
 
+    // Authority-sensitive proofs must inspect the entire confirmed install
+    // root. Their caller owns any narrow, explicit file exclusions.
+    if mode == InstallWalkMode::FullStrict {
+        return false;
+    }
+
     // Dot-prefixed directories are treated as non-runtime metadata/tool directories.
     if name.starts_with('.') {
         return true;

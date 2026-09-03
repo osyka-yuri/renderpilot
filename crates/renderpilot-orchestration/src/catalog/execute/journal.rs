@@ -34,6 +34,23 @@ impl<'a> JournalEntryItem<'a> {
         }
     }
 
+    /// Records one resolved transition action without changing component-file
+    /// item counting.  The action makes archive/remove rows auditable while
+    /// retaining compatibility with older journals.
+    pub(crate) fn component_transition_file(
+        path: &'a PathRef,
+        artifact_id: Option<ArtifactId>,
+        action: &'static str,
+    ) -> Self {
+        Self {
+            path,
+            artifact_id,
+            metadata: Some(JournalItemMetadata::ComponentTransition {
+                action: action.to_owned(),
+            }),
+        }
+    }
+
     /// Records an EXE transition without changing the historical DLL item count.
     pub(crate) fn d3d12_executable(action: &'a D3d12ExecutableAction) -> Self {
         Self {
@@ -47,9 +64,12 @@ impl<'a> JournalEntryItem<'a> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum JournalItemMetadata {
+    ComponentTransition {
+        action: String,
+    },
     D3d12Executable {
         from_sdk_version: u32,
         to_sdk_version: u32,

@@ -2,7 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use renderpilot_application::{D3d12ExecutableAction, D3d12ExecutableActionKind};
+use renderpilot_application::{
+    D3d12ExecutableAction, D3d12ExecutableActionKind, ResolvedPathDisposition, ResolvedTransition,
+};
 use renderpilot_domain::{
     ComponentFile, ComponentId, ComponentRollbackBaseline, GameId, LibraryArtifact,
     LibraryComponent, PathRef,
@@ -146,10 +148,15 @@ pub(super) struct PreparedApplySwap {
     pub(super) artifact: LibraryArtifact,
     pub(super) baseline: Vec<ComponentFile>,
     pub(super) rollback_baseline: Option<ComponentRollbackBaseline>,
-    pub(super) planned: Vec<PlannedFile>,
-    /// FSR split members the (unified) target abandons and must delete — see
-    /// [`super::planning::fsr_members_to_remove`]. Empty for every non-downgrade swap.
-    pub(super) removed: Vec<ComponentFile>,
+    /// The exhaustive application-level path partition.  Filesystem planning,
+    /// active-state rebuilding and journaling consume this value directly.
+    pub(super) transition: ResolvedTransition,
+    /// Rebindable projections of `transition`'s `Write` dispositions only.
+    /// This contains no independently resolved targets or removals.
+    pub(super) writes: Vec<TransitionWrite>,
+    /// The preflight's exact whole-root external-import binding proof, when
+    /// the transition preserves a vendor Xiph alias.
+    pub(super) xiph_import_proof: Option<crate::catalog::xiph_import_proof::XiphImportProof>,
     pub(super) first_swap: bool,
     /// Complete mutation-grade D3D12 context, when the swap manages an EXE.
     pub(super) d3d12: Option<PreparedD3d12Execution>,
@@ -172,12 +179,12 @@ impl PreparedApplySwap {
             .filter(|file| file.install_as().is_some())
         {
             let source = Path::new(artifact_file.path().as_str());
-            if let Some(plan) = self.planned.iter().find(|plan| plan.source == source) {
+            if let Some(plan) = self.writes.iter().find(|plan| plan.source == source) {
                 return plan.file.path().as_str().to_owned();
             }
         }
 
-        self.planned
+        self.writes
             .first()
             .map(|plan| plan.file.path().as_str().to_owned())
             .unwrap_or_default()
@@ -190,7 +197,7 @@ impl PreparedApplySwap {
 
 /// One artifact file resolved to where it will be installed.
 #[derive(Debug)]
-pub(super) struct PlannedFile {
+pub(super) struct TransitionWrite {
     /// Source artifact file on disk to copy from.
     pub(super) source: PathBuf,
     /// The component file the install target becomes (its path is the install
@@ -198,10 +205,47 @@ pub(super) struct PlannedFile {
     pub(super) file: ComponentFile,
 }
 
-impl PlannedFile {
+/// Compatibility spelling retained for isolated legacy planning tests.  The
+/// production apply path uses [`TransitionWrite`] solely as a projection of a
+/// [`ResolvedTransition`].
+#[cfg(test)]
+pub(super) type PlannedFile = TransitionWrite;
+
+impl TransitionWrite {
     pub(super) fn target(&self) -> PathBuf {
         PathBuf::from(self.file.path().as_str())
     }
+}
+
+/// Projects only the already-resolved write partition into source/target
+/// records that can be rebound from the files actually installed.
+pub(super) fn writes_from_transition(transition: &ResolvedTransition) -> Vec<TransitionWrite> {
+    transition
+        .paths()
+        .iter()
+        .filter_map(|path| match path {
+            ResolvedPathDisposition::Write(write) => {
+                let source = write.source();
+                let mut file = ComponentFile::new(write.target().clone());
+                if let Some(sha256) = source.sha256() {
+                    file = file.with_sha256(sha256.clone());
+                }
+                if let Some(version) = source.version() {
+                    file = file.with_version(version.clone());
+                }
+                if let Some(profile) = source.pe_compatibility() {
+                    file = file.with_pe_compatibility(profile.clone());
+                }
+                Some(TransitionWrite {
+                    source: PathBuf::from(source.path().as_str()),
+                    file,
+                })
+            }
+            ResolvedPathDisposition::ArchiveAndRemove(_)
+            | ResolvedPathDisposition::Remove(_)
+            | ResolvedPathDisposition::UntouchedBaseline(_) => None,
+        })
+        .collect()
 }
 
 /// Records the filesystem paths touched by an overlay so directory fsync can

@@ -100,7 +100,7 @@ fn build_grouped_component(
         game.id().clone(),
         group_kind(&ordered),
         group.technology,
-        group_swappability(group.technology, &ordered),
+        group_swappability(group.technology, group.discriminator.as_deref(), &ordered),
     );
 
     for file in &ordered {
@@ -197,8 +197,10 @@ fn primary_rank(
         return fsr::primary_rank(file.file_name(), fsr_upscaler_represents);
     }
     if family == LibraryTechnology::XiphVorbis {
-        return xiph::classify_file_name(file.file_name())
-            .map_or(4, |(member, _)| member.primary_rank());
+        return xiph::parse_runtime_file_name(file.file_name())
+            .ok()
+            .flatten()
+            .map_or(4, |runtime_name| runtime_name.member().primary_rank());
     }
 
     if file.technology() == family { 0 } else { 1 }
@@ -220,6 +222,7 @@ fn group_kind(ordered: &[&DetectedLibraryFile]) -> ComponentKind {
 /// longer blocks an otherwise-swappable bundle.)
 fn group_swappability(
     technology: LibraryTechnology,
+    discriminator: Option<&str>,
     ordered: &[&DetectedLibraryFile],
 ) -> Swappability {
     if technology == LibraryTechnology::XiphVorbis {
@@ -230,6 +233,22 @@ fn group_swappability(
         let Some(layout) = xiph::detect_layout(&files) else {
             return Swappability::ReadOnly;
         };
+        let has_vendor_member = ordered.iter().any(|file| {
+            xiph::parse_runtime_file_name(file.file_name())
+                .ok()
+                .flatten()
+                .is_some_and(|runtime_name| runtime_name.is_vendor())
+        });
+        if has_vendor_member {
+            let expected_discriminator = layout.topology().vendor_discriminator();
+            if discriminator != Some(expected_discriminator.as_str()) {
+                // A vendor spelling is actionable only when xiph_grouping has
+                // authenticated this exact closure. In particular, an ambiguous
+                // same-directory topology intentionally reaches this read-only
+                // path even though its individual files form a valid layout.
+                return Swappability::ReadOnly;
+            }
+        }
         if files.len() > 1 {
             return Swappability::BundleOnly;
         }

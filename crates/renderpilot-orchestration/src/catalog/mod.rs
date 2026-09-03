@@ -84,6 +84,8 @@ mod source_assessment;
 mod swap;
 #[cfg(test)]
 mod test_support;
+mod xiph_baseline_reservations;
+mod xiph_import_proof;
 
 /// The game installation and detected library files produced by a folder scan.
 pub struct ScanFolderCatalogResult {

@@ -3,42 +3,18 @@
 //! Filesystem integrity checks and post-install PE rebind live in
 //! [`super::source_integrity`].
 
-use std::collections::HashSet;
+#[cfg(test)]
 use std::path::{Path, PathBuf};
 
-use renderpilot_application::{AppError, AppResult, ComponentRepository};
-use renderpilot_domain::{
-    ComponentFile, ComponentId, GameId, LibraryArtifact, LibraryComponent, PathRef,
-    component_version_report, fsr,
-};
+#[cfg(test)]
+use renderpilot_application::AppError;
+use renderpilot_application::{AppResult, ComponentRepository, ResolvedTransition};
+#[cfg(test)]
+use renderpilot_domain::{ComponentFile, LibraryArtifact, PathRef};
+use renderpilot_domain::{ComponentId, GameId, LibraryComponent, component_version_report, fsr};
 use renderpilot_storage_sqlite::SqliteStorage;
 
-use super::types::PlannedFile;
-
-/// New active component files after an additive overlay: baseline files that the
-/// package neither overwrites nor removes (kept), plus the package's installed files.
-pub(super) fn additive_active_files(
-    baseline: &[ComponentFile],
-    planned: &[PlannedFile],
-    removed: &[ComponentFile],
-) -> Vec<ComponentFile> {
-    let target_paths: HashSet<&str> = planned
-        .iter()
-        .map(|plan| plan.file.path().as_str())
-        .collect();
-    let removed_paths: HashSet<&str> = removed.iter().map(|file| file.path().as_str()).collect();
-
-    let mut files: Vec<ComponentFile> = baseline
-        .iter()
-        .filter(|file| {
-            !target_paths.contains(file.path().as_str())
-                && !removed_paths.contains(file.path().as_str())
-        })
-        .cloned()
-        .collect();
-    files.extend(planned.iter().map(|plan| plan.file.clone()));
-    files
-}
+use super::types::TransitionWrite;
 
 /// FSR **upscaling-stack** members (upscaler, frame generation) the unified
 /// target supersedes on a downgrade — to be removed so the folder ends on a
@@ -60,10 +36,11 @@ pub(super) fn additive_active_files(
 ///   split members from their `.bak`s — computing from the already-cleaned
 ///   component would resurrect them. On a first swap the baseline IS the
 ///   component's current file set, so both views agree.
+#[cfg(test)]
 pub(super) fn fsr_members_to_remove(
     baseline: &[ComponentFile],
     artifact: &LibraryArtifact,
-    planned: &[PlannedFile],
+    planned: &[TransitionWrite],
 ) -> Vec<ComponentFile> {
     let planned_names: Vec<&str> = planned
         .iter()
@@ -79,30 +56,15 @@ pub(super) fn fsr_members_to_remove(
     .collect()
 }
 
-pub(super) fn resolve_target_dir(component: &LibraryComponent) -> AppResult<PathBuf> {
-    let primary = component
-        .files()
-        .first()
-        .ok_or_else(|| AppError::invalid_input("component has no files"))?;
-
-    let parent = primary.path().parent().ok_or_else(|| {
-        AppError::invalid_input(format!(
-            "cannot determine target directory for {}",
-            primary.path().as_str()
-        ))
-    })?;
-
-    Ok(PathBuf::from(parent))
-}
-
+#[cfg(test)]
 pub(super) fn planned_target_files(
     artifact: &LibraryArtifact,
     target_dir: &Path,
     component: &LibraryComponent,
-) -> AppResult<Vec<PlannedFile>> {
+) -> AppResult<Vec<TransitionWrite>> {
     let artifact_files = renderpilot_application::resolve_transition_members(component, artifact)?;
 
-    let planned: AppResult<Vec<PlannedFile>> = artifact_files
+    let planned: AppResult<Vec<TransitionWrite>> = artifact_files
         .iter()
         .map(|artifact_file| {
             let install_name = renderpilot_application::resolve_transition_install_target(
@@ -126,7 +88,7 @@ pub(super) fn planned_target_files(
                 file = file.with_pe_compatibility(profile.clone());
             }
 
-            Ok(PlannedFile {
+            Ok(TransitionWrite {
                 source: PathBuf::from(artifact_file.path().as_str()),
                 file,
             })
@@ -161,35 +123,38 @@ pub(super) fn full_component_set(
     Ok(components)
 }
 
-/// Rebuilds the catalog component set and journal version label after the FS
-/// overlay, using rebound on-disk metadata for the planned install targets.
-///
-/// Returns `(next_components, to_version)` where `to_version` is
-/// [`component_version_report`]. No artifact label is substituted when the
-/// installed files cannot prove their own version.
-pub(super) fn rebuild_component_set_after_overlay(
+/// Rebuilds the persisted active component strictly from the resolved path
+/// partition.  Rebound write metadata replaces only the matching write rows;
+/// archive/remove rows can never be resurrected by a filesystem planner.
+pub(super) fn rebuild_component_set_after_transition(
     storage: &SqliteStorage,
     game_id: &GameId,
     component: &LibraryComponent,
     component_id: &ComponentId,
-    baseline: &[ComponentFile],
-    rebound_planned: &[PlannedFile],
-    removed: &[ComponentFile],
+    transition: &ResolvedTransition,
+    rebound_writes: &[TransitionWrite],
 ) -> AppResult<(Vec<LibraryComponent>, Option<String>)> {
-    let mut new_files = additive_active_files(baseline, rebound_planned, removed);
-    fsr::sort_representative_first(&mut new_files);
-    let rebuilt = component.rebuild_with_files(new_files);
+    let mut files = transition.expected_active();
+    for file in &mut files {
+        if let Some(rebound) = rebound_writes.iter().find(|write| {
+            crate::paths::same_path(
+                std::path::Path::new(write.file.path().as_str()),
+                std::path::Path::new(file.path().as_str()),
+            )
+        }) {
+            *file = rebound.file.clone();
+        }
+    }
+    fsr::sort_representative_first(&mut files);
+    let rebuilt = component.rebuild_with_files(files);
     let next_components = full_component_set(storage, game_id, rebuilt)?;
-
     let applied_files = next_components
         .iter()
         .find(|entry| entry.id() == component_id)
         .map(|entry| entry.files())
         .unwrap_or(&[]);
-
     let to_version = component_version_report(applied_files, component.technology())
         .known_version()
         .map(|version| version.as_str().to_owned());
-
     Ok((next_components, to_version))
 }

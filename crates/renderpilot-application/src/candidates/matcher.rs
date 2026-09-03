@@ -5,7 +5,7 @@
 //! deduplicates the resulting [`ReplacementCandidate`] list. The data types it
 //! produces live in [`super::dto`].
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use renderpilot_domain::{
@@ -20,6 +20,7 @@ use super::dto::{
 };
 use super::identity::{IntrinsicPackageIdentity, ResolvedTransitionIdentity};
 use super::ordering::sort_and_deduplicate;
+use super::xiph_matching;
 use crate::{
     SwapCompatibilityError, SwapTargetProfile, ensure_replacement_compatible,
     replacement_executable_action,
@@ -197,57 +198,29 @@ fn find_replacement_candidate_selection_with_lookup(
         let installed_release =
             installed_release_state(component, artifacts, component_artifacts, context);
         let current_version = installed_release.known_version();
-        let candidates = component_artifacts
-            .iter()
-            .filter_map(|indexed| {
-                let artifact = &artifacts[indexed.artifact_index];
-                // Ignore artifacts scanned from the exact same game.
-                // Such artifacts represent the game's own mutable file paths.
-                // If the game was modified (e.g. rolled back), the artifact's
-                // stored SHA-256 no longer matches its path, leading to swap errors.
-                if artifact.source_game_id() == Some(component.game_id()) {
-                    return None;
-                }
+        let has_vendor_xiph_alias = xiph_matching::component_has_vendor_alias(component);
+        let mut installed_vendor_xiph_catalog_package = false;
+        let mut candidates = Vec::new();
+        for indexed in component_artifacts {
+            let artifact = &artifacts[indexed.artifact_index];
+            let CandidateEvaluation {
+                candidate,
+                installed_vendor_catalog_package: matches_installed_vendor_catalog_package,
+            } = evaluate_replacement_candidate(
+                component,
+                artifact,
+                indexed,
+                current_version,
+                has_vendor_xiph_alias,
+                context,
+            );
+            installed_vendor_xiph_catalog_package |= matches_installed_vendor_catalog_package;
+            if let Some(candidate) = candidate {
+                candidates.push(candidate);
+            }
+        }
 
-                match ensure_replacement_compatible(component, artifact, &context.target_profile) {
-                    Ok(()) | Err(SwapCompatibilityError::D3d12ExecutableRepairRequired) => {}
-                    Err(_) => return None,
-                }
-                let d3d12_executable_action =
-                    replacement_executable_action(artifact, &context.target_profile).ok()?;
-                let resolved_identity =
-                    ResolvedTransitionIdentity::for_replacement(component, artifact).ok()?;
-                if resolved_identity
-                    .as_ref()
-                    .and_then(|identity| identity.installed_projection(component))
-                    .as_ref()
-                    == resolved_identity.as_ref()
-                {
-                    return None;
-                }
-                let catalog_package = context.catalog_package(artifact).ok()?;
-                let comparison = candidate_comparison(
-                    component,
-                    artifact,
-                    current_version,
-                    catalog_package.as_ref(),
-                )?;
-                let is_downloaded = context.downloaded_ids.contains(artifact.id());
-                Some(
-                    ReplacementCandidate::new(
-                        artifact,
-                        comparison,
-                        is_downloaded,
-                        catalog_package,
-                        indexed.intrinsic_identity.clone(),
-                        resolved_identity,
-                    )
-                    .with_d3d12_executable_action(d3d12_executable_action),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        if candidates.is_empty() {
+        if candidates.is_empty() && !installed_vendor_xiph_catalog_package {
             continue;
         }
 
@@ -271,6 +244,107 @@ fn find_replacement_candidate_selection_with_lookup(
         );
     }
     CandidateSelection::new(groups, selection.streamline_options)
+}
+
+/// Result of evaluating one candidate artifact for a component.
+#[derive(Default)]
+struct CandidateEvaluation {
+    candidate: Option<ReplacementCandidate>,
+    installed_vendor_catalog_package: bool,
+}
+
+/// Classifies one artifact without mutating component-level candidate state.
+fn evaluate_replacement_candidate(
+    component: &LibraryComponent,
+    artifact: &LibraryArtifact,
+    indexed: &IndexedArtifact,
+    current_version: Option<&Version>,
+    has_vendor_xiph_alias: bool,
+    context: &CandidateContext,
+) -> CandidateEvaluation {
+    // Ignore artifacts scanned from the exact same game. Such artifacts
+    // represent mutable game paths, whose stored digest can diverge after a
+    // rollback or another local change.
+    if artifact.source_game_id() == Some(component.game_id()) {
+        return CandidateEvaluation::default();
+    }
+
+    let compatibility = if component.technology() == LibraryTechnology::XiphVorbis {
+        // Candidate cards may establish semantic compatibility, but cannot
+        // manufacture the request-scoped full-root import proof required to
+        // resolve a vendor alias transition.
+        crate::compatibility::ensure_candidate_compatible_without_alias_proof(component, artifact)
+    } else {
+        ensure_replacement_compatible(component, artifact, &context.target_profile)
+    };
+    if !matches!(
+        compatibility,
+        Ok(()) | Err(SwapCompatibilityError::D3d12ExecutableRepairRequired)
+    ) {
+        return CandidateEvaluation::default();
+    }
+
+    let Ok(d3d12_executable_action) =
+        replacement_executable_action(artifact, &context.target_profile)
+    else {
+        return CandidateEvaluation::default();
+    };
+    let resolved_identity = if has_vendor_xiph_alias {
+        None
+    } else {
+        match ResolvedTransitionIdentity::for_replacement(component, artifact) {
+            Ok(identity) => identity,
+            Err(_) => return CandidateEvaluation::default(),
+        }
+    };
+    // An unresolved identity is not safe to present for ordinary transitions.
+    // Vendor Xiph aliases are the deliberate exception: their transition can
+    // only be resolved later, after orchestration has supplied external-import
+    // proof.
+    let is_installed_transition = match resolved_identity.as_ref() {
+        Some(identity) => identity.installed_projection(component).as_ref() == Some(identity),
+        None => !has_vendor_xiph_alias,
+    };
+    if is_installed_transition {
+        return CandidateEvaluation::default();
+    }
+
+    let Ok(catalog_package) = context.catalog_package(artifact) else {
+        return CandidateEvaluation::default();
+    };
+    if has_vendor_xiph_alias
+        && catalog_package.is_some()
+        && xiph_matching::vendor_catalog_content_matches_for_alias(component, artifact)
+    {
+        return CandidateEvaluation {
+            installed_vendor_catalog_package: true,
+            ..CandidateEvaluation::default()
+        };
+    }
+
+    let Some(comparison) = candidate_comparison(
+        component,
+        artifact,
+        current_version,
+        catalog_package.as_ref(),
+    ) else {
+        return CandidateEvaluation::default();
+    };
+    let is_downloaded = context.downloaded_ids.contains(artifact.id());
+    CandidateEvaluation {
+        candidate: Some(
+            ReplacementCandidate::new(
+                artifact,
+                comparison,
+                is_downloaded,
+                catalog_package,
+                indexed.intrinsic_identity.clone(),
+                resolved_identity,
+            )
+            .with_d3d12_executable_action(d3d12_executable_action),
+        ),
+        installed_vendor_catalog_package: false,
+    }
 }
 
 fn installed_release_state(
@@ -301,14 +375,7 @@ fn installed_catalog_release(
             let catalog_package = context.catalog_package(artifact).ok()??;
             Some((artifact, catalog_package))
         })
-        .filter(|artifact| {
-            let Ok(Some(identity)) =
-                ResolvedTransitionIdentity::for_replacement(component, artifact.0)
-            else {
-                return false;
-            };
-            identity.installed_projection(component).as_ref() == Some(&identity)
-        })
+        .filter(|artifact| catalog_artifact_matches_component(component, artifact.0))
         .map(|(artifact, catalog_package)| {
             (
                 catalog_package.release().version.clone(),
@@ -324,6 +391,16 @@ fn installed_catalog_release(
                 .then_with(|| right.2.cmp(&left.2))
         });
     matched.map(|(_, version, _, release)| InstalledReleaseState::known_catalog(version, release))
+}
+
+fn catalog_artifact_matches_component(
+    component: &LibraryComponent,
+    artifact: &LibraryArtifact,
+) -> bool {
+    if let Ok(Some(identity)) = ResolvedTransitionIdentity::for_replacement(component, artifact) {
+        return identity.installed_projection(component).as_ref() == Some(&identity);
+    }
+    xiph_matching::vendor_catalog_content_matches(component, artifact)
 }
 
 #[derive(Debug, Clone)]
@@ -411,70 +488,16 @@ fn candidate_comparison(
     catalog_package: Option<&CatalogCandidatePackage>,
 ) -> Option<CandidateComparison> {
     if component.technology() == LibraryTechnology::XiphVorbis {
-        return Some(xiph_candidate_comparison(component, catalog_package));
+        return Some(xiph_matching::candidate_comparison(
+            component,
+            catalog_package,
+        ));
     }
     require_not_split_downgrade(component, artifact)?;
     require_compatible_graphics_api(component, artifact)?;
     require_version_compatible(component.technology(), current_version, artifact.version())?;
 
     compare_versions(current_version, artifact.version())
-}
-
-fn xiph_candidate_comparison(
-    component: &LibraryComponent,
-    catalog_package: Option<&CatalogCandidatePackage>,
-) -> CandidateComparison {
-    let Some(release) = catalog_package.map(CatalogCandidatePackage::release) else {
-        return CandidateComparison::UnknownVersion;
-    };
-    let Some(required_axes) =
-        renderpilot_domain::xiph::XiphReleaseAxes::from_component_files(component.files())
-    else {
-        return CandidateComparison::UnknownVersion;
-    };
-    let Some(candidate_versions) =
-        renderpilot_domain::xiph::XiphReleaseVersions::from_catalog_components(
-            &required_axes,
-            &release.components,
-        )
-    else {
-        return CandidateComparison::UnknownVersion;
-    };
-    let mut has_newer = false;
-    let mut has_older = false;
-    let mut observed_axes = BTreeSet::new();
-    for file in component.files() {
-        let component_name = match file
-            .path()
-            .file_name()
-            .and_then(renderpilot_domain::xiph::classify_file_name)
-        {
-            Some((member, _)) => renderpilot_domain::xiph::XiphReleaseAxis::for_member(member),
-            None => return CandidateComparison::UnknownVersion,
-        };
-        observed_axes.insert(component_name);
-        let (Some(current), Some(candidate)) =
-            (file.version(), candidate_versions.get(component_name))
-        else {
-            return CandidateComparison::UnknownVersion;
-        };
-        match current.cmp(candidate.numeric_core()) {
-            std::cmp::Ordering::Less => has_newer = true,
-            std::cmp::Ordering::Equal => {}
-            std::cmp::Ordering::Greater => has_older = true,
-        }
-    }
-    if observed_axes.into_iter().collect::<Vec<_>>() != required_axes.iter().collect::<Vec<_>>() {
-        // Embedded Ogg has no physical FileVersion to compare. Treat it as an
-        // unknown mandatory dimension instead of inferring it from Vorbis.
-        return CandidateComparison::UnknownVersion;
-    }
-    match (has_newer, has_older) {
-        (true, true) => CandidateComparison::MixedVersion,
-        (true, false) => CandidateComparison::NewerVersion,
-        (false, true) => CandidateComparison::OlderVersion,
-        (false, false) => CandidateComparison::EqualVersion,
-    }
 }
 
 /// Prevents cross-API FSR replacements (e.g., offering a DX12 artifact to a Vulkan game).
@@ -549,6 +572,7 @@ fn require_version_compatible(
 mod tests {
     use std::collections::BTreeMap;
 
+    use super::super::xiph_matching::candidate_comparison as xiph_candidate_comparison;
     use renderpilot_domain::{
         ComponentFile, ComponentId, ComponentKind, GameId, PackageRelease, PackageVersion, PathRef,
         ReleaseChannel, Swappability,
@@ -722,6 +746,16 @@ mod tests {
         assert_eq!(
             xiph_candidate_comparison(&unknown, Some(&package("1.3.7", "1.3.6"))),
             CandidateComparison::UnknownVersion
+        );
+
+        let vendor = component(&[
+            ("vorbis_vs2010_x64_rwdi.dll", Some("1.3.7")),
+            ("ogg_vs2010_x64_rwdi.dll", Some("1.3.5")),
+        ]);
+        assert_eq!(
+            xiph_candidate_comparison(&vendor, Some(&package("1.3.7", "1.3.6"))),
+            CandidateComparison::NewerVersion,
+            "runtime vendor aliases retain their semantic release axes without broadening catalog names"
         );
 
         let embedded = component(&[

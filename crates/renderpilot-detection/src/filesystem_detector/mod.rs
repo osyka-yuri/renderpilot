@@ -17,12 +17,13 @@ use renderpilot_application::{AppResult, ComponentDetector};
 use renderpilot_domain::{
     ComponentFile, ComponentKind, GameInstallation, LibraryComponent, LibraryTechnology, PathRef,
     PeCompatibilityProfile, RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, Version,
+    xiph,
 };
 use serde::Serialize;
 
 use crate::{
     FileIdentityProbeResult, FileObservation, FileObservationSource, LibraryPatternError,
-    LibraryPatternSet, PatternPlatform, StrongFileCacheKey, VersionDetectionStatus,
+    LibraryPatternSet, PatternKind, PatternPlatform, StrongFileCacheKey, VersionDetectionStatus,
     file_metadata::{DetectedFileMetadata, try_read_detected_file_metadata},
 };
 
@@ -303,6 +304,7 @@ impl LibraryPatternComponentDetector {
         let candidate_extensions = self.patterns.candidate_file_extensions(self.platform);
         let report = collect_files_filtered(&root, self.max_depth, |file_name: &str| {
             candidate_extensions.allows_file_name(file_name)
+                || matches!(xiph::parse_runtime_file_name(file_name), Ok(Some(_)))
         })?;
         if report.completeness() == WalkCompleteness::Incomplete {
             let paths = report
@@ -412,15 +414,29 @@ impl LibraryPatternComponentDetector {
     }
 
     fn classify_file_name(&self, file_name: &str) -> Option<LibraryFileClassification> {
-        let matched = self
+        if let Some(matched) = self
             .patterns
-            .find_match_on_platform(file_name, self.platform)?;
+            .find_match_on_platform(file_name, self.platform)
+        {
+            return Some(LibraryFileClassification::new(
+                matched.technology(),
+                matched.kind(),
+                file_name,
+            ));
+        }
 
-        Some(LibraryFileClassification::new(
-            matched.technology(),
-            matched.kind(),
-            file_name,
-        ))
+        // Runtime names with opaque vendor suffixes are intentionally absent
+        // from the canonical pattern catalog. Their name is only an entry
+        // point: xiph_grouping subsequently requires a complete PE profile,
+        // exact import graph, coherent suffix/style, and architecture before
+        // treating a closure as a vendor deployment.
+        matches!(xiph::parse_runtime_file_name(file_name), Ok(Some(_))).then(|| {
+            LibraryFileClassification::new(
+                LibraryTechnology::XiphVorbis,
+                PatternKind::Glob,
+                file_name,
+            )
+        })
     }
 }
 

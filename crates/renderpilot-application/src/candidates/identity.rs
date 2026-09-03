@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use renderpilot_domain::{LibraryArtifact, LibraryComponent, Sha256Hash};
 
-use crate::AppResult;
+use crate::{
+    AppResult, ExternalAliasRequirements, ResolvedPathDisposition, ResolvedTransition,
+    resolve_transition,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct IdentityMember {
@@ -13,6 +16,7 @@ struct IdentityMember {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct RemovalTarget {
     install_target: String,
+    archive_original: bool,
 }
 
 fn identity_members<'a>(
@@ -69,50 +73,62 @@ impl ResolvedTransitionIdentity {
         component: &LibraryComponent,
         artifact: &LibraryArtifact,
     ) -> AppResult<Option<Self>> {
-        let members = crate::resolve_transition_members(component, artifact)?;
-        let resolved: Vec<_> = members
-            .into_iter()
-            .map(|file| {
-                (
-                    file,
-                    crate::resolve_transition_install_target(component, file),
-                )
-            })
-            .collect();
-        let writes = identity_members(
-            resolved
-                .iter()
-                .map(|(file, target)| (target.clone(), file.sha256())),
-        );
-        let Some(writes) = writes else {
-            return Ok(None);
-        };
-
-        let removals = crate::resolve_transition_removals(
-            component.files(),
+        let transition = resolve_transition(
+            component,
             artifact,
-            resolved.iter().map(|(_, target)| target.as_str()),
-        )
-        .into_iter()
-        .map(|file| {
-            file.path()
-                .file_name()
-                .map(str::trim)
-                .filter(|target| !target.is_empty())
-                .map(|target| RemovalTarget {
-                    install_target: target.to_ascii_lowercase(),
-                })
-        })
-        .collect::<Option<Vec<_>>>();
-        let Some(mut removals) = removals else {
-            return Ok(None);
-        };
+            component.files(),
+            &ExternalAliasRequirements::NotRequired,
+        )?;
+        Ok(Self::for_resolved_transition(&transition))
+    }
+
+    /// Derives candidate deduplication identity from the one complete
+    /// transition fact. This is the entry point for vendor deployments, where
+    /// orchestration has supplied the external-alias proof to the resolver.
+    pub(super) fn for_resolved_transition(transition: &ResolvedTransition) -> Option<Self> {
+        let writes = identity_members(transition.paths().iter().filter_map(|path| match path {
+            ResolvedPathDisposition::Write(write) => Some((
+                write.target().file_name()?.to_owned(),
+                write.source().sha256(),
+            )),
+            ResolvedPathDisposition::ArchiveAndRemove(_)
+            | ResolvedPathDisposition::Remove(_)
+            | ResolvedPathDisposition::UntouchedBaseline(_) => None,
+        }));
+        let writes = writes?;
+
+        let mut removals = transition
+            .paths()
+            .iter()
+            .filter_map(|path| match path {
+                ResolvedPathDisposition::ArchiveAndRemove(archive) => archive
+                    .target()
+                    .file_name()
+                    .map(str::trim)
+                    .filter(|target| !target.is_empty())
+                    .map(|target| RemovalTarget {
+                        install_target: target.to_ascii_lowercase(),
+                        archive_original: true,
+                    }),
+                ResolvedPathDisposition::Remove(remove) => remove
+                    .target()
+                    .file_name()
+                    .map(str::trim)
+                    .filter(|target| !target.is_empty())
+                    .map(|target| RemovalTarget {
+                        install_target: target.to_ascii_lowercase(),
+                        archive_original: false,
+                    }),
+                ResolvedPathDisposition::Write(_)
+                | ResolvedPathDisposition::UntouchedBaseline(_) => None,
+            })
+            .collect::<Vec<_>>();
         removals.sort();
         if removals.windows(2).any(|pair| pair[0] == pair[1]) {
-            return Ok(None);
+            return None;
         }
 
-        Ok(Some(Self { writes, removals }))
+        Some(Self { writes, removals })
     }
 
     /// Projects the installed component onto this transition's concrete targets.

@@ -258,6 +258,9 @@ fn prepare_rollback(
     let managed_files =
         crate::coordinated_files::managed_files_of(storage.get_installed_addon(game_id)?.as_ref())
             .to_vec();
+    crate::catalog::xiph_baseline_reservations::verify_vendor_xiph_baseline_reservations(
+        &rollback_baseline,
+    )?;
     let component =
         crate::coordinated_files::current_component_snapshot(&scanned_component, &managed_files)
             .map_err(|error| {
@@ -270,6 +273,7 @@ fn prepare_rollback(
     validate_expected_active_component(
         &component,
         rollback_baseline.expected_active_files(),
+        rollback_baseline.files(),
         &managed_files,
     )?;
     let baseline = crate::coordinated_files::resolve_component_baseline(
@@ -307,6 +311,7 @@ fn prepare_rollback(
 fn validate_expected_active_component(
     component: &renderpilot_domain::LibraryComponent,
     expected_active: &[renderpilot_domain::ComponentFile],
+    immutable_baseline: &[renderpilot_domain::ComponentFile],
     managed_files: &[renderpilot_domain::ManagedAddonFile],
 ) -> AppResult<()> {
     if expected_active.is_empty() {
@@ -359,6 +364,40 @@ fn validate_expected_active_component(
                 path.display()
             )));
         }
+    }
+    // A persisted vendor transition can intentionally reserve original paths
+    // (live absent, immutable bytes in `.bak`).  Validate this independently
+    // of the active projection so recreated originals never become a fallback
+    // baseline during rollback/reswap.
+    let expected_paths = expected_active
+        .iter()
+        .map(|file| crate::paths::normalized_key(std::path::Path::new(file.path().as_str())))
+        .collect::<std::collections::BTreeSet<_>>();
+    for original in immutable_baseline {
+        let path = std::path::Path::new(original.path().as_str());
+        if expected_paths.contains(&crate::paths::normalized_key(path)) {
+            continue;
+        }
+        let sidecar = crate::fs::backup_path(path)
+            .map_err(|error| AppError::invalid_input(error.to_string()))?;
+        if path.exists() {
+            return Err(AppError::invalid_input(format!(
+                "reserved rollback original unexpectedly exists at {}",
+                path.display()
+            )));
+        }
+        let expected = original.sha256().ok_or_else(|| {
+            AppError::invalid_input(format!(
+                "rollback baseline has no reserved hash for {}",
+                path.display()
+            ))
+        })?;
+        crate::fs::verify_sidecar(&sidecar, expected).map_err(|error| {
+            AppError::invalid_input(format!(
+                "reserved rollback original has no verified sidecar at {}: {error}",
+                sidecar.display()
+            ))
+        })?;
     }
     Ok(())
 }

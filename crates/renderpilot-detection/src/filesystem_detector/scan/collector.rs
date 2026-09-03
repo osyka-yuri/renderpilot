@@ -132,6 +132,9 @@ impl<'filesystem, F: FileNameFilter, C: Fn() -> bool> FileCollector<'filesystem,
         let metadata = read_symlink_metadata(self.file_system, root)?;
 
         if metadata.is_reparse_point() {
+            if self.rejects_reparse_points() {
+                self.record_reparse_point(root);
+            }
             return Ok(());
         }
 
@@ -222,6 +225,24 @@ impl<'filesystem, F: FileNameFilter, C: Fn() -> bool> FileCollector<'filesystem,
             }
         };
 
+        if self.rejects_reparse_points() {
+            let metadata = match read_symlink_metadata_tolerant_with(self.file_system, &path) {
+                Ok(Some(metadata)) => metadata,
+                Ok(None) => {
+                    self.record_vanished(&path);
+                    return Ok(());
+                }
+                Err(error) => {
+                    self.record_error(&path, &error);
+                    return Ok(());
+                }
+            };
+            if metadata.is_reparse_point() {
+                self.record_reparse_point(&path);
+                return Ok(());
+            }
+        }
+
         if file_type == InstallTreeEntryKind::Symlink {
             return Ok(());
         }
@@ -265,6 +286,9 @@ impl<'filesystem, F: FileNameFilter, C: Fn() -> bool> FileCollector<'filesystem,
             };
 
             if md.is_reparse_point() {
+                if self.rejects_reparse_points() {
+                    self.record_reparse_point(&path);
+                }
                 return Ok(());
             }
             if md.kind() == InstallTreeEntryKind::Directory {
@@ -325,6 +349,18 @@ impl<'filesystem, F: FileNameFilter, C: Fn() -> bool> FileCollector<'filesystem,
             message: "filesystem entry disappeared while the installation was being inspected"
                 .to_owned(),
         });
+    }
+
+    fn record_reparse_point(&mut self, path: &Path) {
+        self.diagnostics.push(WalkDiagnostic {
+            kind: WalkDiagnosticKind::ReparsePoint,
+            path: path.to_path_buf(),
+            message: "installation traversal encountered a reparse point".to_owned(),
+        });
+    }
+
+    fn rejects_reparse_points(&self) -> bool {
+        self.mode == InstallWalkMode::FullStrict
     }
 
     fn consume_entry(&mut self, path: &Path) -> bool {

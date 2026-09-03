@@ -11,6 +11,7 @@ mod dto;
 mod identity;
 mod matcher;
 mod ordering;
+mod xiph_matching;
 
 #[cfg(test)]
 mod tests;

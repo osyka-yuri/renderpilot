@@ -389,6 +389,58 @@ fn malformed_xiph_files_are_not_grouped_by_naming_convention_alone() {
 }
 
 #[test]
+fn vendor_xiph_runtime_names_are_detected_but_non_pe_closures_stay_read_only() {
+    let root = tempfile::tempdir().expect("root");
+    for name in [
+        "vorbisfile_vs2010_x64_rwdi.dll",
+        "vorbis_vs2010_x64_rwdi.dll",
+        "ogg_vs2010_x64_rwdi.dll",
+    ] {
+        fs::write(root.path().join(name), b"not-a-pe").expect("vendor fixture");
+    }
+
+    let detector = LibraryPatternComponentDetector::windows_default().expect("patterns");
+    let game = game_installation(root.path());
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("vendor Xiph name detection");
+    let components = group_into_components(&game, &libraries).expect("grouping");
+    let xiph = components
+        .iter()
+        .filter(|component| component.technology() == LibraryTechnology::XiphVorbis)
+        .collect::<Vec<_>>();
+
+    assert_eq!(libraries.len(), 3);
+    assert!(
+        libraries
+            .iter()
+            .all(|library| library.technology() == LibraryTechnology::XiphVorbis)
+    );
+    assert_eq!(xiph.len(), 1);
+    assert_eq!(xiph[0].swappability(), Swappability::ReadOnly);
+}
+
+#[test]
+fn malformed_vendor_xiph_runtime_names_are_not_detected() {
+    let root = tempfile::tempdir().expect("root");
+    for name in [
+        "vorbis__x64.dll",
+        "vorbis_vs2010_x64_rwdi..dll",
+        "ogg_vs2010_x64_rwdi-.dll",
+    ] {
+        fs::write(root.path().join(name), b"not-a-pe").expect("malformed vendor fixture");
+    }
+
+    let detector = LibraryPatternComponentDetector::windows_default().expect("patterns");
+    let game = game_installation(root.path());
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("malformed names do not abort scan");
+
+    assert!(libraries.is_empty());
+}
+
+#[test]
 fn xiph_singletons_fail_closed_without_cross_family_grouping() {
     let root = tempfile::tempdir().expect("root");
     fs::write(root.path().join("ogg.dll"), b"malformed-ogg").expect("Ogg fixture");

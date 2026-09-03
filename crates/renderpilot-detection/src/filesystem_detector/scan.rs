@@ -20,6 +20,8 @@ pub enum InstallWalkMode {
     Probe,
     /// Authoritative traversal of the confirmed install tree.
     Full,
+    /// Full traversal for proofs that must reject reparse descendants.
+    FullStrict,
 }
 
 /// Stable class of a recoverable traversal diagnostic.
@@ -33,6 +35,8 @@ pub enum WalkDiagnosticKind {
     BudgetExceeded,
     /// Probe depth limit intentionally prevented a complete traversal.
     DepthLimit,
+    /// A symbolic link, junction, or another reparse point was encountered.
+    ReparsePoint,
 }
 
 /// One recoverable traversal failure.
@@ -132,6 +136,21 @@ impl InstallTreeWalker {
         }
     }
 
+    /// Creates a full-tree walker for authority-sensitive proofs.
+    ///
+    /// Unlike [`Self::full`], this mode reports every encountered reparse
+    /// point as incomplete instead of silently skipping it. This prevents a
+    /// static-import proof from claiming coverage of a tree whose descendants
+    /// may resolve outside the confirmed installation root.
+    #[must_use]
+    pub fn full_strict() -> Self {
+        Self {
+            mode: InstallWalkMode::FullStrict,
+            max_depth: None,
+            max_entries: None,
+        }
+    }
+
     /// Creates a cheap advisory probe with a bounded directory depth.
     #[must_use]
     pub fn probe() -> Self {
@@ -214,6 +233,10 @@ mod tests {
     fn probe_and_full_modes_are_explicit() {
         assert_eq!(InstallTreeWalker::probe().mode(), InstallWalkMode::Probe);
         assert_eq!(InstallTreeWalker::full().mode(), InstallWalkMode::Full);
+        assert_eq!(
+            InstallTreeWalker::full_strict().mode(),
+            InstallWalkMode::FullStrict
+        );
     }
 
     #[test]
@@ -307,6 +330,76 @@ mod tests {
         assert_eq!(report.diagnostics().len(), 1);
         assert_eq!(report.diagnostics()[0].kind(), WalkDiagnosticKind::Io);
         assert!(report.diagnostics()[0].message().contains("disappeared"));
+    }
+
+    #[test]
+    fn strict_full_walk_marks_reparse_descendants_incomplete() {
+        struct ReparseFileSystem;
+
+        impl InstallTreeFileSystem for ReparseFileSystem {
+            fn symlink_metadata(&self, path: &std::path::Path) -> io::Result<InstallTreeMetadata> {
+                let metadata = if path == std::path::Path::new("virtual-root") {
+                    InstallTreeMetadata::new(InstallTreeEntryKind::Directory, false)
+                } else {
+                    InstallTreeMetadata::new(InstallTreeEntryKind::Directory, true)
+                };
+                Ok(metadata)
+            }
+
+            fn read_directory(
+                &self,
+                _path: &std::path::Path,
+            ) -> io::Result<Vec<io::Result<InstallTreeDirectoryEntry>>> {
+                Ok(vec![Ok(InstallTreeDirectoryEntry::new(
+                    PathBuf::from("virtual-root/junction"),
+                    OsString::from("junction"),
+                    Ok(InstallTreeEntryKind::Directory),
+                ))])
+            }
+        }
+
+        let report = collect_files_filtered_with_mode(
+            std::path::Path::new("virtual-root"),
+            InstallWalkMode::FullStrict,
+            None,
+            None,
+            &ReparseFileSystem,
+            (),
+        )
+        .expect("strict walk");
+
+        assert_eq!(report.completeness(), WalkCompleteness::Incomplete);
+        assert!(report.files().is_empty());
+        assert_eq!(report.diagnostics().len(), 1);
+        assert_eq!(
+            report.diagnostics()[0].kind(),
+            WalkDiagnosticKind::ReparsePoint
+        );
+    }
+
+    #[test]
+    fn strict_full_walk_visits_directory_names_excluded_by_regular_full_scan() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let excluded = temp.path().join(".git");
+        fs::create_dir_all(&excluded).expect("excluded-named directory");
+        let candidate = excluded.join("loader.dll");
+        fs::write(&candidate, b"candidate").expect("candidate file");
+
+        let full = InstallTreeWalker::full()
+            .walk_filtered(temp.path(), |_| true)
+            .expect("regular full walk");
+        let strict = InstallTreeWalker::full_strict()
+            .walk_filtered(temp.path(), |_| true)
+            .expect("strict full walk");
+
+        assert!(
+            !full.files().contains(&candidate),
+            "ordinary full scans retain their established directory exclusions"
+        );
+        assert!(
+            strict.files().contains(&candidate),
+            "external-importer proof must cover all regular files below the root"
+        );
     }
 
     #[test]

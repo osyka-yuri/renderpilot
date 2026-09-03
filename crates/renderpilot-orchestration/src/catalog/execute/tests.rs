@@ -7,7 +7,7 @@ use std::sync::{
 
 use renderpilot_application::{
     ArtifactRepository, ComponentRepository, D3d12ExecutableAction, D3d12ExecutableProfile,
-    GameRepository, InstalledAddonRepository,
+    ExternalAliasRequirements, GameRepository, InstalledAddonRepository, resolve_transition,
 };
 use renderpilot_domain::{
     AddonKind, Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile,
@@ -489,7 +489,17 @@ fn applied_path_uses_the_selected_renamed_member_after_projection() {
         ArtifactTrustLevel::LocalObserved,
     )
     .expect("artifact");
-    let component = streamline_component(&["primary.dll"]);
+    let component = streamline_component(&["primary.dll"]).rebuild_with_files(vec![
+        comp_file_str("C:/game/primary.dll")
+            .with_sha256(Sha256Hash::new("c".repeat(64)).expect("current hash")),
+    ]);
+    let transition = resolve_transition(
+        &component,
+        &artifact,
+        component.files(),
+        &ExternalAliasRequirements::NotRequired,
+    )
+    .expect("transition");
     let prepared = PreparedApplySwap {
         game_id: component.game_id().clone(),
         component_id: component.id().clone(),
@@ -497,8 +507,9 @@ fn applied_path_uses_the_selected_renamed_member_after_projection() {
         artifact,
         baseline: Vec::new(),
         rollback_baseline: None,
-        planned: vec![planned_copy(selected_path, target_path)],
-        removed: Vec::new(),
+        writes: vec![planned_copy(selected_path, target_path)],
+        transition,
+        xiph_import_proof: None,
         first_swap: true,
         d3d12: None,
     };
@@ -570,6 +581,10 @@ fn prepared_d3d12_path_swap(
         ComponentKind::NativeLibrary,
         LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
+    )
+    .with_file(
+        comp_file_str("C:/game/D3D12Core.dll")
+            .with_sha256(Sha256Hash::new("a".repeat(64)).expect("current hash")),
     );
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:d3d12-paths").expect("artifact id"),
@@ -582,6 +597,13 @@ fn prepared_d3d12_path_swap(
         ArtifactTrustLevel::CatalogDownloaded,
     )
     .expect("artifact");
+    let transition = resolve_transition(
+        &component,
+        &artifact,
+        component.files(),
+        &ExternalAliasRequirements::NotRequired,
+    )
+    .expect("transition");
     let prepared = PreparedApplySwap {
         game_id: component.game_id().clone(),
         component_id: component.id().clone(),
@@ -589,8 +611,9 @@ fn prepared_d3d12_path_swap(
         artifact,
         baseline: Vec::new(),
         rollback_baseline: None,
-        planned: Vec::new(),
-        removed: Vec::new(),
+        writes: Vec::new(),
+        transition,
+        xiph_import_proof: None,
         first_swap: !backup_exists,
         d3d12: Some(PreparedD3d12Execution {
             state: crate::catalog::runtime_compatibility::D3d12ExecutableState {
@@ -686,6 +709,111 @@ fn sha_of(path: &Path) -> Sha256Hash {
     renderpilot_detection::sha256_file(path).expect("hash file")
 }
 
+/// Builds a deliberately tiny, parseable PE32+ Xiph fixture.  The production
+/// boundary re-reads both imports and public exports, so a byte blob or a
+/// filename-only fixture would not exercise the DIDE transition path.
+fn synthetic_xiph_pe(public_export: &str, static_imports: &[&str]) -> Vec<u8> {
+    const PE_OFFSET: usize = 0x80;
+    const COFF_HEADER_LEN: usize = 20;
+    const OPTIONAL_HEADER_SIZE: usize = 0xf0;
+    const SECTION_RVA: u32 = 0x1000;
+    const SECTION_RAW_POINTER: usize = 0x200;
+    const PE32_PLUS_DATA_DIRECTORIES_OFFSET: usize = 112;
+    const DATA_DIRECTORY_ENTRY_LEN: usize = 8;
+    const EXPORT_DIRECTORY_LEN: usize = 40;
+    const IMPORT_DESCRIPTOR_LEN: usize = 20;
+
+    let coff_offset = PE_OFFSET + 4;
+    let optional_offset = coff_offset + COFF_HEADER_LEN;
+    let section_offset = optional_offset + OPTIONAL_HEADER_SIZE;
+    let export_functions_offset = EXPORT_DIRECTORY_LEN;
+    let export_names_offset = export_functions_offset + 4;
+    let export_ordinals_offset = export_names_offset + 4;
+    let import_offset = export_ordinals_offset + 2;
+    let import_len = (static_imports.len() + 1) * IMPORT_DESCRIPTOR_LEN;
+    let export_name_offset = import_offset + import_len;
+
+    let mut section = vec![0; export_name_offset];
+    section.extend_from_slice(public_export.as_bytes());
+    section.push(0);
+
+    let mut import_name_rvas = Vec::with_capacity(static_imports.len());
+    for import in static_imports {
+        import_name_rvas.push(SECTION_RVA + u32::try_from(section.len()).expect("fixture size"));
+        section.extend_from_slice(import.as_bytes());
+        section.push(0);
+    }
+    let function_rva = SECTION_RVA + u32::try_from(section.len()).expect("fixture size");
+    section.push(0xc3); // mapped byte: the export parser only needs a valid target.
+
+    section[20..24].copy_from_slice(&1u32.to_le_bytes());
+    section[24..28].copy_from_slice(&1u32.to_le_bytes());
+    section[28..32].copy_from_slice(
+        &(SECTION_RVA + u32::try_from(export_functions_offset).expect("fixture offset"))
+            .to_le_bytes(),
+    );
+    section[32..36].copy_from_slice(
+        &(SECTION_RVA + u32::try_from(export_names_offset).expect("fixture offset")).to_le_bytes(),
+    );
+    section[36..40].copy_from_slice(
+        &(SECTION_RVA + u32::try_from(export_ordinals_offset).expect("fixture offset"))
+            .to_le_bytes(),
+    );
+    section[export_functions_offset..export_functions_offset + 4]
+        .copy_from_slice(&function_rva.to_le_bytes());
+    section[export_names_offset..export_names_offset + 4].copy_from_slice(
+        &(SECTION_RVA + u32::try_from(export_name_offset).expect("fixture offset")).to_le_bytes(),
+    );
+    section[export_ordinals_offset..export_ordinals_offset + 2]
+        .copy_from_slice(&0u16.to_le_bytes());
+    for (index, name_rva) in import_name_rvas.iter().enumerate() {
+        let descriptor = import_offset + index * IMPORT_DESCRIPTOR_LEN;
+        section[descriptor..descriptor + 4].copy_from_slice(&SECTION_RVA.to_le_bytes());
+        section[descriptor + 12..descriptor + 16].copy_from_slice(&name_rva.to_le_bytes());
+    }
+
+    let mut bytes = vec![0; SECTION_RAW_POINTER + section.len()];
+    bytes[0..2].copy_from_slice(b"MZ");
+    bytes[0x3c..0x40].copy_from_slice(&(PE_OFFSET as u32).to_le_bytes());
+    bytes[PE_OFFSET..PE_OFFSET + 4].copy_from_slice(b"PE\0\0");
+    bytes[coff_offset..coff_offset + 2].copy_from_slice(&0x8664u16.to_le_bytes());
+    bytes[coff_offset + 2..coff_offset + 4].copy_from_slice(&1u16.to_le_bytes());
+    bytes[coff_offset + 16..coff_offset + 18]
+        .copy_from_slice(&(OPTIONAL_HEADER_SIZE as u16).to_le_bytes());
+    bytes[optional_offset..optional_offset + 2].copy_from_slice(&0x20bu16.to_le_bytes());
+    let data_directories = optional_offset + PE32_PLUS_DATA_DIRECTORIES_OFFSET;
+    bytes[data_directories - 4..data_directories].copy_from_slice(&16u32.to_le_bytes());
+    bytes[data_directories..data_directories + 4].copy_from_slice(&SECTION_RVA.to_le_bytes());
+    bytes[data_directories + 4..data_directories + 8]
+        .copy_from_slice(&(EXPORT_DIRECTORY_LEN as u32).to_le_bytes());
+    let import_directory = data_directories + DATA_DIRECTORY_ENTRY_LEN;
+    bytes[import_directory..import_directory + 4].copy_from_slice(
+        &(SECTION_RVA + u32::try_from(import_offset).expect("fixture offset")).to_le_bytes(),
+    );
+    bytes[import_directory + 4..import_directory + 8]
+        .copy_from_slice(&(import_len as u32).to_le_bytes());
+    bytes[section_offset..section_offset + 8].copy_from_slice(b".rdata\0\0");
+    bytes[section_offset + 8..section_offset + 12]
+        .copy_from_slice(&(section.len() as u32).to_le_bytes());
+    bytes[section_offset + 12..section_offset + 16].copy_from_slice(&SECTION_RVA.to_le_bytes());
+    bytes[section_offset + 16..section_offset + 20]
+        .copy_from_slice(&(section.len() as u32).to_le_bytes());
+    bytes[section_offset + 20..section_offset + 24]
+        .copy_from_slice(&(SECTION_RAW_POINTER as u32).to_le_bytes());
+    bytes[SECTION_RAW_POINTER..].copy_from_slice(&section);
+    bytes
+}
+
+fn observed_xiph_file(path: &Path) -> ComponentFile {
+    let profile = renderpilot_detection::inspect_pe(path)
+        .expect("read synthetic PE")
+        .compatibility_profile()
+        .expect("complete synthetic Xiph compatibility profile");
+    ComponentFile::new(path_as_ref(path))
+        .with_sha256(sha_of(path))
+        .with_pe_compatibility(profile)
+}
+
 fn sample_game_at(install: &Path) -> GameInstallation {
     let install_str = install.to_string_lossy();
     let id = format!("manual:{install_str}");
@@ -701,6 +829,300 @@ fn sample_game_at(install: &Path) -> GameInstallation {
         GameRuntime::NativeWindows,
         path_as_ref(install),
     )
+}
+
+#[test]
+fn apply_swap_rolls_back_when_late_xiph_reservation_is_recreated_before_commit() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game directory");
+    fs::create_dir_all(&library_dir).expect("library directory");
+
+    let engine = game_dir.join("engine.exe");
+    let old_wrapper = game_dir.join("vorbisfile_vs2010_x64_rwdi.dll");
+    let old_vorbis = game_dir.join("vorbis_vs2010_x64_rwdi.dll");
+    let old_ogg = game_dir.join("ogg_vs2010_x64_rwdi.dll");
+    let old_wrapper_bytes = synthetic_xiph_pe(
+        "ov_open",
+        &["vorbis_vs2010_x64_rwdi.dll", "ogg_vs2010_x64_rwdi.dll"],
+    );
+    let old_vorbis_bytes = synthetic_xiph_pe("vorbis_info_init", &["ogg_vs2010_x64_rwdi.dll"]);
+    let old_ogg_bytes = synthetic_xiph_pe("ogg_sync_init", &[]);
+    write(
+        &engine,
+        &synthetic_xiph_pe("engine_marker", &["vorbisfile_vs2010_x64_rwdi.dll"]),
+    );
+    write(&old_wrapper, &old_wrapper_bytes);
+    write(&old_vorbis, &old_vorbis_bytes);
+    write(&old_ogg, &old_ogg_bytes);
+
+    let new_wrapper = library_dir.join("vorbisfile.dll");
+    let new_vorbis = library_dir.join("vorbis.dll");
+    let new_ogg = library_dir.join("ogg.dll");
+    write(
+        &new_wrapper,
+        &synthetic_xiph_pe("ov_open", &["vorbis.dll", "ogg.dll"]),
+    );
+    write(
+        &new_vorbis,
+        &synthetic_xiph_pe("vorbis_info_init", &["ogg.dll"]),
+    );
+    write(&new_ogg, &synthetic_xiph_pe("ogg_sync_init", &[]));
+
+    let game = sample_game_at(&game_dir);
+    let component_id = ComponentId::new("component:dide-late-apply-reservation").expect("id");
+    let component = [
+        observed_xiph_file(&old_wrapper),
+        observed_xiph_file(&old_vorbis),
+        observed_xiph_file(&old_ogg),
+    ]
+    .into_iter()
+    .fold(
+        LibraryComponent::new(
+            component_id.clone(),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            LibraryTechnology::XiphVorbis,
+            Swappability::BundleOnly,
+        ),
+        LibraryComponent::with_file,
+    );
+    let artifact = LibraryArtifact::new(
+        ArtifactId::new("artifact:dide-late-apply-reservation").expect("artifact id"),
+        LibraryTechnology::XiphVorbis,
+        "vorbisfile.dll",
+        vec![
+            observed_xiph_file(&new_wrapper),
+            observed_xiph_file(&new_vorbis),
+            observed_xiph_file(&new_ogg),
+        ],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("Xiph artifact")
+    .with_metadata(
+        ArtifactMetadata::default().with_runtime_target(RuntimeTarget::new(Architecture::X64)),
+    );
+
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+        .expect("component");
+    storage.upsert_artifact(&artifact).expect("artifact");
+    let context = Context::from_storage(storage);
+
+    // This hook is deliberately after filesystem transition + rebind/rebuild,
+    // and immediately before the commit-boundary reservation recheck.  Moving
+    // that recheck earlier makes this test commit instead of roll back.
+    let recreated_vorbis = old_vorbis.clone();
+    let hook_ran = Arc::new(AtomicBool::new(false));
+    let hook_ran_in_apply = Arc::clone(&hook_ran);
+    let _hook = super::test_hooks::set_before_transition_commit_hook(move || {
+        write(&recreated_vorbis, b"raced-recreated-vendor-vorbis");
+        hook_ran_in_apply.store(true, Ordering::SeqCst);
+    });
+    let error = apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
+        .expect_err("late recreation of archived vendor Vorbis must abort apply");
+    assert!(
+        hook_ran.load(Ordering::SeqCst),
+        "the test must reach the post-rebind, pre-commit reservation boundary"
+    );
+    assert!(
+        matches!(error, crate::ServiceError::InvalidInput(_)),
+        "late reservation rejection must be surfaced as a failed apply: {error:?}"
+    );
+
+    assert_eq!(
+        context
+            .storage()
+            .list_components_for_game(game.id())
+            .expect("stored components"),
+        vec![component],
+        "the failed durable mutation must leave the active component projection unchanged"
+    );
+    assert!(
+        context
+            .storage()
+            .get_component_backup(&component_id)
+            .expect("backup query")
+            .is_none(),
+        "a failed first apply must not persist a rollback baseline"
+    );
+
+    for (path, original) in [
+        (&old_wrapper, old_wrapper_bytes.as_slice()),
+        (&old_vorbis, old_vorbis_bytes.as_slice()),
+        (&old_ogg, old_ogg_bytes.as_slice()),
+    ] {
+        assert_eq!(
+            fs::read(path).expect("restored vendor original"),
+            original,
+            "durable rollback must restore {}",
+            path.display()
+        );
+        assert!(
+            !bak_of(path).exists(),
+            "durable rollback must remove the temporary sidecar for {}",
+            path.display()
+        );
+    }
+    for canonical in [&game_dir.join("vorbis.dll"), &game_dir.join("ogg.dll")] {
+        assert!(
+            !canonical.exists() && !bak_of(canonical).exists(),
+            "durable rollback must remove newly created canonical target {}",
+            canonical.display()
+        );
+    }
+}
+
+#[test]
+fn apply_swap_rolls_back_when_late_xiph_external_import_changes_before_commit() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game directory");
+    fs::create_dir_all(&library_dir).expect("library directory");
+
+    let engine = game_dir.join("engine.exe");
+    let old_wrapper = game_dir.join("vorbisfile_vs2010_x64_rwdi.dll");
+    let old_vorbis = game_dir.join("vorbis_vs2010_x64_rwdi.dll");
+    let old_ogg = game_dir.join("ogg_vs2010_x64_rwdi.dll");
+    let old_wrapper_bytes = synthetic_xiph_pe(
+        "ov_open",
+        &["vorbis_vs2010_x64_rwdi.dll", "ogg_vs2010_x64_rwdi.dll"],
+    );
+    let old_vorbis_bytes = synthetic_xiph_pe("vorbis_info_init", &["ogg_vs2010_x64_rwdi.dll"]);
+    let old_ogg_bytes = synthetic_xiph_pe("ogg_sync_init", &[]);
+    write(
+        &engine,
+        &synthetic_xiph_pe("engine_marker", &["vorbisfile_vs2010_x64_rwdi.dll"]),
+    );
+    write(&old_wrapper, &old_wrapper_bytes);
+    write(&old_vorbis, &old_vorbis_bytes);
+    write(&old_ogg, &old_ogg_bytes);
+
+    let new_wrapper = library_dir.join("vorbisfile.dll");
+    let new_vorbis = library_dir.join("vorbis.dll");
+    let new_ogg = library_dir.join("ogg.dll");
+    write(
+        &new_wrapper,
+        &synthetic_xiph_pe("ov_open", &["vorbis.dll", "ogg.dll"]),
+    );
+    write(
+        &new_vorbis,
+        &synthetic_xiph_pe("vorbis_info_init", &["ogg.dll"]),
+    );
+    write(&new_ogg, &synthetic_xiph_pe("ogg_sync_init", &[]));
+
+    let game = sample_game_at(&game_dir);
+    let component_id = ComponentId::new("component:dide-late-import-proof").expect("id");
+    let component = [
+        observed_xiph_file(&old_wrapper),
+        observed_xiph_file(&old_vorbis),
+        observed_xiph_file(&old_ogg),
+    ]
+    .into_iter()
+    .fold(
+        LibraryComponent::new(
+            component_id.clone(),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            LibraryTechnology::XiphVorbis,
+            Swappability::BundleOnly,
+        ),
+        LibraryComponent::with_file,
+    );
+    let artifact = LibraryArtifact::new(
+        ArtifactId::new("artifact:dide-late-import-proof").expect("artifact id"),
+        LibraryTechnology::XiphVorbis,
+        "vorbisfile.dll",
+        vec![
+            observed_xiph_file(&new_wrapper),
+            observed_xiph_file(&new_vorbis),
+            observed_xiph_file(&new_ogg),
+        ],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("Xiph artifact")
+    .with_metadata(
+        ArtifactMetadata::default().with_runtime_target(RuntimeTarget::new(Architecture::X64)),
+    );
+
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+        .expect("component");
+    storage.upsert_artifact(&artifact).expect("artifact");
+    let context = Context::from_storage(storage);
+
+    // The seam runs after rebind/rebuild and immediately before the durable
+    // commit.  Unlike the reservation race above, no transition path is
+    // recreated: only an external importer changes.  Without the final proof
+    // recheck this would commit a missing vendor dependency.
+    let raced_engine = engine;
+    let raced_engine_bytes = synthetic_xiph_pe("engine_raced", &["vorbis_vs2010_x64_rwdi.dll"]);
+    let hook_ran = Arc::new(AtomicBool::new(false));
+    let hook_ran_in_apply = Arc::clone(&hook_ran);
+    let _hook = super::test_hooks::set_before_transition_commit_hook(move || {
+        write(&raced_engine, &raced_engine_bytes);
+        hook_ran_in_apply.store(true, Ordering::SeqCst);
+    });
+    let error = apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
+        .expect_err("late external vendor import must abort apply");
+    assert!(
+        hook_ran.load(Ordering::SeqCst),
+        "the test must reach the post-rebind, pre-commit proof boundary"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("Xiph external-import proof changed during swap"),
+        "the final external-import proof must reject the race: {error:?}"
+    );
+
+    assert_eq!(
+        context
+            .storage()
+            .list_components_for_game(game.id())
+            .expect("stored components"),
+        vec![component],
+        "the failed durable mutation must leave the active component projection unchanged"
+    );
+    assert!(
+        context
+            .storage()
+            .get_component_backup(&component_id)
+            .expect("backup query")
+            .is_none(),
+        "a failed first apply must not persist a rollback baseline"
+    );
+
+    for (path, original) in [
+        (&old_wrapper, old_wrapper_bytes.as_slice()),
+        (&old_vorbis, old_vorbis_bytes.as_slice()),
+        (&old_ogg, old_ogg_bytes.as_slice()),
+    ] {
+        assert_eq!(
+            fs::read(path).expect("restored vendor original"),
+            original,
+            "durable rollback must restore {}",
+            path.display()
+        );
+        assert!(
+            !bak_of(path).exists(),
+            "durable rollback must remove the temporary sidecar for {}",
+            path.display()
+        );
+    }
+    for canonical in [&game_dir.join("vorbis.dll"), &game_dir.join("ogg.dll")] {
+        assert!(
+            !canonical.exists() && !bak_of(canonical).exists(),
+            "durable rollback must remove newly created canonical target {}",
+            canonical.display()
+        );
+    }
 }
 
 fn d3d12_artifact_at(source: &Path, sdk_line: u32) -> LibraryArtifact {

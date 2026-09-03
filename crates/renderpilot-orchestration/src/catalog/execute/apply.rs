@@ -31,6 +31,7 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
     } = request;
     let guard = crate::mutation_boundary::enter_game_mutation_boundary(context, game_id)?;
     let storage = context.storage();
+    let mut xiph_import_cache = crate::catalog::xiph_import_proof::XiphImportProofCache::default();
     let preflight = match crate::catalog::swap::load_swap_preflight(
         context,
         game_id,
@@ -39,6 +40,7 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
         crate::catalog::swap::SwapPreflightMode::Apply {
             confirmation_supplied: confirmation_token.is_some(),
         },
+        &mut xiph_import_cache,
     )? {
         crate::catalog::swap::SwapPreflight::Ready(preflight) => *preflight,
         crate::catalog::swap::SwapPreflight::UnusableSource { artifact_id, issue } => {
@@ -59,6 +61,13 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
     let game_root = std::path::PathBuf::from(preflight.game.install_path().as_str());
     let mut prepared = prepare_apply_swap(game_id, component_id, preflight)?;
     validate_executable_confirmation(&prepared, confirmation_token)?;
+    crate::catalog::xiph_import_proof::require_same_external_alias_proof(
+        prepared.xiph_import_proof.as_ref(),
+        &game_root,
+        &prepared.component,
+        &prepared.baseline,
+        &mut xiph_import_cache,
+    )?;
     let mut executable_guard = prepared
         .d3d12
         .as_ref()
@@ -94,11 +103,9 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
                         #[cfg(test)]
                         inject_d3d12_apply_failure(D3d12ApplyFailurePoint::AfterExecutableBackup)?;
 
-                        perform_apply_fs(
-                            &prepared.component,
-                            &prepared.baseline,
-                            &prepared.planned,
-                            &prepared.removed,
+                        perform_transition_apply_fs(
+                            &prepared.transition,
+                            prepared.rollback_baseline.as_ref(),
                         )?;
                         #[cfg(test)]
                         inject_d3d12_apply_failure(D3d12ApplyFailurePoint::AfterDllMutation)?;
@@ -115,8 +122,16 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
                             D3d12ApplyFailurePoint::AfterExecutableMutation,
                         )?;
 
-                        if let Err(error) = rebind_planned_files_for_technology(
-                            &mut prepared.planned,
+                        crate::catalog::xiph_import_proof::require_same_external_alias_proof(
+                            prepared.xiph_import_proof.as_ref(),
+                            &game_root,
+                            &prepared.component,
+                            &prepared.baseline,
+                            &mut xiph_import_cache,
+                        )?;
+
+                        if let Err(error) = rebind_transition_writes_for_technology(
+                            &mut prepared.writes,
                             prepared.component.technology(),
                         ) {
                             if matches!(error.kind(), AppErrorKind::StaleReplacementSource) {
@@ -129,14 +144,13 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
                             return Err(error);
                         }
 
-                        let (next_components, to_version) = rebuild_component_set_after_overlay(
+                        let (next_components, to_version) = rebuild_component_set_after_transition(
                             storage,
                             &prepared.game_id,
                             &prepared.component,
                             &prepared.component_id,
-                            &prepared.baseline,
-                            &prepared.planned,
-                            &prepared.removed,
+                            &prepared.transition,
+                            &prepared.writes,
                         )?;
 
                         let executable_baseline = build_executable_baseline(
@@ -196,6 +210,28 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
                         }
                         #[cfg(test)]
                         inject_d3d12_apply_failure(D3d12ApplyFailurePoint::BeforeDatabaseCommit)?;
+                        // Recheck only reservation invariants at the last
+                        // recoverable point.  Another process can recreate an
+                        // archived original after the filesystem batch's
+                        // immediate check but before this durable commit.
+                        #[cfg(test)]
+                        super::test_hooks::run_before_transition_commit_hook();
+                        // The reservation check alone cannot notice an
+                        // external importer that starts requiring an alias
+                        // just archived by this transition.  Reprove at the
+                        // final recoverable boundary, after rebind/rebuild
+                        // and after the test-only race seam.
+                        crate::catalog::xiph_import_proof::require_same_external_alias_proof(
+                            prepared.xiph_import_proof.as_ref(),
+                            &game_root,
+                            &prepared.component,
+                            &prepared.baseline,
+                            &mut xiph_import_cache,
+                        )?;
+                        super::fs_ops::validate_transition_reservations(
+                            &prepared.transition,
+                            prepared.rollback_baseline.as_ref(),
+                        )?;
                         storage.commit_game_mutation(GameMutationCommit {
                             game_id: &prepared.game_id,
                             component_set: Some(&next_components),
@@ -208,13 +244,32 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
                             types::D3d12ExecutableActionResult::from_action(&d3d12.action)
                         });
                         let mut journal_items = prepared
-                            .planned
+                            .transition
+                            .paths()
                             .iter()
-                            .map(|plan| {
-                                JournalEntryItem::component_file(
-                                    plan.file.path(),
-                                    Some(prepared.artifact.id().clone()),
-                                )
+                            .filter_map(|path| match path {
+                                renderpilot_application::ResolvedPathDisposition::Write(write) => {
+                                    Some(JournalEntryItem::component_transition_file(
+                                        write.target(),
+                                        Some(prepared.artifact.id().clone()),
+                                        if write.current().is_some() {
+                                            "replace"
+                                        } else {
+                                            "add"
+                                        },
+                                    ))
+                                }
+                                renderpilot_application::ResolvedPathDisposition::ArchiveAndRemove(archive) => {
+                                    Some(JournalEntryItem::component_transition_file(
+                                        archive.target(), None, "archive_and_remove"
+                                    ))
+                                }
+                                renderpilot_application::ResolvedPathDisposition::Remove(remove) => {
+                                    Some(JournalEntryItem::component_transition_file(
+                                        remove.target(), None, "remove"
+                                    ))
+                                }
+                                renderpilot_application::ResolvedPathDisposition::UntouchedBaseline(_) => None,
                             })
                             .collect::<Vec<_>>();
                         if let Some(action) = prepared
@@ -243,7 +298,15 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
                             component_id: prepared.component_id.as_str().to_owned(),
                             applied_path: prepared.applied_path(),
                             replacement_path: prepared.replacement_path(),
-                            updated_file_count: prepared.planned.len(),
+                            updated_file_count: prepared
+                                .transition
+                                .paths()
+                                .iter()
+                                .filter(|path| !matches!(
+                                    path,
+                                    renderpilot_application::ResolvedPathDisposition::UntouchedBaseline(_)
+                                ))
+                                .count(),
                             d3d12_executable_action,
                         })
                     })();
@@ -314,29 +377,26 @@ fn expected_active_executable_identity(
 }
 
 /// Computes the canonical set of filesystem paths touched by an apply.
-fn apply_mutation_paths_set(
-    current: &[renderpilot_domain::ComponentFile],
-    baseline: &[renderpilot_domain::ComponentFile],
-    planned: &[types::PlannedFile],
-    removed: &[renderpilot_domain::ComponentFile],
-) -> Vec<std::path::PathBuf> {
-    let mut live: Vec<std::path::PathBuf> = current
+fn apply_mutation_paths_set(prepared: &types::PreparedApplySwap) -> Vec<std::path::PathBuf> {
+    let mut live: Vec<std::path::PathBuf> = prepared
+        .component
+        .files()
         .iter()
-        .chain(baseline)
-        .chain(removed)
+        .chain(&prepared.baseline)
         .map(|file| std::path::PathBuf::from(file.path().as_str()))
         .collect();
-    live.extend(planned.iter().map(types::PlannedFile::target));
+    live.extend(
+        prepared
+            .transition
+            .paths()
+            .iter()
+            .map(|path| std::path::PathBuf::from(path.target().as_str())),
+    );
     crate::fs::expand_with_sidecars(live)
 }
 
 pub(super) fn apply_mutation_paths(prepared: &types::PreparedApplySwap) -> Vec<std::path::PathBuf> {
-    let mut paths = apply_mutation_paths_set(
-        prepared.component.files(),
-        &prepared.baseline,
-        &prepared.planned,
-        &prepared.removed,
-    );
+    let mut paths = apply_mutation_paths_set(prepared);
     if let Some(d3d12) = prepared
         .d3d12
         .as_ref()

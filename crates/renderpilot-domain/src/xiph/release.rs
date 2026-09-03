@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{ComponentFile, PackageVersion};
 
-use super::naming::{XiphMember, classify_file_name};
+use super::naming::{XiphMember, parse_runtime_file_name};
 
 /// One independently versioned Xiph upstream release coordinate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -70,7 +70,11 @@ impl XiphReleaseAxes {
         }
         let members = files
             .iter()
-            .map(|file| classify_file_name(file.path().file_name()?).map(|(member, _)| member))
+            .map(|file| {
+                parse_runtime_file_name(file.path().file_name()?)
+                    .ok()?
+                    .map(|runtime| runtime.member())
+            })
             .collect::<Option<Vec<_>>>()?;
         Some(Self::from_members(members))
     }
