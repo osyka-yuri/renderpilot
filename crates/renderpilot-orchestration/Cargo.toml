@@ -22,7 +22,6 @@ renderpilot-nvapi = { path = "../renderpilot-nvapi" }
 renderpilot-platform-windows = { path = "../renderpilot-platform-windows" }
 renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite" }
 hex = "0.4"
-filetime = "0.2"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 http = "1"
 httpdate = "1"

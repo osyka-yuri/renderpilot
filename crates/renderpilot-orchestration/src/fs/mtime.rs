@@ -1,5 +1,6 @@
 //! File mtime helpers and HTTP-date conversion for upstream Last-Modified.
 
+use std::fs::OpenOptions;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
@@ -8,14 +9,31 @@ use crate::ServiceError;
 /// Best-effort mtime stamping helper for installed files whose upstream date is
 /// meaningful to users. Callers decide whether a failure is fatal.
 pub(crate) fn set_file_mtime(path: &Path, modified: SystemTime) -> Result<(), ServiceError> {
-    filetime::set_file_mtime(path, filetime::FileTime::from_system_time(modified)).map_err(
-        |error| {
+    open_file_for_mtime(path)
+        .and_then(|file| file.set_modified(modified))
+        .map_err(|error| {
             crate::failed(format!(
                 "failed to set modified time for `{}`: {error}",
                 path.display()
             ))
-        },
-    )
+        })
+}
+
+/// Opens a file with the access required by [`std::fs::File::set_modified`].
+///
+/// Windows requires a write-capable handle to change timestamps. On non-Windows
+/// targets, preserve `filetime`'s read-first fallback for files whose metadata
+/// can be updated without opening them for writing.
+fn open_file_for_mtime(path: &Path) -> std::io::Result<std::fs::File> {
+    #[cfg(windows)]
+    {
+        OpenOptions::new().write(true).open(path)
+    }
+
+    #[cfg(not(windows))]
+    {
+        std::fs::File::open(path).or_else(|_| OpenOptions::new().write(true).open(path))
+    }
 }
 
 /// Parses an HTTP-date header into a [`SystemTime`].
