@@ -479,7 +479,10 @@ fn whole_row_adoption_records_dlss_fix_source_and_created_path_when_companion_pr
 
     let dlss_fix = dlss_fix_source(&record).expect("advisory dlss-fix source recorded");
     assert!(dlss_fix.is_advisory());
-    assert_eq!(dlss_fix.url(), "https://renodx.com/renodx-dlssfix.addon64");
+    assert_eq!(
+        dlss_fix.url(),
+        "https://github.com/clshortfuse/renodx/releases/download/snapshot/renodx-dlssfix.addon64"
+    );
     // Digest must come from the DLSS-Fix file, not the main addon.
     assert_ne!(
         dlss_fix.digest(),

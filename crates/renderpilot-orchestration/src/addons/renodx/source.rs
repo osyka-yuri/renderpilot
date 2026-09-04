@@ -10,7 +10,7 @@ use renderpilot_domain::Architecture;
 use super::types::RenoDxGeneric;
 
 /// Upstream host serving the per-game RenoDX add-ons.
-const RENODX_BASE: &str = "https://renodx.com";
+const RENODX_BASE: &str = "https://github.com/clshortfuse/renodx/releases/download/snapshot";
 
 /// Reserved slug for the DLSS-Fix companion. Both its canonical source URL and
 /// on-disk file name derive from this single value, so it cannot become a main
@@ -92,11 +92,11 @@ mod tests {
     fn addon_url_derives_from_slug_and_arch() {
         assert_eq!(
             addon_url("cp2077", Architecture::X64),
-            "https://renodx.com/renodx-cp2077.addon64"
+            "https://github.com/clshortfuse/renodx/releases/download/snapshot/renodx-cp2077.addon64"
         );
         assert_eq!(
             addon_url("oldgame", Architecture::X86),
-            "https://renodx.com/renodx-oldgame.addon32"
+            "https://github.com/clshortfuse/renodx/releases/download/snapshot/renodx-oldgame.addon32"
         );
     }
 
@@ -166,7 +166,9 @@ mod tests {
         };
         assert_eq!(
             generic_addon_url(&slugged, Architecture::X64).as_deref(),
-            Some("https://renodx.com/renodx-_univ.addon64")
+            Some(
+                "https://github.com/clshortfuse/renodx/releases/download/snapshot/renodx-_univ.addon64"
+            )
         );
     }
 }
