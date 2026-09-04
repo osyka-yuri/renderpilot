@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.0] - 2026-09-04
+
+### Added
+
+- **Vendor-suffixed audio runtime layouts (Xiph)**: Added detection and swapping support for games using engine- or compiler-suffixed Ogg/Vorbis audio libraries (such as Chrome Engine games). RenderPilot automatically resolves required runtime DLL aliases from game executables and creates matching replacements during swaps.
+
+### Changed
+
+- **Filesystem dependency reduction**: Replaced external file timestamp libraries with native standard-library handling, reducing external dependency overhead.
+
+### Fixed
+
+- **RenoDX add-on downloads**: Updated the download source to the official `renodx.com` domain, resolving connection timeouts and failed installations following the upstream domain migration.
+
 ## [1.10.3] - 2026-09-02
 
 ### Changed
