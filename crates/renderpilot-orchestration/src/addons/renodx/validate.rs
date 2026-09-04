@@ -22,7 +22,7 @@ use crate::addons::manifest_validate::{
 const SUPPORTED_SCHEMA_VERSION: u32 = 1;
 
 /// Hosts a RenoDX add-on or ReShade build may be downloaded from.
-const DOWNLOAD_HOST_ALLOWLIST: &[&str] = &["clshortfuse.github.io", "github.com", "nightly.link"];
+const DOWNLOAD_HOST_ALLOWLIST: &[&str] = &["renodx.com", "github.com", "nightly.link"];
 
 /// Validates an entire manifest.
 pub(super) fn validate_manifest(manifest: &RenoDxManifest) -> Result<(), ServiceError> {
