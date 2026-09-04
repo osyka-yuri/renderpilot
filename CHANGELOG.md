@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.1] - 2026-09-04
+
+### Fixed
+
+- **RenoDX download stability**: Switched add-on downloads from GitHub Pages hosting (`renodx.com`) to GitHub Releases storage to improve connection reliability and avoid timeouts observed on Pages IP ranges.
+
 ## [1.11.0] - 2026-09-04
 
 ### Added
