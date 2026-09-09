@@ -11,6 +11,7 @@ import { lumaOverrides as lumaDe } from './overrides/luma/de';
 import { lumaOverrides as lumaEs } from './overrides/luma/es';
 import { lumaOverrides as lumaFr } from './overrides/luma/fr';
 import { lumaOverrides as lumaJa } from './overrides/luma/ja';
+import { lumaOverrides as lumaPtBr } from './overrides/luma/pt-BR';
 import { lumaOverrides as lumaRu } from './overrides/luma/ru';
 import { lumaOverrides as lumaZhHans } from './overrides/luma/zh-Hans';
 import { lumaOverrides as lumaZhHant } from './overrides/luma/zh-Hant';
@@ -19,10 +20,12 @@ import { nvapiOverrides as nvapiDe } from './overrides/nvapi/de';
 import { nvapiOverrides as nvapiEs } from './overrides/nvapi/es';
 import { nvapiOverrides as nvapiFr } from './overrides/nvapi/fr';
 import { nvapiOverrides as nvapiJa } from './overrides/nvapi/ja';
+import { nvapiOverrides as nvapiPtBr } from './overrides/nvapi/pt-BR';
 import { nvapiOverrides as nvapiRu } from './overrides/nvapi/ru';
 import { nvapiOverrides as nvapiZhHans } from './overrides/nvapi/zh-Hans';
 import { nvapiOverrides as nvapiZhHant } from './overrides/nvapi/zh-Hant';
 import { NVAPI_SOURCE_CATALOG } from './overrides/nvapi/contract.generated';
+import { ptBr } from './pt-BR';
 import { ru } from './ru';
 import { zhHans } from './zh-Hans';
 import { zhHant } from './zh-Hant';
@@ -60,6 +63,7 @@ const staticCatalogs: Readonly<Record<LazyLocale, MessageDictionary>> = {
   ru,
   de,
   es,
+  'pt-BR': ptBr,
   fr,
   ja,
   'zh-Hans': zhHans,
@@ -69,6 +73,7 @@ const lumaCatalogs: Readonly<Record<LazyLocale, Readonly<Record<string, string>>
   ru: lumaRu,
   de: lumaDe,
   es: lumaEs,
+  'pt-BR': lumaPtBr,
   fr: lumaFr,
   ja: lumaJa,
   'zh-Hans': lumaZhHans,
@@ -78,6 +83,7 @@ const nvapiCatalogs: Readonly<Record<LazyLocale, Readonly<Record<string, string>
   ru: nvapiRu,
   de: nvapiDe,
   es: nvapiEs,
+  'pt-BR': nvapiPtBr,
   fr: nvapiFr,
   ja: nvapiJa,
   'zh-Hans': nvapiZhHans,

@@ -55,6 +55,7 @@ export const en = defineSourceCatalog({
   'settings.language.fr': 'Français',
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',
+  'settings.language.ptBr': 'Português (Brasil)',
 
   // ── Settings: tabs ──
   'settings.tabs.general': 'General',

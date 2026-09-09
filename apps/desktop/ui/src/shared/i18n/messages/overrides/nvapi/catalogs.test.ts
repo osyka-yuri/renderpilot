@@ -5,6 +5,7 @@ import { nvapiOverrides as de } from './de';
 import { nvapiOverrides as es } from './es';
 import { nvapiOverrides as fr } from './fr';
 import { nvapiOverrides as ja } from './ja';
+import { nvapiOverrides as ptBr } from './pt-BR';
 import { nvapiOverrides as ru } from './ru';
 import { nvapiOverrides as zhHans } from './zh-Hans';
 import { nvapiOverrides as zhHant } from './zh-Hant';
@@ -18,6 +19,7 @@ const catalogs: Readonly<Record<LazyLocale, Readonly<Record<string, string>>>> =
   ru,
   de,
   es,
+  'pt-BR': ptBr,
   fr,
   ja,
   'zh-Hans': zhHans,
@@ -25,7 +27,7 @@ const catalogs: Readonly<Record<LazyLocale, Readonly<Record<string, string>>>> =
 };
 
 describe('NVAPI localized catalogs', () => {
-  it('contains the exact 17-setting / 170-message bundled snapshot in all seven locales', () => {
+  it('contains the exact 17-setting / 170-message bundled snapshot in all eight locales', () => {
     const expectedKeys = Object.keys(NVAPI_SOURCE_CATALOG).toSorted();
     expect(NVAPI_SETTING_COUNT).toBe(17);
     expect(expectedKeys).toHaveLength(170);

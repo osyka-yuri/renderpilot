@@ -12,6 +12,7 @@ import { lumaOverrides as de } from './overrides/luma/de';
 import { lumaOverrides as es } from './overrides/luma/es';
 import { lumaOverrides as fr } from './overrides/luma/fr';
 import { lumaOverrides as ja } from './overrides/luma/ja';
+import { lumaOverrides as ptBr } from './overrides/luma/pt-BR';
 import { lumaOverrides as ru } from './overrides/luma/ru';
 import { lumaOverrides as zhHans } from './overrides/luma/zh-Hans';
 import { lumaOverrides as zhHant } from './overrides/luma/zh-Hant';
@@ -20,6 +21,7 @@ const lumaCatalogs = {
   ru,
   de,
   es,
+  'pt-BR': ptBr,
   fr,
   ja,
   'zh-Hans': zhHans,

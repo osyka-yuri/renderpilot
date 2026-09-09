@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Locator, type Page } from '@playwright/test';
 
-export const LOCALES = ['en', 'ru', 'es', 'fr', 'de', 'ja', 'zh-Hans', 'zh-Hant'] as const;
+export const LOCALES = ['en', 'ru', 'es', 'pt-BR', 'fr', 'de', 'ja', 'zh-Hans', 'zh-Hant'] as const;
 
 const WCAG_22_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'];
 

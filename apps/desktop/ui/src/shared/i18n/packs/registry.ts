@@ -5,6 +5,7 @@ import type { LocaleLoader, LocalePack } from './types';
 const lazyLocaleLoaders = {
   ru: () => import('./ru').then((module) => module.default),
   es: () => import('./es').then((module) => module.default),
+  'pt-BR': () => import('./pt-BR').then((module) => module.default),
   fr: () => import('./fr').then((module) => module.default),
   de: () => import('./de').then((module) => module.default),
   ja: () => import('./ja').then((module) => module.default),

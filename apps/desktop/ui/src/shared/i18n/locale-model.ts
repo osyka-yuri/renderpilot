@@ -1,9 +1,10 @@
-export const LOCALES = ['en', 'ru', 'es', 'fr', 'de', 'ja', 'zh-Hans', 'zh-Hant'] as const;
+export const LOCALES = ['en', 'ru', 'es', 'pt-BR', 'fr', 'de', 'ja', 'zh-Hans', 'zh-Hant'] as const;
 export type Locale = (typeof LOCALES)[number];
 
 export const LAZY_LOCALES = [
   'ru',
   'es',
+  'pt-BR',
   'fr',
   'de',
   'ja',

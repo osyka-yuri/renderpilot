@@ -44,6 +44,7 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'settings.language.fr': 'Français',
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',
+  'settings.language.ptBr': 'Português (Brasil)',
 
   'settings.tabs.general': '一般',
   'settings.tabs.renodx': 'RenoDX',

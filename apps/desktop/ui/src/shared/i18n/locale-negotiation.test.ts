@@ -7,6 +7,8 @@ describe('negotiateLocale', () => {
     [['EN_us'], 'en'],
     [['ru_RU'], 'ru'],
     [['ES-mx'], 'es'],
+    [['pt-BR'], 'pt-BR'],
+    [['pt-PT'], 'pt-BR'],
     [['fr-CA-u-nu-latn'], 'fr'],
     [['de-Latn-DE'], 'de'],
     [['ja-JP'], 'ja'],
@@ -15,9 +17,9 @@ describe('negotiateLocale', () => {
   });
 
   it('preserves browser preference order while skipping invalid and unsupported tags', () => {
-    expect(negotiateLocale(['not_a_tag?', 'pt-BR', 'fr-FR', 'ru-RU'])).toBe('fr');
-    expect(negotiateLocale(['pt-BR', 'ru-RU'])).toBe('ru');
-    expect(negotiateLocale(['pt-BR', 'it-IT'])).toBe('en');
+    expect(negotiateLocale(['not_a_tag?', 'it-IT', 'fr-FR', 'ru-RU'])).toBe('fr');
+    expect(negotiateLocale(['pt-BR', 'ru-RU'])).toBe('pt-BR');
+    expect(negotiateLocale(['it-IT', 'pt-BR'])).toBe('pt-BR');
     expect(negotiateLocale([])).toBe('en');
   });
 

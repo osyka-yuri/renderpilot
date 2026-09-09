@@ -6,6 +6,7 @@ const NON_CHINESE_LOCALES: Readonly<Partial<Record<string, Locale>>> = {
   en: 'en',
   ru: 'ru',
   es: 'es',
+  pt: 'pt-BR',
   fr: 'fr',
   de: 'de',
   ja: 'ja',

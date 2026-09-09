@@ -377,7 +377,7 @@ export function validateExternalCatalogBoundaries(english, luma, nvapi) {
   }
 }
 
-const NON_ENGLISH_LOCALES = ['ru', 'de', 'es', 'fr', 'ja', 'zh-Hans', 'zh-Hant'];
+const NON_ENGLISH_LOCALES = ['ru', 'de', 'es', 'pt-BR', 'fr', 'ja', 'zh-Hans', 'zh-Hant'];
 const NVIDIA_FAMILY_TERM_KEYS = [
   'superResolution',
   'frameGeneration',

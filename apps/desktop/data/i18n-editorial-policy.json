@@ -19,6 +19,12 @@
       "multiFrameGeneration": "Generación de fotogramas múltiples",
       "rayReconstruction": "Reconstrucción de rayos"
     },
+    "pt-BR": {
+      "superResolution": "Super Resolution",
+      "frameGeneration": "Frame Generation",
+      "multiFrameGeneration": "Multi Frame Generation",
+      "rayReconstruction": "Ray Reconstruction"
+    },
     "fr": {
       "superResolution": "Super Résolution",
       "frameGeneration": "Génération d’images",
@@ -48,6 +54,7 @@
     "ru": "https://www.nvidia.com/ru-ru/geforce/technologies/dlss/",
     "de": "https://www.nvidia.com/de-de/geforce/technologies/dlss/",
     "es": "https://www.nvidia.com/es-es/geforce/technologies/dlss/",
+    "pt-BR": "https://www.nvidia.com/pt-br/geforce/technologies/dlss/",
     "fr": "https://www.nvidia.com/fr-fr/geforce/technologies/dlss/",
     "ja": "https://www.nvidia.com/ja-jp/geforce/technologies/dlss/",
     "zh-Hans": "https://www.nvidia.cn/geforce/technologies/dlss/",
@@ -116,6 +123,7 @@
     "settings.language.en",
     "settings.language.es",
     "settings.language.fr",
+    "settings.language.ptBr",
     "settings.tabs.nvidia",
     "settings.tabs.renodx"
   ],
@@ -189,6 +197,19 @@
       "Custom": "Personalizado",
       "Preset G (unused)": "Preajuste G (no utilizado)"
     },
+    "pt-BR": {
+      "Render Preset": "Predefinição de renderização",
+      "Forced Model Preset Profile": "Perfil de predefinição de modelo forçado",
+      "Forced Quality Level": "Nível de qualidade forçado",
+      "Forced Scaling Ratio": "Proporção de escalonamento forçada",
+      "Enable DLL Override": "Ativar substituição de DLL",
+      "Off": "Desativado",
+      "N/A": "Não disponível",
+      "Off (game default)": "Desativado (padrão do jogo)",
+      "Recommended": "Recomendado",
+      "Custom": "Personalizado",
+      "Preset G (unused)": "Predefinição G (não utilizada)"
+    },
     "fr": {
       "Render Preset": "Préréglage de rendu",
       "Forced Model Preset Profile": "Profil de préréglage de modèle forcé",
@@ -260,6 +281,13 @@
     "es": {
       "quotationMarks": { "open": "«", "close": "»", "innerSpacing": false },
       "forbiddenQuoteMarks": ["\"", "„", "“", "”", "「", "」"],
+      "forbiddenPunctuation": ["..."],
+      "sentenceTerminator": ".",
+      "requiredScript": null
+    },
+    "pt-BR": {
+      "quotationMarks": { "open": "“", "close": "”", "innerSpacing": false },
+      "forbiddenQuoteMarks": ["\"", "«", "»", "„", "「", "」"],
       "forbiddenPunctuation": ["..."],
       "sentenceTerminator": ".",
       "requiredScript": null
