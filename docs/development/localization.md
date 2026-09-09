@@ -1,6 +1,6 @@
 # Localization
 
-The desktop has eight effective locales: English plus Russian, German, Spanish, French, Japanese, Simplified Chinese, and Traditional Chinese. English is the structural source. The seven non-English locale packs are lazy modules loaded on demand together with their Luma/NVAPI translations and locale-neutral source contracts, so those external catalogs remain outside the initial bundle graph.
+The desktop has nine effective locales: English plus Russian, German, Spanish, Brazilian Portuguese, French, Japanese, Simplified Chinese, and Traditional Chinese. English is the structural source. The eight non-English locale packs are lazy modules loaded on demand together with their Luma/NVAPI translations and locale-neutral source contracts, so those external catalogs remain outside the initial bundle graph.
 
 ## Generated contracts
 
@@ -37,7 +37,7 @@ pnpm run i18n:review --locale ru --format tsv
 pnpm run i18n:review --locale ja --format json
 ```
 
-The current external review set contains 269 rows: 99 Luma messages and 170 NVAPI messages. Repeat review for all seven non-English locales after relevant source changes. A clean generated report and passing automated checks establish structural consistency; they do not constitute native-language approval.
+The current external review set contains 274 rows: 104 Luma messages and 170 NVAPI messages. Repeat review for all eight non-English locales after relevant source changes. A clean generated report and passing automated checks establish structural consistency; they do not constitute native-language approval.
 
 Use stable localization IDs in add-on catalogs and retain a reviewed English fallback for every published message. Keep interpolation typed and structural. Do not concatenate translated fragments or let untrusted manifest prose become an implicit localization key.
 

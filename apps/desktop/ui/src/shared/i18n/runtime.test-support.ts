@@ -54,6 +54,7 @@ export function createTestRuntime(options: {
     en: () => Promise.resolve(enPack),
     ru: () => Promise.resolve(pack('ru', { nav: 'Games' })),
     es: () => Promise.resolve(pack('es', { nav: 'Games' })),
+    'pt-BR': () => Promise.resolve(pack('pt-BR', { nav: 'Games' })),
     fr: () => Promise.resolve(pack('fr', { nav: 'Games' })),
     de: () => Promise.resolve(pack('de', { nav: 'Games' })),
     ja: () => Promise.resolve(pack('ja', { nav: 'Games' })),

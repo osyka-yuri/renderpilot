@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { decodeStoredLanguageMode, encodeStoredLanguageMode } from './language-mode-codec';
 
 describe('language mode codec v2', () => {
-  it.each(['system', 'en', 'ru', 'es', 'fr', 'de', 'ja', 'zh-Hans', 'zh-Hant'] as const)(
+  it.each(['system', 'en', 'ru', 'es', 'pt-BR', 'fr', 'de', 'ja', 'zh-Hans', 'zh-Hant'] as const)(
     'round-trips %s',
     (mode) => {
       const encoded = encodeStoredLanguageMode(mode);

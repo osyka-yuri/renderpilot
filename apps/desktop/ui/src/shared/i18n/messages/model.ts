@@ -36,6 +36,7 @@ export const PLURAL_CATEGORIES = {
   en: ['one', 'other'],
   ru: ['one', 'few', 'many', 'other'],
   es: ['one', 'many', 'other'],
+  'pt-BR': ['one', 'many', 'other'],
   fr: ['one', 'many', 'other'],
   de: ['one', 'other'],
   ja: ['other'],

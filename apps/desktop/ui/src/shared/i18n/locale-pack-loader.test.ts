@@ -12,6 +12,7 @@ function createLoaders(
     en: () => Promise.resolve(pack('en', { nav: 'Games' })),
     ru: () => Promise.resolve(pack('ru', { nav: 'Игры' })),
     es: () => Promise.resolve(pack('es', { nav: 'Juegos' })),
+    'pt-BR': () => Promise.resolve(pack('pt-BR', { nav: 'Jogos' })),
     fr: () => Promise.resolve(pack('fr', { nav: 'Jeux' })),
     de: () => Promise.resolve(pack('de', { nav: 'Spiele' })),
     ja: () => Promise.resolve(pack('ja', { nav: 'ゲーム' })),

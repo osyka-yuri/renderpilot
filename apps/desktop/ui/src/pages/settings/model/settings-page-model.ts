@@ -21,6 +21,7 @@ export const languageOptions = [
   { value: 'en', labelKey: 'settings.language.en' },
   { value: 'ru', labelKey: 'settings.language.ru' },
   { value: 'es', labelKey: 'settings.language.es' },
+  { value: 'pt-BR', labelKey: 'settings.language.ptBr' },
   { value: 'fr', labelKey: 'settings.language.fr' },
   { value: 'de', labelKey: 'settings.language.de' },
   { value: 'ja', labelKey: 'settings.language.ja' },

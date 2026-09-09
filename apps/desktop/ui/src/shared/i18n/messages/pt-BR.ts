@@ -1,0 +1,1032 @@
+import type { EnglishCatalog } from './en';
+import { defineLocalizedCatalog } from './contract';
+import { plural } from './model';
+
+export const ptBr = defineLocalizedCatalog<'pt-BR', EnglishCatalog>()({
+  'nav.games': 'Jogos',
+  'nav.libraries': 'Bibliotecas',
+  'nav.settings': 'Configurações',
+  'nav.operations': 'Histórico',
+  'nav.gameFallback': 'Jogo',
+  'nav.donate': 'Doar',
+  'shell.refresh': 'Atualizar',
+  'shell.updateAvailable': 'Atualização disponível',
+  'nav.skipToContent': 'Pular para o conteúdo',
+  'nav.primaryLabel': 'Navegação principal',
+  'nav.breadcrumbLabel': 'Trilha de navegação',
+  'shell.sidebar.toggle': 'Alternar barra lateral',
+  'shell.sidebar.title': 'Navegação',
+  'shell.sidebar.description': 'Navegação principal do aplicativo.',
+  'shell.notifications.regionLabel': 'Notificações',
+  'shell.notifications.close': 'Fechar notificação',
+  'shell.pageTitle': '{page} — RenderPilot',
+
+  'settings.appearance.title': 'Aparência',
+  'settings.appearance.description': 'Personalize a aparência e o idioma do aplicativo.',
+  'settings.appearance.theme.title': 'Tema',
+  'settings.appearance.theme.description': 'Escolha um tema de cores para o aplicativo.',
+  'settings.appearance.theme.triggerLabel': 'Tema',
+  'settings.appearance.language.title': 'Idioma',
+  'settings.appearance.language.description': 'Selecione o idioma da interface.',
+  'settings.appearance.language.triggerLabel': 'Idioma',
+  'settings.appearance.language.placeholder': 'Selecionar idioma',
+
+  'settings.theme.system': 'Sistema',
+  'settings.theme.dark': 'Escuro',
+  'settings.theme.light': 'Claro',
+
+  'settings.language.system': 'Padrão do sistema',
+  'settings.language.en': 'English',
+  'settings.language.ru': 'Русский',
+  'settings.language.es': 'Español',
+  'settings.language.zhHans': '简体中文',
+  'settings.language.zhHant': '繁體中文',
+  'settings.language.fr': 'Français',
+  'settings.language.de': 'Deutsch',
+  'settings.language.ja': '日本語',
+  'settings.language.ptBr': 'Português (Brasil)',
+
+  'settings.tabs.general': 'Geral',
+  'settings.tabs.renodx': 'RenoDX',
+  'settings.tabs.catalog': 'Catálogo',
+  'settings.tabs.nvidia': 'NVIDIA',
+
+  // ── Settings: NVIDIA ──
+  'settings.nvidia.indicator.title': 'Indicador do DLSS',
+  'settings.nvidia.indicator.description':
+    'Exibe uma sobreposição com a versão e a configuração ativas do DLSS durante o jogo.',
+  'settings.nvidia.indicator.systemWide': 'Em todo o sistema',
+  'settings.nvidia.indicator.overlayTitle': 'Sobreposição na tela',
+  'settings.nvidia.indicator.overlayDescription': 'Aplica-se a todos os jogos neste PC.',
+  'settings.nvidia.indicator.toggleLabel': 'Alternar indicador do DLSS',
+  'settings.nvidia.global.title': 'Configurações globais do DLSS',
+  'settings.nvidia.global.description':
+    'Valores padrão aplicados a todos os jogos sem substituição específica, por meio do perfil-base da NVIDIA.',
+  'settings.nvidia.global.systemWide': 'Em todo o sistema',
+  'settings.nvidia.global.familySr': 'DLSS Super Resolution',
+  'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
+  'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
+  'settings.nvidia.unsupported.title': 'Nenhuma GPU NVIDIA detectada',
+  'settings.nvidia.unsupported.description':
+    'Estas configurações exigem uma placa de vídeo NVIDIA compatível.',
+
+  'game.card.action.details': 'Detalhes',
+  'game.card.action.detailsLabel': 'Abrir detalhes de {title}',
+  'game.card.detectedLibraries': 'Componentes detectados',
+  'game.card.availableAddons': 'Complementos disponíveis',
+  'game.card.badge.upToDate': 'Atualizado',
+  'game.card.badge.updatesAvailable': 'Atualizações disponíveis',
+  'game.card.badge.updatesAvailableCount': plural('count', {
+    one: '1 atualização disponível',
+    many: '{count} atualizações disponíveis',
+    other: '{count} atualizações disponíveis',
+  }),
+  'game.card.status.favorite': 'Favorito',
+  'game.card.status.hidden': 'Oculto',
+  'game.card.menu.label': 'Opções para {title}',
+  'game.card.menu.favorite.add': 'Adicionar aos favoritos',
+  'game.card.menu.favorite.remove': 'Remover dos favoritos',
+  'game.card.menu.favorite.toggleHint': 'Alternar o status de favorito deste jogo.',
+  'game.card.menu.hidden.add': 'Ocultar jogo',
+  'game.card.menu.hidden.remove': 'Mostrar jogo',
+  'game.card.menu.hidden.toggleHint': 'Alternar o status de oculto deste jogo.',
+  'game.card.menu.removeFromCatalog': 'Remover do catálogo',
+  'game.card.menu.removeFromCatalogHint': 'Esquecer este jogo adicionado manualmente.',
+  'game.card.removeConfirm.title': 'Remover {title} do catálogo?',
+  'game.card.removeConfirm.description':
+    'O RenderPilot reverterá com segurança as alterações gerenciadas e depois removerá o cartão e seu histórico. Os arquivos do jogo não serão modificados.',
+  'game.card.removeConfirm.action': 'Remover do catálogo',
+
+  'game.cover.alt': 'Capa',
+  'game.cover.altWithTitle': 'Capa: {title}',
+  'game.cover.menu.fetch': 'Baixar capa',
+  'game.cover.menu.fetching': 'Baixando…',
+  'game.cover.menu.fetchHint': 'Buscar uma capa online.',
+  'game.cover.menu.pick': 'Escolher arquivo de imagem…',
+  'game.cover.menu.pickHint': 'Selecione uma imagem local para usar como capa.',
+  'game.cover.menu.clear': 'Remover capa',
+  'game.cover.menu.clearHint': 'Restaurar a capa padrão.',
+
+  'game.dashboard.summary': 'Resumo',
+  'game.dashboard.games': plural('count', {
+    one: '{count} jogo',
+    many: '{count} jogos',
+    other: '{count} jogos',
+  }),
+  'game.dashboard.updates': plural('count', {
+    one: '{count} atualização',
+    many: '{count} atualizações',
+    other: '{count} atualizações',
+  }),
+
+  'error.boundary.title': 'Algo deu errado',
+  'error.boundary.description':
+    'Esta tela encontrou um erro inesperado. Tente novamente ou acesse outra seção.',
+  'error.boundary.reset': 'Tentar novamente',
+  'error.desktopTransportFailed':
+    'O serviço de desktop retornou uma resposta inválida. Tente realizar a ação novamente.',
+  'error.unexpectedClient': 'Ocorreu um erro inesperado. Tente realizar a ação novamente.',
+  'error.localeLoadFailed':
+    'Não foi possível carregar o idioma selecionado. O idioma anterior continua ativo.',
+  'error.recoveryBundlePath': 'Pacote de recuperação: {path}',
+  'pageLoad.loading': 'Carregando página…',
+  'pageLoad.error.title': 'Não foi possível abrir esta página',
+  'pageLoad.error.description':
+    'Não foi possível carregar a página. Tente novamente ou volte para Jogos.',
+  'pageLoad.error.retry': 'Tentar novamente',
+  'pageLoad.error.backToGames': 'Voltar para Jogos',
+
+  'games.addGame': 'Adicionar jogo',
+  'games.addingGame': 'Adicionando jogo…',
+  'games.chooseInstallFolder': 'Escolher pasta de instalação do jogo',
+  'addGame.title': 'Adicionar jogo',
+  'addGame.cannotAddTitle': 'Não foi possível adicionar o jogo',
+  'addGame.installRoot': 'Raiz da instalação',
+  'addGame.reviewTitle': 'Revisar instalação do jogo',
+  'addGame.reviewDescription': 'Confirme a raiz da instalação antes de adicionar um jogo.',
+  'addGame.selectedFolder': 'Pasta selecionada',
+  'addGame.recommendedFolder': 'Raiz da instalação recomendada',
+  'addGame.existingRoot': 'Pasta atual do jogo',
+  'addGame.chooseExecutable': 'Executável do jogo',
+  'addGame.chooseExecutablePlaceholder': 'Escolher um executável',
+  'addGame.chooseAnother': 'Escolher outra',
+  'addGame.add': 'Adicionar jogo',
+  'addGame.addSelected': 'Adicionar pasta selecionada',
+  'addGame.correctRoot': 'Corrigir caminho',
+  'addGame.addRecommended': 'Adicionar raiz recomendada',
+  'addGame.replaceRootTitle': 'Corrigir caminho do jogo',
+  'addGame.replaceRootDescription':
+    'O RenderPilot usará a pasta selecionada no lugar da atual. Os arquivos do jogo não serão modificados.',
+  'addGame.replaceExistingRoot': 'Corrigir caminho',
+  'addGame.rootCorrection.rollbackTitle':
+    'As alterações ativas dos componentes precisam ser revertidas primeiro',
+  'addGame.rootCorrection.rollbackDescription': plural('count', {
+    one: 'O RenderPilot precisa reverter a alteração ativa de 1 componente antes de substituir a raiz do cartão.',
+    many: 'O RenderPilot precisa reverter as alterações ativas de {count} componentes antes de substituir a raiz do cartão.',
+    other:
+      'O RenderPilot precisa reverter as alterações ativas de {count} componentes antes de substituir a raiz do cartão.',
+  }),
+  'addGame.rootCorrection.rollbackAndReplace': 'Reverter alterações e substituir raiz',
+  'addGame.rootCorrection.rollbackFailed':
+    'Não foi possível reverter completamente as alterações dos componentes. A raiz atual do jogo não foi modificada.',
+  'addGame.rootCorrection.blocker.pendingRecovery':
+    'Uma operação de arquivos interrompida ainda precisa ser recuperada.',
+  'addGame.rootCorrection.blocker.installedAddon':
+    'Um complemento instalado pertence a arquivos que estão fora da pasta selecionada.',
+  'addGame.rootCorrection.blocker.nvapi':
+    'A configuração ativa do perfil NVIDIA pertence a executáveis que estão fora da pasta selecionada.',
+  'addGame.rootCorrection.blocker.orphanedComponentBaseline':
+    'Um estado de reversão salvo não possui mais um componente correspondente.',
+  'addGame.rescan': 'Verificar o jogo novamente',
+  'addGame.catalogBusy':
+    'Há outra operação do catálogo em andamento. Aguarde a conclusão e tente novamente.',
+  'addGame.warning.legacyCardsConsolidated': plural('count', {
+    one: 'Um cartão antigo confirmado como incorreto foi consolidado.',
+    many: '{count} cartões antigos confirmados como incorretos foram consolidados.',
+    other: '{count} cartões antigos confirmados como incorretos foram consolidados.',
+  }),
+  'addGame.warning.legacyCardsRetained': plural('count', {
+    one: 'Um cartão antigo foi mantido porque não havia indícios conclusivos de uma instalação independente.',
+    many: '{count} cartões antigos foram mantidos porque não havia indícios conclusivos de instalações independentes.',
+    other:
+      '{count} cartões antigos foram mantidos porque não havia indícios conclusivos de instalações independentes.',
+  }),
+  'addGame.warning.recoveryBundleCreated':
+    'O estado antigo conflitante foi salvo no pacote de recuperação {path}.',
+  'addGame.warning.rootCorrectionHistoryArchived':
+    'O histórico do catálogo fora da raiz corrigida foi salvo no pacote de recuperação {path}.',
+  'addGame.warning.recoveryBundleFallback': 'Pacote de recuperação: {path}',
+  'addGame.warning.unsupportedPlatform':
+    'A verificação de instalações de jogos é compatível apenas com o Windows.',
+  'addGame.warning.probeIncomplete':
+    'Não foi possível verificar algumas pastas. A recomendação é menos confiável.',
+  'addGame.warning.parentProbeIncomplete':
+    'Não foi possível verificar completamente a pasta superior recomendada. Confira-a antes de adicioná-la.',
+  'addGame.unavailable.multipleInstalls':
+    'A pasta selecionada parece ser uma biblioteca compartilhada com vários jogos. Selecione a pasta de um jogo específico.',
+  'addGame.unavailable.containsProvenInstall':
+    'A pasta selecionada contém uma instalação de jogo já reconhecida. Selecione a pasta exata desse jogo em vez da pasta superior compartilhada.',
+  'addGame.unavailable.containsMultipleCatalogInstalls':
+    'A pasta selecionada contém vários jogos já reconhecidos. Selecione a pasta de um jogo específico.',
+  'addGame.unavailable.insideExistingInstall':
+    'A pasta selecionada está dentro de um jogo já adicionado. Use a raiz da instalação desse jogo.',
+  'addGame.unavailable.noReadableExecutable':
+    'Nenhum executável de jogo legível foi encontrado na pasta selecionada. Selecione a pasta de instalação que contém o executável do jogo.',
+  'addGame.unavailable.rootCorrectionBlocked':
+    'Não é possível alterar com segurança a raiz da instalação existente enquanto houver um estado gerenciado. Resolva primeiro os bloqueios indicados.',
+  'addGame.warning.insideExistingInstall':
+    'Esta pasta pertence a um jogo existente. Use a raiz da instalação dele.',
+  'addGame.warning.narrowsExistingInstall':
+    'A raiz manual existente parece incluir várias pastas de jogos. Ao confirmar, o mesmo cartão será mantido e sua raiz será corrigida para a pasta selecionada.',
+  'addGame.warning.multipleProvenInstalls':
+    'Esta pasta contém várias instalações de jogos confirmadas.',
+  'addGame.warning.containsProvenInstall':
+    'Esta pasta contém uma instalação de jogo confirmada. Use a raiz exata dela.',
+  'addGame.warning.multipleInstallsSuspected':
+    'Os executáveis de subpastas diferentes podem pertencer a jogos distintos. Se você confirmar, a pasta ainda será tratada como um único jogo.',
+  'addGame.warning.explicitExecutableRequired':
+    'Todos os executáveis válidos parecem ser inicializadores ou utilitários. Selecione um explicitamente.',
+  'addGame.warning.noReadableExecutable':
+    'Esta pasta não pode ser adicionada separadamente porque não contém nenhum executável de jogo legível.',
+  'addGame.warning.filesystemProbeError':
+    'Não foi possível verificar parte da instalação. Confira as permissões de acesso aos arquivos.',
+  'addGame.warning.unknown':
+    'A verificação do jogo produziu um aviso que esta versão do RenderPilot não consegue exibir.',
+  'games.libraryActions': 'Ações',
+  'games.search': 'Pesquisar jogos',
+  'games.openFilters': 'Filtros',
+  'games.openFiltersActive': 'Filtros (ativos)',
+  'games.loading': 'Carregando…',
+  'games.empty.title': 'Nenhum jogo encontrado',
+  'games.empty.description': 'Adicione um jogo para exibi-lo no painel.',
+  'games.filterEmpty.title': 'Nenhum resultado encontrado',
+  'games.filterEmpty.description': 'Tente alterar sua pesquisa ou os filtros.',
+  'games.filterEmpty.reset': 'Redefinir filtros',
+
+  'settings.catalog.title': 'Fontes de capas',
+  'settings.catalog.description': 'Selecione fontes online para baixar capas de jogos.',
+  'settings.catalog.steamKey.inputLabel': 'Chave de API do SteamGridDB',
+  'settings.catalog.steamKey.placeholder': 'Chave de API',
+  'settings.catalog.steamKey.loading': 'Carregando…',
+  'settings.catalog.steamKey.save': 'Salvar',
+  'settings.catalog.steamKey.saved': 'Salva',
+  'settings.catalog.steamKey.cleared': 'Removida',
+  'settings.catalog.steamKey.readError': 'Erro ao ler a configuração.',
+  'settings.catalog.steamKey.saveError': 'Erro ao salvar a configuração.',
+  'settings.catalog.steamKey.show': 'Mostrar chave de API',
+  'settings.catalog.steamKey.hide': 'Ocultar chave de API',
+  'settings.catalog.steamKey.getKey': 'Obter uma chave de API',
+
+  'settings.renodx.vulkan.description':
+    'Gerencie a camada Vulkan compartilhada do ReShade para jogos Vulkan com RenoDX.',
+  'settings.renodx.vulkan.channel': 'Canal da camada Vulkan',
+  'settings.renodx.vulkan.channelDescription':
+    'Escolha qual canal do ReShade será usado pela camada Vulkan compartilhada.',
+  'settings.renodx.vulkan.loadError': 'Não foi possível carregar o estado da camada Vulkan.',
+  'settings.renodx.vulkan.saveError': 'Não foi possível salvar o canal da camada Vulkan.',
+  'settings.renodx.vulkan.applyError': 'Não foi possível aplicar a camada Vulkan.',
+
+  'common.unknown': 'Desconhecido',
+  'common.downloadProgress': 'Progresso do download',
+  'common.close': 'Fechar',
+
+  'gameDetails.noGameSelected.title': 'Nenhum jogo selecionado',
+  'gameDetails.noGameSelected.description': 'Selecione um jogo no painel para ver os detalhes.',
+
+  'gameDetails.version.noReplacements': 'Nenhuma versão alternativa',
+  'gameDetails.version.restoreOriginal': 'Restaurar o {fileName} original',
+  'gameDetails.version.fileCount': plural('count', {
+    one: '1 arquivo',
+    many: '{count} arquivos',
+    other: '{count} arquivos',
+  }),
+
+  'gameDetails.vendor.description': 'Alterar a versão do componente.',
+
+  'gameDetails.dlss.description': 'Altere a versão do DLSS ou substitua suas configurações.',
+  'gameDetails.dlss.descriptionSwapOnly': 'Altere a versão do DLSS.',
+  'gameDetails.dlss.libraryFileLabel': 'Versão do arquivo',
+  'gameDetails.dlss.driverOverridesLabel': 'Substituições do perfil NVIDIA',
+
+  'gameDetails.streamline.description': 'Gerencie os complementos do Streamline.',
+  'gameDetails.streamline.versionTitle': 'Versão global do Streamline',
+  'gameDetails.streamline.versionDescription': 'Aplica a mesma versão a todos os complementos.',
+  'gameDetails.streamline.noOtherVersions': 'Nenhuma outra versão',
+  'gameDetails.streamline.mixed': 'Versões variadas',
+  'gameDetails.streamline.mixedRange': 'Versões variadas (v{min} – v{max})',
+  'gameDetails.streamline.updatesSummary': '{updates} atualizações · {missing} ausentes',
+  'gameDetails.streamline.restoreAllLabel': 'Restaurar todos os complementos ao estado original',
+  'gameDetails.streamline.restoreAllTooltip': 'Restaurar tudo ao estado original',
+  'gameDetails.updateAll.action': 'Atualizar tudo',
+  'gameDetails.updateAll.actionCount': 'Atualizar tudo ({count})',
+  'gameDetails.updateAll.upToDate': 'Todas as versões estáveis estão atualizadas',
+  'gameDetails.updateAll.partialFailure':
+    'Algumas atualizações falharam ({count}). Confira os detalhes e tente novamente.',
+  'gameDetails.updateAll.tooltip': plural('count', {
+    one: 'Atualizar 1 componente para a versão estável mais recente',
+    many: 'Atualizar {count} componentes para as versões estáveis mais recentes',
+    other: 'Atualizar {count} componentes para as versões estáveis mais recentes',
+  }),
+  'gameDetails.executable.title': 'Executável do jogo',
+  'gameDetails.executable.groupLabel': 'Executáveis do jogo disponíveis',
+  'gameDetails.developerMode.requiredTitle': 'O modo de desenvolvedor do Windows está desativado',
+  'gameDetails.developerMode.requiredDescription':
+    'O Microsoft D3D12 Agility Preview exige esta configuração do Windows.',
+  'gameDetails.developerMode.checkTitle': 'Não foi possível verificar o modo de desenvolvedor',
+  'gameDetails.developerMode.checkDescription':
+    'O RenderPilot não conseguiu determinar o estado atual do modo de desenvolvedor do Windows.',
+  'gameDetails.developerMode.checkUnavailable':
+    'É necessário concluir a verificação antes de continuar.',
+  'gameDetails.developerMode.enableGuidance':
+    'Você pode ativar o modo de desenvolvedor em “Para desenvolvedores”, nas Configurações do Windows.',
+  'gameDetails.developerMode.previewGuidance':
+    'A documentação da Microsoft explica como ativar o modo de desenvolvedor no Windows.',
+  'gameDetails.developerMode.restartInfo':
+    'Em alguns casos, o Windows aplica essa configuração somente após a reinicialização.',
+  'gameDetails.developerMode.stillDisabled':
+    'O modo de desenvolvedor continua desativado. Se ele foi ativado recentemente, talvez seja necessário reiniciar o Windows para aplicar a alteração.',
+  'gameDetails.developerMode.settingsOpenFailed':
+    'Não foi possível abrir as Configurações do Windows. Abra “Para desenvolvedores” manualmente.',
+  'gameDetails.developerMode.documentationOpenFailed':
+    'Não foi possível abrir a documentação da Microsoft.',
+  'gameDetails.developerMode.openSettings': 'Abrir configurações',
+  'gameDetails.developerMode.openDocumentation': 'Abrir documentação',
+  'gameDetails.developerMode.checkStatus': 'Verificar status',
+  'gameDetails.developerMode.retryCheck': 'Verificar novamente',
+  'gameDetails.developerMode.checkingStatus': 'Verificando…',
+  'gameDetails.d3d12.status.original': 'EXE original',
+  'gameDetails.d3d12.status.patched': 'EXE modificado: {from} → {to}',
+  'gameDetails.d3d12.status.repair': 'Reparo necessário',
+  'gameDetails.d3d12.repairGuidance':
+    'Verifique os arquivos do jogo e faça uma nova varredura. O RenderPilot não substituirá este EXE.',
+  'gameDetails.d3d12.action.patch': 'Modificar EXE: {from} → {to}',
+  'gameDetails.d3d12.action.restore': 'Restaurar EXE: {from} → {to}',
+  'gameDetails.d3d12.action.repair': 'O EXE precisa ser reparado primeiro',
+  'gameDetails.d3d12.action.blocked': 'Esta versão do D3D12 não pode ser aplicada no estado atual.',
+  'gameDetails.d3d12.action.planPatch': 'Será aplicada uma modificação: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore': 'O EXE original será restaurado: SDK {from} → {to}',
+  'gameDetails.d3d12.select.compatible': 'Compatível com o EXE atual',
+  'gameDetails.d3d12.select.changesExecutable': 'Exige alteração do EXE',
+  'gameDetails.d3d12.select.unavailable': 'Indisponível',
+  'gameDetails.d3d12.confirm.title': 'Confirmar alteração do EXE',
+  'gameDetails.d3d12.confirm.description':
+    'O RenderPilot alterará a exportação D3D12SDKVersion do executável.',
+  'gameDetails.d3d12.confirm.updateAllDescription':
+    'Estas atualizações exigem a alteração da linha do SDK do D3D12 nos executáveis indicados. Nada será baixado nem alterado até você confirmar.',
+  'gameDetails.d3d12.confirm.backup': 'Caminho do backup: {path}',
+  'gameDetails.d3d12.confirm.backupWillCreate':
+    'Antes da alteração, será criado um backup do EXE original em: {path}',
+  'gameDetails.d3d12.confirm.backupExists':
+    'O EXE original já está salvo em: {path}. Esse backup não será substituído.',
+  'gameDetails.d3d12.confirm.signatureWarning':
+    'Após a alteração, a assinatura digital do EXE poderá ser considerada inválida e as verificações de integridade poderão detectar que o arquivo foi modificado. Ao reverter completamente o D3D12, o RenderPilot restaurará o EXE original.',
+  'gameDetails.d3d12.confirm.accept': 'Alterar',
+  'gameDetails.d3d12.executableLockedTitle': 'Seleção de EXE bloqueada',
+  'gameDetails.d3d12.executableLocked':
+    'Para selecionar outro EXE, reverta completamente o componente D3D12.',
+  'gameDetails.d3d12.executableRepairLocked':
+    'Siga as instruções de recuperação do cartão do D3D12 e verifique o jogo novamente.',
+  'gameDetails.executable.description':
+    'O executável do jogo: o perfil NVIDIA é aplicado a ele e o RenoDX é instalado em sua pasta.',
+  'gameDetails.executable.triggerLabel': 'Executável do jogo: {fileName}',
+  'gameDetails.executable.detectedGroup': 'Executáveis do jogo detectados',
+  'gameDetails.executable.otherGroup': 'Outros (inicializadores, instaladores e ferramentas)',
+  'gameDetails.executable.customBadge': 'Manual',
+  'gameDetails.executable.reset': 'Redefinir para detecção automática',
+  'gameDetails.executable.tooltipAuto':
+    'Executável do jogo: detectado automaticamente. Usado pelo perfil NVIDIA e pelo RenoDX.',
+  'gameDetails.executable.tooltipCustom':
+    'Executável do jogo: selecionado manualmente. Usado pelo perfil NVIDIA e pelo RenoDX.',
+  'gameDetails.profile.title': 'Perfil de NVIDIA',
+  'gameDetails.profile.description': 'Defina as configurações do driver NVIDIA para este jogo.',
+  'gameDetails.profile.pinnedManual': 'Selecionado manualmente.',
+  'gameDetails.profile.autoDetected': 'Detectado automaticamente.',
+  'gameDetails.profile.noExeDetected': 'Nenhum arquivo executável foi encontrado para este jogo.',
+  'gameDetails.profile.noExe': 'Sem executável',
+  'gameDetails.profile.noProfile': 'Perfil NVIDIA não encontrado.',
+
+  'gameDetails.nvapi.requiresDriver': 'exige o driver {version}+',
+  'gameDetails.nvapi.unavailable': 'indisponível',
+  'gameDetails.nvapi.resetDefault': 'Redefinir para o padrão',
+  'gameDetails.nvapi.alreadyDefault': 'Já está no padrão',
+  'gameDetails.nvapi.restoreBaselineLabel': 'Restaurar valor inicial',
+  'gameDetails.nvapi.restoreBaseline': 'Restaurar valor inicial',
+  'gameDetails.nvapi.alreadyBaseline': 'Já está no valor inicial',
+  'gameDetails.nvapi.noBaseline': 'Nenhum valor inicial salvo',
+  'gameDetails.nvapi.versionUnavailable': 'Versão do DLSS indisponível',
+
+  'gameDetails.nvapi.warning.noDll':
+    'Nenhum arquivo DLL do DLSS foi detectado na pasta de instalação.',
+  'gameDetails.nvapi.warning.noManifest': 'O manifesto não contém dados para esta versão da DLL.',
+  'gameDetails.nvapi.warning.dllVersionUnknown':
+    'Uma DLL do DLSS foi encontrada, mas sua versão está indisponível.',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    'O catálogo do jogo não está pronto. Verifique o jogo novamente antes de alterar configurações NVIDIA que dependem da DLL.',
+  'gameDetails.nvapi.warning.noExecutable':
+    'Nenhum arquivo executável foi encontrado para este jogo.',
+  'gameDetails.nvapi.warning.nvapiUnavailable': 'A NVAPI está indisponível.',
+  'gameDetails.nvapi.warning.nvapiInitFailed': 'Falha ao inicializar a NVAPI.',
+  'gameDetails.nvapi.warning.drsFailed': 'Não foi possível criar a sessão DRS.',
+
+  'operations.title': 'Histórico',
+  'operations.subtitleGame': 'Atividade de {title}',
+  'operations.loading': 'Carregando…',
+  'operations.empty': 'Ainda não há histórico',
+  'operations.gameName': 'Jogo',
+  'operations.date': 'Data',
+  'operations.status': 'Status',
+  'operations.action': 'Ação',
+  'operations.libraryType': 'Tipo de biblioteca',
+  'operations.version': 'Versão',
+
+  'libraries.error': 'Erro',
+  'libraries.catalogFallback.title': 'Catálogo indisponível',
+  'libraries.catalogFallback.description':
+    'Somente os pacotes registrados localmente são exibidos. Este não é o catálogo completo.',
+  'libraries.state.localOnly': 'Somente local',
+  'libraries.state.downloaded': 'Baixado',
+  'libraries.state.missing': 'Arquivos ausentes',
+  'libraries.state.corrupt': 'Arquivos corrompidos',
+  'libraries.hash.copy': 'Copiar hash',
+  'libraries.hash.copyVersion': 'Copiar hash de {version}',
+  'libraries.hash.copied': 'Copiado',
+  'libraries.hash.failed': 'Falha ao copiar',
+  'libraries.hash.copiedToast': 'Hash copiado para a área de transferência',
+  'libraries.sort.byColumn': 'Ordenar por {label}',
+  'libraries.actions.delete': 'Excluir',
+  'libraries.actions.download': 'Baixar',
+  'libraries.actions.deleteVersion': 'Excluir {version}',
+  'libraries.actions.downloadVersion': 'Baixar {version}',
+  'libraries.actions.deletedToast': '{version} excluída',
+  'libraries.actions.downloadedToast': '{version} baixada',
+  'libraries.actions.failedToast': 'Não foi possível {action}',
+  'libraries.actions.downloadAll': 'Baixar as versões mais recentes',
+  'libraries.actions.downloadAllCount': 'Baixar as versões mais recentes ({count})',
+  'libraries.actions.downloadAllUpToDate': 'Todas as versões mais recentes já foram baixadas',
+  'libraries.actions.downloadAllTooltip': plural('count', {
+    one: 'Baixar 1 versão mais recente',
+    many: 'Baixar {count} versões mais recentes',
+    other: 'Baixar {count} versões mais recentes',
+  }),
+  'libraries.actions.downloadAllDoneToast': plural('count', {
+    one: '{count} biblioteca baixada',
+    many: '{count} bibliotecas baixadas',
+    other: '{count} bibliotecas baixadas',
+  }),
+  'libraries.actions.downloadAllPartialToast': '{succeeded} baixadas, {failed} com falha',
+  'libraries.actions.downloadAllNoneToast': 'Todas as versões mais recentes já foram baixadas',
+  'libraries.filters.vendorLabel': 'Fornecedores de bibliotecas',
+  'libraries.filters.typeLabel': 'Tipos de bibliotecas',
+  'libraries.table.caption': 'Versões de bibliotecas {vendor} {type}',
+
+  'common.cancel': 'Cancelar',
+  'common.apply': 'Aplicar',
+
+  'filters.title': 'Filtros',
+  'filters.launchers.title': 'Inicializadores',
+  'filters.launchers.empty': 'Nenhum inicializador encontrado',
+  'filters.launchers.reorder.instructions':
+    'Para reordenar um inicializador, focalize o botão de movimentação, pressione Espaço ou Enter, use as setas e pressione Espaço ou Enter para soltá-lo. Esc cancela.',
+  'filters.launchers.reorder.move': 'Mover {label}, posição {position} de {total}',
+  'filters.launchers.reorder.zoneLabel': 'Área de reordenação dos inicializadores',
+  'filters.launchers.reorder.itemLabel': 'Inicializador {label}',
+  'filters.launchers.reorder.dragStarted':
+    '{itemLabel} selecionado em {zoneLabel}, posição {position} de {count}.',
+  'filters.launchers.reorder.movedToPosition':
+    '{itemLabel} movido para a posição {position} de {count}.',
+  'filters.launchers.reorder.movedToZoneStart': '{itemLabel} movido para o início de {zoneLabel}.',
+  'filters.launchers.reorder.movedToZoneEnd': '{itemLabel} movido para o final de {zoneLabel}.',
+  'filters.launchers.reorder.droppedAnnouncement':
+    '{itemLabel} solto em {zoneLabel}, posição {position} de {count}.',
+  'filters.launchers.reorder.zoneActiveInstruction':
+    'Use Espaço ou Enter para selecionar um item e as setas para movê-lo.',
+  'filters.launchers.reorder.zoneDragDisabledInstruction':
+    'Não é possível reordenar os inicializadores.',
+  'filters.launchers.reorder.pickedUp': '{label} selecionado, posição {position} de {total}.',
+  'filters.launchers.reorder.moved': '{label} movido para a posição {position} de {total}.',
+  'filters.launchers.reorder.dropped': '{label} solto na posição {position} de {total}.',
+  'filters.launchers.reorder.cancelled': 'A reordenação de {label} foi cancelada.',
+  'filters.libraries.title': 'Componentes',
+  'filters.libraries.empty': 'Nenhum componente encontrado',
+  'filters.addons.title': 'Complementos',
+
+  'games.favoritesToggle': 'Favoritos',
+  'games.favoritesToggleActive': 'Favoritos (ativos)',
+  'games.showHiddenActive': 'Jogos ocultos (ativos)',
+  'games.showHidden': 'Mostrar',
+
+  'operation.label.low': 'Risco baixo',
+  'operation.label.medium': 'Risco médio',
+  'operation.label.high': 'Risco alto',
+  'operation.label.blocked': 'Bloqueada',
+  'operation.label.planned': 'Planejada',
+  'operation.label.completed': 'Concluída',
+  'operation.label.failed': 'Falhou',
+  'operation.label.rolledBack': 'Revertida',
+  'operation.label.replaceComponent': 'Alterar versão',
+  'operation.duration': 'Concluída em {duration}',
+  'operation.filesUpdated.none': 'Nenhum arquivo atualizado.',
+  'operation.filesUpdated.count': plural('count', {
+    one: '1 arquivo atualizado.',
+    many: '{count} arquivos atualizados.',
+    other: '{count} arquivos atualizados.',
+  }),
+  'operation.filesRestored.none': 'Nenhum arquivo restaurado.',
+  'operation.filesRestored.count': plural('count', {
+    one: '1 arquivo restaurado.',
+    many: '{count} arquivos restaurados.',
+    other: '{count} arquivos restaurados.',
+  }),
+  'operation.itemLabel': '{kind}, {status}',
+
+  'notify.stalePlan': 'O plano da operação está desatualizado. Tente novamente.',
+  'notify.missingStableGameId': 'Não foi possível identificar o jogo.',
+  'notify.coverPickerPreview': 'Use o aplicativo para desktop para escolher uma capa.',
+  'notify.coverUpdated.title': 'Capa atualizada',
+  'notify.coverUpdated.body': 'Sua capa personalizada foi salva.',
+  'notify.coverDownloaded.title': 'Capa baixada',
+  'notify.coverDownloaded.body': 'A capa do jogo foi atualizada.',
+  'notify.coverRemoved.title': 'Capa removida',
+  'notify.coverRemoved.body': 'A capa padrão foi restaurada.',
+  'notify.favoriteFailed': 'Não foi possível alterar o status de favorito.',
+  'notify.favoriteAdded': 'Adicionado aos favoritos.',
+  'notify.favoriteRemoved': 'Removido dos favoritos.',
+  'notify.hiddenFailed': 'Não foi possível alterar o status de oculto.',
+  'notify.gameHidden': 'Jogo ocultado.',
+  'notify.gameUnhidden': 'Jogo exibido.',
+  'notify.gameRemovedFromCatalog': 'Jogo removido do catálogo.',
+  'notify.removeGameFailed': 'Não foi possível remover o jogo do catálogo.',
+  'notify.applyCompleted': 'Alterações aplicadas',
+  'notify.rollbackCompleted': 'Reversão concluída',
+  'notify.swapBatchFailed.title': 'Algumas atualizações falharam',
+  'notify.swapBatchFailed.description':
+    'Não foi possível atualizar {failed} de {total} componentes.',
+  'notify.rollbackBatchFailed.title': 'Algumas restaurações falharam',
+  'notify.rollbackBatchFailed.description':
+    'Não foi possível restaurar {failed} de {total} componentes.',
+  'notify.statusError': 'Erro',
+  'notify.statusWarning': 'Aviso',
+
+  'scan.partialWarning': plural('count', {
+    one: 'Não foi possível verificar 1 pasta.',
+    many: 'Não foi possível verificar {count} pastas.',
+    other: 'Não foi possível verificar {count} pastas.',
+  }),
+  'scan.automaticFailed':
+    'A verificação automática das bibliotecas falhou. Mesmo assim, a lista de jogos foi atualizada.',
+
+  'coverSync.failed': 'Não foi possível sincronizar as capas.',
+  'coverSync.refreshFailed': 'Não foi possível sincronizar as capas.',
+  'coverSync.failure.single': 'Não foi possível baixar a capa de {title}: {message}',
+  'coverSync.failure.multiple': plural('count', {
+    one: 'Não foi possível baixar as capas de {count} jogo. Primeiro erro: {summary}',
+    many: 'Não foi possível baixar as capas de {count} jogos. Primeiro erro: {summary}',
+    other: 'Não foi possível baixar as capas de {count} jogos. Primeiro erro: {summary}',
+  }),
+  'coverSync.failure.hint': 'Confira as fontes de capas dos jogos e a configuração do SteamGridDB.',
+
+  'nvidia.changeSettingFailed': 'Não foi possível aplicar as configurações',
+  'nvidia.revertDefaultFailed': 'Não foi possível restaurar as configurações padrão',
+  'nvidia.revertBaselineFailed': 'Não foi possível restaurar as configurações iniciais',
+
+  'indicator.changeFailed': 'Não foi possível alternar o indicador do DLSS',
+
+  'libraries.column.version': 'Versão',
+  'libraries.column.hash': 'Hash',
+  'libraries.column.signed': 'Assinado',
+  'libraries.column.size': 'Tamanho',
+  'libraries.column.documents': 'Documentos',
+  'libraries.column.actions': 'Ações',
+  'libraries.documents.openForVersion': 'Abrir documentos legais de {name} {version}',
+  'libraries.documents.title': 'Documentos legais',
+  'libraries.documents.description': 'Aplicáveis a {name} {version}.',
+  'libraries.documents.formatPdf': 'PDF',
+  'libraries.documents.formatText': 'Texto',
+  'libraries.documents.open': 'Abrir',
+  'libraries.documents.openFailed': 'Não foi possível abrir o documento',
+  'libraries.unsigned': 'Não assinado',
+  'libraries.invalidDate': 'Data inválida',
+  'libraries.empty.loading': 'Carregando…',
+  'libraries.empty.unavailable': 'Não foi possível carregar as bibliotecas',
+  'libraries.empty.none': 'Nenhuma biblioteca encontrada',
+  'libraries.error.loadFailed': 'Não foi possível carregar as bibliotecas',
+  'libraries.error.refreshFailed': 'Não foi possível atualizar o manifesto',
+  'libraries.error.downloadFailed': 'Falha no download',
+  'libraries.error.deleteFailed': 'Falha ao excluir',
+  'libraries.error.downloadedRefreshFailed':
+    'Biblioteca baixada, mas não foi possível atualizar o status',
+  'libraries.error.deletedRefreshFailed':
+    'Biblioteca excluída, mas não foi possível atualizar o status',
+
+  'settings.catalog.source.steam.actionLabel': 'Baixar capas do Steam',
+  'settings.catalog.source.steam.title': 'Steam',
+  'settings.catalog.source.steam.description': 'Baixe capas do catálogo público do Steam.',
+  'settings.catalog.source.gog.actionLabel': 'Baixar capas do GOG',
+  'settings.catalog.source.gog.title': 'GOG',
+  'settings.catalog.source.gog.description': 'Baixe capas do catálogo oficial do GOG.',
+  'settings.catalog.source.steamgriddb.actionLabel': 'Baixar capas do SteamGridDB',
+  'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
+  'settings.catalog.source.steamgriddb.description':
+    'Baixe capas da comunidade pelo SteamGridDB. Exige uma chave de API.',
+  'settings.catalog.artworkReadError': 'Erro ao carregar a configuração das capas.',
+  'settings.catalog.artworkSaveError': 'Erro ao salvar a configuração das capas.',
+
+  'user_message.invalid_argument': 'A entrada fornecida é inválida.',
+  'user_message.invalid_install_root':
+    'Escolha a pasta de instalação de um único jogo. Não é possível adicionar raízes de unidades, compartilhamentos de rede nem pastas do sistema.',
+  'user_message.multiple_installs_detected':
+    'Esta pasta contém várias instalações de jogos. Selecione a pasta de instalação de um único jogo.',
+  'user_message.stale_install_inspection':
+    'A instalação foi alterada durante a verificação. Confira o resultado atualizado antes de adicioná-la.',
+  'user_message.root_correction_cleanup_required':
+    'As alterações ativas dos componentes precisam ser revertidas antes de alterar a raiz do jogo.',
+  'user_message.root_correction_blocked':
+    'Resolva o estado ativo pelo cartão existente antes de alterar a raiz do jogo.',
+  'user_message.managed_cleanup_ambiguous':
+    'O RenderPilot encontrou alterações gerenciadas sobrepostas cuja ordem segura de restauração não pode ser comprovada. Nada foi alterado e um pacote de recuperação foi criado.',
+  'user_message.game_removal_cleanup_failed':
+    'O RenderPilot não conseguiu restaurar os arquivos originais do jogo, por isso o cartão não foi removido. Confira os arquivos do jogo e tente novamente.',
+  'user_message.invalid_game_reference': 'Jogo não encontrado.',
+  'user_message.invalid_component_reference': 'Componente não encontrado.',
+  'user_message.invalid_artifact_reference': 'Item não encontrado.',
+  'user_message.invalid_operation_reference': 'Ação não encontrada.',
+  'user_message.response_serialization_failed': 'Erro ao processar a solicitação.',
+  'user_message.plan_changed_rebuild': 'A tarefa está desatualizada. Tente novamente.',
+  'user_message.game_not_in_catalog': 'O jogo não é compatível.',
+  'user_message.operation_not_found': 'Ação não encontrada.',
+  'user_message.artifact_not_found': 'Item não encontrado.',
+  'user_message.component_not_found': 'Componente não encontrado.',
+  'user_message.invalid_operation_state': 'Esta ação não está disponível no momento.',
+  'user_message.operation_could_not_complete': 'Não foi possível concluir a ação.',
+  'user_message.command_task_failed': 'Não foi possível executar o comando.',
+  'user_message.storage_failed': 'O aplicativo não conseguiu ler nem gravar seu catálogo.',
+  'user_message.provider_failed': 'Não foi possível ler uma fonte de dados.',
+  'user_message.detection_failed': 'O aplicativo não conseguiu analisar os arquivos do jogo.',
+  'user_message.steamgriddb_api_key_missing':
+    'Forneça uma chave de API do SteamGridDB nas configurações.',
+  'user_message.unsupported_cover_image_type': 'Formato de imagem não compatível.',
+  'user_message.cover_download_failed': 'Falha ao baixar a capa.',
+  'user_message.cover_artwork_not_found': 'Nenhuma capa foi encontrada para este jogo.',
+  'user_message.cover_file_system_error': 'Falha ao salvar a capa no disco.',
+  'user_message.stale_replacement_source':
+    'Não foi possível aplicar esta atualização porque o arquivo de origem foi substituído ou modificado fora do RenderPilot. Selecione a versão novamente; talvez seja necessário fazer um download.',
+  'user_message.catalog_consolidation_blocked':
+    'O RenderPilot encontrou estados gerenciados conflitantes em cartões de jogo duplicados. Nada foi alterado e um pacote de recuperação foi criado.',
+  'user_message.rollback_also_failed':
+    'A ação falhou e o RenderPilot não conseguiu restaurar completamente o estado anterior dos arquivos. Confira os arquivos do jogo antes de tentar novamente.',
+  'user_message.access_denied': 'Acesso negado. Confira suas permissões e tente novamente.',
+  'user_message.nvapi_catalog_not_ready':
+    'Verifique o jogo novamente antes de alterar configurações NVIDIA que dependem da DLL.',
+  'user_message.safety_context_missing':
+    'A verificação de segurança dos arquivos ainda não está pronta. Atualize a avaliação e tente novamente.',
+  'user_message.safety_context_stale':
+    'A avaliação de segurança dos arquivos está desatualizada. Atualize-a e tente novamente.',
+  'user_message.safety_context_scope_mismatch':
+    'A avaliação de segurança pertence a outro recurso. Atualize-a e tente novamente.',
+
+  'suggested_action.refresh_games': 'Atualize a lista de jogos e tente novamente.',
+  'suggested_action.reload_game_details': 'Atualize os detalhes do jogo e tente novamente.',
+  'suggested_action.refresh_candidates': 'Atualize a lista e tente novamente.',
+  'suggested_action.rebuild_plan_or_reload_operations':
+    'Atualize a visualização e tente novamente.',
+  'suggested_action.retry_after_required_data': 'Aguarde e tente novamente mais tarde.',
+  'suggested_action.inspect_logs': 'Se o problema persistir, tente reiniciar o aplicativo.',
+  'suggested_action.retry_or_restart': 'Se o problema persistir, tente reiniciar o aplicativo.',
+  'suggested_action.rebuild_operation_plan': 'Reinicie a ação.',
+  'suggested_action.refresh_or_scan_game_folder':
+    'Atualize a lista ou verifique a pasta novamente.',
+  'suggested_action.reload_file_safety':
+    'Atualize a avaliação de segurança dos arquivos e tente novamente.',
+
+  'settings.about.title': 'Atualizações',
+  'settings.about.description': 'Verifique se há atualizações do aplicativo.',
+  'settings.about.version.title': 'Versão do aplicativo',
+  'settings.about.version.loading': 'Carregando…',
+  'settings.about.checkForUpdates': 'Verificar atualizações',
+  'settings.about.updateInProgress': 'Atualizando…',
+  'settings.about.updateAvailable': 'Atualização disponível',
+  'settings.about.upToDate': 'Você está usando a versão mais recente',
+  'settings.about.updateCheckError': 'Falha ao verificar atualizações',
+
+  'settings.about.updateDialog.title': 'Atualização disponível',
+  'settings.about.updateDialog.versionLine': '{currentVersion} → {version}',
+  'settings.about.updateDialog.releaseDate': 'Publicada em {date}',
+  'settings.about.updateDialog.releaseNotes': 'Notas da versão',
+  'settings.about.updateDialog.noNotes':
+    'Não foram fornecidas notas da versão para esta atualização.',
+  'settings.about.updateDialog.notesTruncated': 'As notas da versão foram resumidas.',
+
+  'settings.about.updateDialog.installAndRestart': 'Instalar e reiniciar',
+  'settings.about.updateDialog.later': 'Mais tarde',
+  'settings.about.updateDialog.close': 'Fechar',
+  'settings.about.updateDialog.retryDownload': 'Tentar baixar novamente',
+  'settings.about.updateDialog.retryInstall': 'Tentar instalar novamente',
+  'settings.about.updateDialog.restartNow': 'Reiniciar agora',
+
+  'settings.about.updateDialog.downloading': 'Baixando atualização…',
+  'settings.about.updateDialog.downloadingBytes': '{received} baixados',
+  'settings.about.updateDialog.downloadingBytesTotal': '{received} de {total}',
+  'settings.about.updateDialog.verifying': 'Verificando atualização…',
+  'settings.about.updateDialog.verifyingDescription': 'Verificando o pacote baixado.',
+  'settings.about.updateDialog.installing':
+    'Aplicando atualização… O aplicativo será fechado e reiniciado automaticamente.',
+  'settings.about.updateDialog.restarting': 'Reiniciando o aplicativo…',
+
+  'settings.about.updateDialog.prepareErrorTitle': 'Falha no download ou na verificação',
+  'settings.about.updateDialog.prepareErrorDescription':
+    'Não foi possível baixar ou verificar a atualização. Confira a conexão e tente novamente.',
+  'settings.about.updateDialog.installErrorTitle': 'Falha na instalação',
+  'settings.about.updateDialog.installErrorDescription':
+    'Não foi possível instalar a atualização. Reinicie o RenderPilot normalmente e tente novamente; o Windows solicitará permissões de administrador se necessário.',
+  'settings.about.updateDialog.restartRequiredTitle': 'Reinicialização necessária',
+  'settings.about.updateDialog.restartRequiredDescription':
+    'A atualização foi instalada, mas o aplicativo não pôde ser reiniciado automaticamente. Reinicie o RenderPilot manualmente para concluir a atualização.',
+
+  'settings.about.updateDialog.progressLabel': 'Progresso do download',
+  // ── Game details: RenoDX ──
+  'gameDetails.renodx.title': 'RenoDX HDR',
+  'gameDetails.renodx.description':
+    'Adicione HDR e mapeamento de tons a este jogo com o complemento ReShade do RenoDX.',
+  'gameDetails.renodx.loading': 'Verificando disponibilidade…',
+  'gameDetails.renodx.installError': 'Falha ao instalar o RenoDX',
+  'gameDetails.renodx.uninstallError': 'Falha ao remover o RenoDX',
+  'gameDetails.renodx.switchError': 'Falha ao alterar o canal do ReShade',
+  'gameDetails.renodx.unsupported': 'Não há um perfil RenoDX para este jogo.',
+  'gameDetails.renodx.incompatible': 'Não é possível instalar o RenoDX: {reason}.',
+  'gameDetails.renodx.status.label': 'Status',
+  'gameDetails.renodx.statusInstalled': 'Instalado',
+  'gameDetails.renodx.actionInstall': 'Instalar',
+  'gameDetails.renodx.actionUninstall': 'Remover RenoDX',
+  'gameDetails.renodx.actionRepair': 'Reparar',
+  'gameDetails.renodx.actionRepairDlssFix': 'Reparar DLSS-Fix',
+  'gameDetails.renodx.actionFinishDlssFixRecovery': 'Concluir recuperação',
+  'gameDetails.renodx.dlssFixRecoveryPending':
+    'Uma operação anterior do DLSS-Fix precisa ser recuperada.',
+  'gameDetails.renodx.uninstallConfirmTitle': 'Remover o RenoDX deste jogo?',
+  'gameDetails.renodx.uninstallConfirmBody':
+    'Isso remove o complemento RenoDX e restaura somente os arquivos do ReShade modificados durante a configuração do RenoDX.',
+  'gameDetails.renodx.uninstallConfirmAction': 'Remover',
+  'gameDetails.renodx.installing': 'Instalando…',
+  'gameDetails.renodx.cancel': 'Cancelar',
+  // ── Game details: RenoDX shared Vulkan layer ──
+  'gameDetails.renodx.vulkanLayer.removeError':
+    'Não foi possível remover a camada Vulkan compartilhada do ReShade.',
+  'gameDetails.renodx.vulkanLayer.title': 'Camada Vulkan compartilhada',
+  'gameDetails.renodx.vulkanLayer.removeConfirmTitle': 'Remover a camada Vulkan compartilhada?',
+  'gameDetails.renodx.vulkanLayer.removeConfirmBody':
+    'Remover a camada Vulkan compartilhada do ReShade afeta todos os jogos Vulkan com RenoDX. Deseja continuar?',
+  'gameDetails.renodx.vulkanLayer.openSettings': 'Abrir configurações do RenoDX',
+  'gameDetails.renodx.vulkanLayer.externalReadOnly':
+    'Uma camada Vulkan existente foi detectada; somente leitura nesta versão',
+  'gameDetails.renodx.vulkanLayer.state.not_installed': 'Não instalada',
+  'gameDetails.renodx.vulkanLayer.state.installed': 'Instalada',
+  'gameDetails.renodx.vulkanLayer.state.installed_disabled': 'Desativada no Registro',
+  'gameDetails.renodx.vulkanLayer.state.external_read_only': 'Somente leitura',
+  'gameDetails.renodx.vulkanLayer.state.conflict': 'Conflito',
+  'gameDetails.renodx.vulkanLayer.state.needs_repair': 'Precisa de reparo',
+  'gameDetails.renodx.vulkanLayer.state.unsupported': 'Não compatível',
+  'gameDetails.renodx.vulkanLayer.action.install': 'Instalar',
+  'gameDetails.renodx.vulkanLayer.action.update': 'Atualizar',
+  'gameDetails.renodx.vulkanLayer.action.switch_channel': 'Alterar canal',
+  'gameDetails.renodx.vulkanLayer.action.repair': 'Reparar camada',
+  'gameDetails.renodx.vulkanLayer.action.remove': 'Remover',
+  'gameDetails.renodx.vulkanLayer.diagnostic.external_layer_detected':
+    'Uma camada Vulkan existente foi detectada.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.duplicate_layer_manifest':
+    'Há vários manifestos de camada do ReShade registrados.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.ambiguous_loader_visibility':
+    'A visibilidade do carregador é ambígua.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.missing_layer_dll': 'A DLL da camada está ausente.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.unreadable_dll':
+    'Não foi possível ler a DLL da camada (permissão negada ou arquivo bloqueado).',
+  'gameDetails.renodx.vulkanLayer.diagnostic.missing_manifest':
+    'O manifesto da camada está ausente.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_missing':
+    'Os arquivos da camada existem, mas o registro do carregador Vulkan está ausente.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_disabled':
+    'A entrada do carregador no Registro está desativada.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.unsupported_architecture':
+    'A arquitetura da camada não é compatível.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.hkcu_not_visible_when_elevated':
+    'A camada está registrada em HKCU e pode não ser carregada em jogos executados com privilégios elevados.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.manifest_malformed':
+    'Não foi possível analisar um manifesto de camada.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_scope_not_writable':
+    'Não é possível gravar no escopo necessário do Registro.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.permission_denied':
+    'O sistema operacional negou uma operação necessária.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.backend_validation_failed':
+    'A validação do backend falhou; a camada precisa ser revisada.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.hash_mismatch':
+    'O hash da DLL da camada não corresponde à versão esperada.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.db_only_fallback':
+    'A DLL da camada está ausente; usando o registro informativo do banco de dados.',
+  // ── Game details: RenoDX incompatibility reasons ──
+  'gameDetails.renodx.reason.api_unsupported': 'API gráfica não compatível',
+  'gameDetails.renodx.reason.api_not_allowed': 'API gráfica não permitida para este jogo',
+  'gameDetails.renodx.reason.arch_unknown': 'arquitetura do executável desconhecida',
+  'gameDetails.otherTab': 'Outros',
+  'gameDetails.renodx.unavailable': 'O RenoDX não está disponível no momento.',
+  'renodx.generic.universal': 'RenoDX universal',
+  'renodx.generic.unity': 'RenoDX universal (Unity)',
+  'gameDetails.renodx.generic.profileTooltip': 'Um perfil compartilhado do motor está sendo usado.',
+  'renodx.phase.finalizing': 'Finalizando…',
+  'luma.phase.finalizing': 'Finalizando…',
+  'gameDetails.renodx.confidenceLabel': 'Compatibilidade do RenoDX',
+  'gameDetails.renodx.confidenceVerified': 'Funciona',
+  'gameDetails.renodx.confidenceExperimental': 'Em desenvolvimento',
+  'gameDetails.renodx.confidenceUntested': 'Não verificado',
+  'gameDetails.renodx.external':
+    'Este complemento RenoDX é distribuído externamente e precisa ser baixado manualmente.',
+  'gameDetails.renodx.actionOpenExternal': 'Abrir página de download',
+  'gameDetails.renodx.external.installFromFile': 'Instalar de um arquivo',
+  'gameDetails.renodx.external.dropHint':
+    'Baixe o complemento e depois solte-o aqui ou escolha o arquivo.',
+  'gameDetails.renodx.external.invalidFile':
+    'Esse arquivo não é um complemento RenoDX (.addon64/.addon32).',
+  'gameDetails.renodx.fileInstall.title': 'Instalação manual',
+  'gameDetails.renodx.fileInstall.chooseFile': 'Escolher arquivo de complemento…',
+  'gameDetails.renodx.fileInstall.chooseAnother': 'Escolher outro arquivo',
+  'gameDetails.renodx.fileInstall.expected': 'Complemento esperado: {name}',
+  'gameDetails.renodx.fileInstall.confirm': 'Instalar {fileName}?',
+  'gameDetails.renodx.fileInstall.errorExtension':
+    'Esse arquivo não é um complemento RenoDX (.addon64/.addon32).',
+  'gameDetails.renodx.fileInstall.errorArch':
+    'Este complemento é {addon}, mas o jogo é {game}. Baixe o complemento correspondente.',
+  'gameDetails.renodx.fileInstall.warnName':
+    'Este não parece ser o complemento esperado ({expected}). Instale-o somente se tiver certeza.',
+  'gameDetails.renodx.nativeHdr': 'Este jogo já oferece HDR nativo; o RenoDX não é necessário.',
+  'gameDetails.renodx.blacklisted': 'O RenoDX não é recomendado para este jogo.',
+  'gameDetails.renodx.updatesNotTracked': 'Atualizações não monitoradas',
+  'gameDetails.renodx.channel.label': 'Canal do host ReShade',
+  'gameDetails.renodx.channel.hostLabel': 'Host ReShade',
+  'gameDetails.renodx.channel.stable': 'Stable',
+  'gameDetails.renodx.channel.nightly': 'Nightly',
+  'gameDetails.renodx.host.version': '{version}',
+  'gameDetails.renodx.host.versionUnknown': 'versão desconhecida do ReShade',
+  'gameDetails.renodx.host.addons.none': 'sem suporte a complementos',
+  'gameDetails.renodx.host.addons.unknown': 'suporte a complementos desconhecido',
+  'gameDetails.renodx.host.action.update_host': 'atualização disponível',
+  'gameDetails.renodx.host.action.repair_host':
+    'Reparar o ReShade para oferecer suporte aos complementos RenoDX',
+  'gameDetails.renodx.host.customBuild':
+    'Compilação personalizada (por exemplo, GShade) — você mesmo gerencia as atualizações',
+  'gameDetails.renodx.host.conflictMultiple':
+    'Vários hosts ReShade foram encontrados; verifique a posição ativa',
+  'gameDetails.renodx.host.conflictBlocksInstall':
+    'Um arquivo existente ocupa a posição do ReShade usada por este jogo, ou o ReShade está em outra posição. Resolva isso antes de instalar.',
+  'gameDetails.renodx.actionUpdate': 'Atualizar',
+  'gameDetails.renodx.updating': 'Atualizando…',
+  'gameDetails.renodx.updateError': 'Falha ao atualizar o RenoDX',
+  'gameDetails.renodx.actionInstallDlssFix': 'Instalar',
+  'gameDetails.renodx.actionRemoveDlssFix': 'Remover',
+  'gameDetails.renodx.dlssFixInstallError': 'Falha ao instalar o DLSS-Fix',
+  'gameDetails.renodx.dlssFixRemoveError': 'Falha ao desinstalar o DLSS-Fix',
+  'gameDetails.renodx.fresh.label': 'Atualizações',
+  'gameDetails.renodx.fresh.current': 'Atualizado',
+  'gameDetails.renodx.fresh.available': 'Atualização disponível',
+  'gameDetails.renodx.fresh.channelMismatch': 'Alteração de canal disponível',
+  'gameDetails.renodx.fresh.validationRequired': 'Validação necessária',
+  'gameDetails.renodx.fresh.unknown': 'Não foi possível verificar',
+  'gameDetails.renodx.fresh.checking': 'Verificando…',
+  'gameDetails.renodx.addonDated': 'Complemento de {date}',
+  'gameDetails.renodx.installedOn': 'Instalado em {date}',
+  'gameDetails.renodx.lastChecked': 'Verificado {time}',
+  'gameDetails.renodx.lastCheckedNever': 'Ainda não verificado',
+  'gameDetails.renodx.actionCheckUpdates': 'Verificar atualizações',
+  'gameDetails.renodx.component.reshade': 'Host de ReShade',
+  'gameDetails.renodx.component.addon': 'Complemento RenoDX',
+  'gameDetails.renodx.component.addonDesc': 'O complemento HDR deste jogo',
+  'gameDetails.renodx.component.addonDisabled': 'Instalado, mas desativado no ReShade.ini',
+  'gameDetails.renodx.component.addonFileInstall':
+    'Instalado de um arquivo — sem monitoramento de atualizações',
+  'gameDetails.renodx.component.dlssFix': 'DLSS-Fix',
+  'gameDetails.renodx.component.dlssFixDesc': 'Corrige a cintilação com o DLSS Frame Generation',
+  'gameDetails.renodx.component.dlssFixOffer':
+    'Disponível — evita a cintilação com o DLSS Frame Generation',
+  'gameDetails.renodx.component.dlssFixHint':
+    'Uma correção geral do ReShade, não específica do RenoDX. Faz o ReShade desenhar sobre os quadros nativos do jogo em vez dos quadros gerados e oculta o escalonamento do DLSS do ReShade quando o jogo implementa o Streamline corretamente.',
+  'gameDetails.renodx.attribution': 'RenoDX por clshortfuse.',
+  'gameDetails.renodx.attributionLink': 'Ver projeto',
+  // ── Game details: shared add-on copy (RenoDX + Luma) ──
+  'gameDetails.fileSafety.generic':
+    'Modificar arquivos de jogos multijogador pode causar restrições ou o bloqueio da conta.',
+  'gameDetails.fileSafety.detectedOne':
+    '{engine} foi detectado. Modificar arquivos do jogo pode causar restrições ou o bloqueio da conta.',
+  'gameDetails.fileSafety.detectedMany':
+    'Anti-cheat detectado: {engines}. Modificar arquivos do jogo pode causar restrições ou o bloqueio da conta.',
+  'gameDetails.fileSafety.loadError':
+    'Não foi possível verificar os riscos da alteração de arquivos',
+  'gameDetails.addon.blockedByOtherAddon.tracked':
+    '{installedAddon} está instalado neste jogo — desinstale-o antes de instalar {blockedAddon}.',
+  'gameDetails.addon.blockedByOtherAddon.unmanaged':
+    'Arquivos de {installedAddon} foram encontrados no disco para este jogo — remova-os antes de instalar {blockedAddon}.',
+  'addon.availability.loadFailed': 'Não foi possível verificar',
+  'addon.availability.retry': 'Tentar novamente',
+  'addon.availability.checking': 'Verificando…',
+  // ── Game details: Luma ──
+  'gameDetails.luma.title': 'Luma Framework',
+  'gameDetails.luma.description':
+    'Os recursos do Luma disponíveis para este jogo são exibidos abaixo.',
+  'gameDetails.luma.loading': 'Verificando disponibilidade…',
+  'gameDetails.luma.installError': 'Falha ao instalar o Luma',
+  'gameDetails.luma.uninstallError': 'Falha ao desinstalar o Luma',
+  'gameDetails.luma.updateError': 'Falha ao atualizar o Luma',
+  'gameDetails.luma.repairError': 'Falha ao reparar o Luma',
+  'gameDetails.luma.unsupported': 'Nenhum perfil Luma está disponível para este jogo.',
+  'gameDetails.luma.incompatible': 'Não é possível instalar o Luma: {reason}.',
+  'gameDetails.luma.blacklisted': 'O Luma não é recomendado para este jogo.',
+  'gameDetails.luma.unavailable': 'O Luma não está disponível no momento.',
+  'gameDetails.luma.unmanagedPresent':
+    'Uma instalação existente do Luma foi encontrada no disco sem um registro associado. Remova-a manualmente e reinstale.',
+  'gameDetails.luma.installTornWarning':
+    'Uma instalação anterior não foi concluída corretamente. Uma nova instalação fará a limpeza e o reparo.',
+  'gameDetails.luma.installTornWarningInstalled':
+    'A última operação não foi concluída corretamente. Use Reparar (ou Atualizar, se disponível) para terminar de reconciliar a instalação.',
+  'gameDetails.luma.status.label': 'Status',
+  'gameDetails.luma.statusInstalled': 'Instalado',
+  'gameDetails.luma.actionInstall': 'Instalar',
+  'gameDetails.luma.installing': 'Instalando…',
+  'gameDetails.luma.actionUninstall': 'Remover Luma',
+  'gameDetails.luma.actionRepair': 'Reparar',
+  'gameDetails.luma.actionUpdate': 'Atualizar',
+  'gameDetails.luma.updating': 'Atualizando…',
+  'gameDetails.luma.actionCheckUpdates': 'Verificar atualizações',
+  'gameDetails.luma.uninstallConfirmTitle': 'Remover o Luma deste jogo?',
+  'gameDetails.luma.uninstallConfirmBody':
+    'Isso remove o Luma. Se o Luma gerencia a DLL do DLSS, a troca da biblioteca será revertida e o estado anterior ao Luma será restaurado com exatidão. DLLs reutilizadas e trocas independentes não serão alteradas.',
+  'gameDetails.luma.uninstallConfirmAction': 'Remover',
+  'gameDetails.luma.vcredistWarning':
+    'Talvez um Visual C++ Redistributable recente esteja ausente neste sistema. Se o Luma não carregar, instale o redistribuível.',
+  'gameDetails.luma.vcredistLink': 'Baixar o redistribuível',
+  'gameDetails.luma.dgvoodoo.managed':
+    'O RenderPilot instalará e configurará o dgVoodoo2 {version} para este perfil Luma.',
+  // ── Game details: Luma confidence ──
+  'gameDetails.luma.confidenceLabel': 'Compatibilidade com o Luma',
+  'gameDetails.luma.confidenceVerified': 'Funciona',
+  'gameDetails.luma.confidenceExperimental': 'Em desenvolvimento',
+  'gameDetails.luma.confidenceUntested': 'Não verificado',
+  'gameDetails.luma.generic.engineUnreal': 'Unreal Engine',
+  'gameDetails.luma.generic.engineUnity': 'Unity',
+  'gameDetails.luma.generic.profileTooltip': 'Um perfil compartilhado do motor está sendo usado.',
+  'gameDetails.luma.features.title': 'Recursos',
+  'gameDetails.luma.features.dlssFsr': 'DLSS / FSR',
+  'gameDetails.luma.features.hdr': 'HDR',
+  'gameDetails.luma.features.supported': 'Compatível',
+  'gameDetails.luma.features.unsupported': 'Não compatível',
+  'gameDetails.luma.features.experimental': 'Experimental',
+  'gameDetails.luma.features.unknown': 'Desconhecido',
+  // ── Game details: Luma incompatibility reasons ──
+  'gameDetails.luma.reason.api_unsupported': 'API gráfica não compatível',
+  'gameDetails.luma.reason.api_not_allowed': 'API gráfica não permitida para este jogo',
+  'gameDetails.luma.reason.arch_unknown': 'arquitetura do executável desconhecida',
+  'gameDetails.luma.reason.arch_mismatch':
+    'a arquitetura do executável não corresponde a este complemento',
+  // ── Game details: Luma ReShade host ──
+  'gameDetails.luma.channel.stable': 'Stable',
+  'gameDetails.luma.channel.nightly': 'Nightly',
+  'gameDetails.luma.host.version': '{version}',
+  'gameDetails.luma.host.versionUnknown': 'Versão desconhecida',
+  'gameDetails.luma.host.addons.none': 'sem suporte a complementos',
+  'gameDetails.luma.host.addons.unknown': 'suporte a complementos desconhecido',
+  'gameDetails.luma.host.action.update_host': 'atualização disponível',
+  'gameDetails.luma.host.action.repair_host':
+    'Reparar o ReShade para oferecer suporte aos complementos Luma',
+  'gameDetails.luma.host.customBuild':
+    'Compilação personalizada (por exemplo, GShade) — você mesmo gerencia as atualizações',
+  'gameDetails.luma.host.conflictMultiple':
+    'Vários hosts ReShade foram encontrados — é preciso verificar a posição ativa',
+  'gameDetails.luma.host.conflictBlocksInstall':
+    'Um arquivo existente ocupa a posição do ReShade usada por este jogo, ou o ReShade está em outra posição — resolva isso antes de instalar.',
+  // ── Game details: Luma freshness / timestamps ──
+  'gameDetails.luma.fresh.label': 'Versão',
+  'gameDetails.luma.fresh.current': 'Mais recente',
+  'gameDetails.luma.fresh.available': 'Atualização disponível',
+  'gameDetails.luma.fresh.channelMismatch': 'Alteração de canal disponível',
+  'gameDetails.luma.fresh.validationRequired': 'Validação necessária',
+  'gameDetails.luma.fresh.unknown': 'Não foi possível verificar',
+  'gameDetails.luma.fresh.checking': 'Verificando…',
+  'gameDetails.luma.updatesNotTracked': 'Atualizações não monitoradas',
+  'gameDetails.luma.addonDated': 'Complemento de {date}',
+  'gameDetails.luma.installedOn': 'Instalado em {date}',
+  'gameDetails.luma.lastChecked': 'Verificado {time}',
+  'gameDetails.luma.lastCheckedNever': 'Ainda não verificado',
+  // ── Game details: Luma components ──
+  'gameDetails.luma.component.reshade': 'Host de ReShade',
+  'gameDetails.luma.component.addon': 'Complemento Luma',
+  'gameDetails.luma.component.addonDesc': 'Recursos do Luma para este jogo',
+  'gameDetails.luma.component.dgvoodoo': 'Wrapper do dgVoodoo2',
+  'gameDetails.luma.component.dgvoodooDesc': 'Ponte D3D9 gerenciada, versão {version}',
+  // ── Game details: Luma launch arguments ──
+  'gameDetails.luma.launchArgs.instructions.steam':
+    'Se você iniciar o jogo pelo Steam, adicione-os lá: clique com o botão direito no jogo → Propriedades → Geral → Opções de inicialização.',
+  'gameDetails.luma.launchArgs.instructions.gog':
+    'Se você iniciar o jogo pelo GOG Galaxy, adicione-os lá: configurações do jogo → Gerenciar instalação → Configurar.',
+  'gameDetails.luma.launchArgs.instructions.epic':
+    'Se você iniciar o jogo pelo Epic Games Launcher, adicione-os lá: clique com o botão direito no jogo → Gerenciar → Argumentos adicionais da linha de comando.',
+  'gameDetails.luma.launchArgs.instructions.ea':
+    'Se você iniciar o jogo pelo EA app, adicione-os lá: selecione o jogo → Gerenciar → Ver propriedades → Opções avançadas de inicialização.',
+  'gameDetails.luma.launchArgs.instructions.ubisoft':
+    'Se você iniciar o jogo pelo Ubisoft Connect, adicione-os lá: selecione o jogo → Propriedades → Adicionar argumentos de inicialização.',
+  'gameDetails.luma.launchArgs.instructions.other':
+    'Use o método que realmente inicia o jogo. Adicione os argumentos ao inicializador, ao destino do atalho, ao arquivo em lotes ou a outro carregador.',
+  'gameDetails.luma.launchArgs.title': 'Argumentos de inicialização necessários',
+  'gameDetails.luma.launchArgs.dx11Title': 'Este perfil Luma exige DirectX 11',
+  'gameDetails.luma.launchArgs.copyStep': 'Copie os argumentos de inicialização necessários:',
+  'gameDetails.luma.launchArgs.copy': 'Copiar argumentos',
+  'gameDetails.luma.launchArgs.copied': 'Copiado',
+  'gameDetails.luma.launchArgs.copyFailed':
+    'Não foi possível copiar os argumentos de inicialização',
+  // ── Game details: Luma attribution ──
+  'gameDetails.luma.attribution': 'Luma Framework por Filoppi.',
+  'gameDetails.luma.attributionLink': 'Ver projeto',
+  'gameDetails.luma.guidance.gameSetting': 'Configuração do jogo',
+  'gameDetails.luma.guidance.engineIni': 'Alteração manual do INI',
+  'gameDetails.luma.guidance.launchArgument': 'Argumento de inicialização',
+  'gameDetails.luma.guidance.warning': 'Importante',
+  'gameDetails.luma.guidance.compatibility': 'Nota de compatibilidade',
+  'gameDetails.luma.guidance.externalTool': 'Ferramenta de terceiros',
+  'gameDetails.luma.guidance.copy': 'Copiar',
+  'gameDetails.luma.guidance.copied': 'Copiado',
+  'gameDetails.luma.guidance.copyFailed': 'Não foi possível copiar',
+});

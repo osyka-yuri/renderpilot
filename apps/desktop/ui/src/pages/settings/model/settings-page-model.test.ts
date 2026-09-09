@@ -25,7 +25,7 @@ const optionValidationCases = [
   {
     name: 'language',
     options: languageOptions,
-    validValues: ['system', 'en', 'zh-Hans', 'zh-Hant'],
+    validValues: ['system', 'en', 'pt-BR', 'zh-Hans', 'zh-Hant'],
     invalidValues: ['', 'english', 'zh'],
   },
 ] as const satisfies readonly OptionValidationCase[];
@@ -81,6 +81,7 @@ describe('settings-page-model', () => {
       { value: 'en', labelKey: 'settings.language.en' },
       { value: 'ru', labelKey: 'settings.language.ru' },
       { value: 'es', labelKey: 'settings.language.es' },
+      { value: 'pt-BR', labelKey: 'settings.language.ptBr' },
       { value: 'fr', labelKey: 'settings.language.fr' },
       { value: 'de', labelKey: 'settings.language.de' },
       { value: 'ja', labelKey: 'settings.language.ja' },

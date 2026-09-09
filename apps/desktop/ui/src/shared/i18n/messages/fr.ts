@@ -44,6 +44,7 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'settings.language.fr': 'Français',
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',
+  'settings.language.ptBr': 'Português (Brasil)',
 
   'settings.tabs.general': 'Général',
   'settings.tabs.renodx': 'RenoDX',

@@ -7,6 +7,7 @@ import { es } from './es';
 import { fr } from './fr';
 import { ja } from './ja';
 import { PLURAL_CATEGORIES, type MessageDictionary, type MessageValue } from './model';
+import { ptBr } from './pt-BR';
 import { ru } from './ru';
 import { analyzeMessageTemplate } from './runtime';
 import { zhHans } from './zh-Hans';
@@ -15,6 +16,7 @@ import { zhHant } from './zh-Hant';
 const localizedCatalogs = {
   ru,
   es,
+  'pt-BR': ptBr,
   fr,
   de,
   ja,
