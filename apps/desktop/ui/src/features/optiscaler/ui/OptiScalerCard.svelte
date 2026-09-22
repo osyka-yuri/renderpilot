@@ -57,7 +57,7 @@
   const compatibilityStatusKeys = {
     working: 'gameDetails.optiscaler.compatibilityVerified',
     conditional: 'gameDetails.optiscaler.compatibilityConditional',
-    unknown: 'gameDetails.optiscaler.compatibilityUnknown',
+    untested: 'gameDetails.optiscaler.compatibilityUntested',
     unsupported: 'gameDetails.optiscaler.compatibilityUnsupported',
   } as const satisfies Record<OptiScalerCompatibilityStatus, MessageKeyWithoutParams>;
 

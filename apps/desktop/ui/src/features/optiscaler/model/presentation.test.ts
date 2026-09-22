@@ -146,7 +146,7 @@ describe('OptiScaler presentation transitions', () => {
   it('projects catalog compatibility status onto addon badge tone', () => {
     expect(optiscalerCompatibilityBadgeTone('working')).toBe('verified');
     expect(optiscalerCompatibilityBadgeTone('conditional')).toBe('experimental');
-    expect(optiscalerCompatibilityBadgeTone('unknown')).toBe('untested');
+    expect(optiscalerCompatibilityBadgeTone('untested')).toBe('untested');
     expect(optiscalerCompatibilityBadgeTone('unsupported')).toBe('unsupported');
   });
 

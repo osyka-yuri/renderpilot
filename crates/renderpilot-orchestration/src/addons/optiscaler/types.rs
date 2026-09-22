@@ -260,7 +260,7 @@ pub enum OptiScalerCompatibilityStatus {
     /// The exact game is listed but has a prerequisite or condition.
     Conditional,
     /// No exact catalogue entry exists; detected files remain real evidence.
-    Unknown,
+    Untested,
     /// The exact game is marked unsupported.
     Unsupported,
 }

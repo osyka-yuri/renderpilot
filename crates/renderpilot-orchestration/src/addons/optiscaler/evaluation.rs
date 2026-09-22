@@ -163,7 +163,7 @@ mod tests {
             detected_apis: Vec::new(),
             accepted_prerequisite_binding: OptiScalerPrerequisiteBinding::None,
             compatibility: OptiScalerCompatibility {
-                status: OptiScalerCompatibilityStatus::Unknown,
+                status: OptiScalerCompatibilityStatus::Untested,
                 declared_inputs: Vec::new(),
                 launch: None,
                 guidance: Vec::new(),

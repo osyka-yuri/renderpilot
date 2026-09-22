@@ -181,7 +181,7 @@ export function optiscalerCompatibilityBadgeTone(
       return 'verified';
     case 'conditional':
       return 'experimental';
-    case 'unknown':
+    case 'untested':
       return 'untested';
     case 'unsupported':
       return 'unsupported';

@@ -19,7 +19,7 @@ export function buildOptiScalerAvailability(
     relocation: null,
     proxy_conflict: null,
     compatibility: {
-      status: 'unknown',
+      status: 'untested',
       declared_inputs: [],
       launch: null,
       guidance: [],

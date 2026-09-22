@@ -818,6 +818,9 @@ export const en = defineSourceCatalog({
   'gameDetails.renodx.unavailable': 'RenoDX is unavailable right now.',
   // ── Game details: RenoDX generic (engine-fallback) labels ──
   'gameDetails.renodx.generic.profileTooltip': 'A shared engine profile is being used.',
+  'gameDetails.renodx.generic.profileUeExtended': 'Unreal Engine Extended',
+  'gameDetails.renodx.generic.profileUnity': 'Unity',
+  'gameDetails.renodx.generic.profileUnrealLegacy': 'Unreal Engine (Legacy)',
   'renodx.phase.finalizing': 'Finalizing…',
   'luma.phase.finalizing': 'Finalizing…',
   'optiscaler.phase.verifying': 'Verifying…',
@@ -1078,7 +1081,7 @@ export const en = defineSourceCatalog({
   'gameDetails.optiscaler.compatibilityLabel': 'Compatibility',
   'gameDetails.optiscaler.compatibilityVerified': 'Confirmed',
   'gameDetails.optiscaler.compatibilityConditional': 'Conditional',
-  'gameDetails.optiscaler.compatibilityUnknown': 'Unknown',
+  'gameDetails.optiscaler.compatibilityUntested': 'Unverified',
   'gameDetails.optiscaler.compatibilityUnavailable': 'Unavailable',
   'gameDetails.optiscaler.compatibilityUnsupported': 'Unsupported',
   'gameDetails.optiscaler.versionLabel': 'Version',

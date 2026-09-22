@@ -50,7 +50,7 @@ pub(super) fn evaluate<'a>(
         identity_conflict,
     ) = match resolved {
         ResolvedCompatibility::NoMatch => (
-            OptiScalerCompatibilityStatus::Unknown,
+            OptiScalerCompatibilityStatus::Untested,
             Vec::new(),
             Vec::new(),
             None,
@@ -59,7 +59,7 @@ pub(super) fn evaluate<'a>(
             false,
         ),
         ResolvedCompatibility::Conflict => (
-            OptiScalerCompatibilityStatus::Unknown,
+            OptiScalerCompatibilityStatus::Untested,
             Vec::new(),
             Vec::new(),
             None,
@@ -108,7 +108,7 @@ pub(super) fn evaluate<'a>(
             Some("the compatibility catalogue marks this game unsupported".to_owned()),
         )
     } else if mode == EvaluationMode::Candidate
-        && status == OptiScalerCompatibilityStatus::Unknown
+        && status == OptiScalerCompatibilityStatus::Untested
         && !candidate_has_evidence
     {
         (
@@ -564,7 +564,7 @@ mod tests {
             EvaluationMode::Candidate,
         );
 
-        assert_eq!(evaluation.status, OptiScalerCompatibilityStatus::Unknown);
+        assert_eq!(evaluation.status, OptiScalerCompatibilityStatus::Untested);
         assert_eq!(evaluation.block_code, None);
         assert_eq!(evaluation.blocked_reason, None);
     }
@@ -582,7 +582,7 @@ mod tests {
             EvaluationMode::Candidate,
         );
 
-        assert_eq!(evaluation.status, OptiScalerCompatibilityStatus::Unknown);
+        assert_eq!(evaluation.status, OptiScalerCompatibilityStatus::Untested);
         assert!(!crate::addons::optiscaler::matcher::capability_available(
             &catalog,
             &facts,
@@ -614,7 +614,7 @@ mod tests {
             true,
             EvaluationMode::Candidate,
         );
-        assert_eq!(evaluation.status, OptiScalerCompatibilityStatus::Unknown);
+        assert_eq!(evaluation.status, OptiScalerCompatibilityStatus::Untested);
         assert_eq!(evaluation.block_code, None);
         assert_eq!(evaluation.blocked_reason, None);
 

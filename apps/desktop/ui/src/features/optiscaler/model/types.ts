@@ -23,7 +23,7 @@ export type OptiScalerModuleAvailability = {
   description: string;
 };
 
-export type OptiScalerCompatibilityStatus = 'working' | 'conditional' | 'unknown' | 'unsupported';
+export type OptiScalerCompatibilityStatus = 'working' | 'conditional' | 'untested' | 'unsupported';
 
 export type OptiScalerCompatibilityGuidanceKind = 'warning' | 'compatibility' | 'game_setting';
 

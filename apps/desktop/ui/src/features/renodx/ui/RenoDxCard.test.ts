@@ -183,6 +183,99 @@ describe('RenoDxCard', () => {
     expect(target.textContent).toContain('Confirmed');
   });
 
+  it('displays clean profile badge and unverified confidence for a generic profile', async () => {
+    const store = createRenoDxStore({
+      api: fakeApi({
+        getAvailability: vi.fn(() =>
+          Promise.resolve(
+            availability({
+              state: { status: 'not_installed' },
+              outcome: {
+                kind: 'installable',
+                confidence: 'untested',
+                generic_profile: {
+                  engine: 'unreal',
+                  profile_id: 'ue_extended',
+                  message: {
+                    id: 'renodx.generic.ue_extended',
+                    fallback_text: 'Uses the shared Unreal Engine Extended profile.',
+                  },
+                },
+                profile_id: 'ue_extended',
+                host_kind: 'proxy',
+                guidance: [],
+                launch: null,
+              },
+              manual_install: null,
+            }),
+          ),
+        ),
+      }),
+    });
+    await store.load('renodx-game');
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'renodx-game',
+        store,
+        onOpenRenoDxSettings: vi.fn(),
+      },
+    });
+    flushSync();
+
+    expect(target.textContent).toContain('Compatibility');
+    expect(target.textContent).toContain('Unverified');
+    expect(target.textContent).toContain('Unreal Engine Extended');
+  });
+
+  it('falls back to engine name when generic profile_id is unmapped or unknown', async () => {
+    const store = createRenoDxStore({
+      api: fakeApi({
+        getAvailability: vi.fn(() =>
+          Promise.resolve(
+            availability({
+              state: { status: 'not_installed' },
+              outcome: {
+                kind: 'installable',
+                confidence: 'untested',
+                generic_profile: {
+                  engine: 'unreal',
+                  profile_id: 'ue_future_unknown_v9',
+                  message: {
+                    id: 'renodx.generic.custom',
+                    fallback_text: 'Uses a custom engine profile.',
+                  },
+                },
+                profile_id: 'ue_future_unknown_v9',
+                host_kind: 'proxy',
+                guidance: [],
+                launch: null,
+              },
+              manual_install: null,
+            }),
+          ),
+        ),
+      }),
+    });
+    await store.load('renodx-game');
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'renodx-game',
+        store,
+        onOpenRenoDxSettings: vi.fn(),
+      },
+    });
+    flushSync();
+
+    expect(target.textContent).toContain('Compatibility');
+    expect(target.textContent).toContain('Unverified');
+    expect(target.textContent).toContain('Unreal Engine');
+    expect(target.textContent).not.toContain('ue_future_unknown_v9');
+  });
+
   it('renders disabled install button and attribution when blocked by another addon', async () => {
     const store = createRenoDxStore({
       api: fakeApi({

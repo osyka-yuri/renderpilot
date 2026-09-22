@@ -37,7 +37,7 @@ function report(overrides: Partial<OptiScalerAvailability> = {}): OptiScalerAvai
     game_id: gameId,
     selected_release: 'v0.9.3',
     compatibility: {
-      status: 'unknown',
+      status: 'untested',
       declared_inputs: ['dlss2_plus'],
       launch: null,
       guidance: [],
@@ -197,7 +197,7 @@ describe('OptiScalerCard', () => {
     });
     await render(blocked);
 
-    expect(target.textContent).toContain('Unknown');
+    expect(target.textContent).toContain('Unverified');
     expect(target.textContent).toContain('v0.9.3');
     expect(findButton('Install', target)?.disabled).toBe(true);
     expect(document.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
@@ -209,7 +209,7 @@ describe('OptiScalerCard', () => {
         install: { installed: false, release: null },
         eligibility: { available: true, block_code: null },
         compatibility: {
-          status: 'unknown',
+          status: 'untested',
           declared_inputs: ['fsr2_plus'],
           launch: null,
           guidance: [],
