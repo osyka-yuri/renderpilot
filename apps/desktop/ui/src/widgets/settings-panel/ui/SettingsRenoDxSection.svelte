@@ -3,9 +3,10 @@
   import AlertTriangleIcon from '@lucide/svelte/icons/alert-triangle';
   import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import DownloadIcon from '@lucide/svelte/icons/download';
-  import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import WrenchIcon from '@lucide/svelte/icons/wrench';
+  import { cn } from '@shared/classnames';
 
   import { AddonComponentRow, AddonFieldLabel, AddonToolStatusBadge } from '@entities/addon';
   import type { ReshadeChannel } from '@entities/addon';
@@ -229,15 +230,24 @@
         <DownloadProgressBar ids={[VULKAN_LAYER_PROGRESS_ID]} active={store.busy} />
 
         {#if showCheckUpdates}
-          <Button variant="outline" size="sm" disabled={controlsDisabled} onclick={loadLayer}>
-            {#if store.loading}
-              <Spinner class="size-4" />
-              {t('gameDetails.renodx.fresh.checking')}
-            {:else}
-              <RotateCwIcon class="size-4" aria-hidden="true" />
-              {t('gameDetails.renodx.actionCheckUpdates')}
-            {/if}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={controlsDisabled}
+            aria-busy={store.loading}
+            onclick={loadLayer}
+          >
+            <RefreshCwIcon
+              class={cn('size-4', store.loading && 'animate-spin')}
+              aria-hidden="true"
+            />
+            {t('gameDetails.renodx.actionCheckUpdates')}
           </Button>
+          <span class="sr-only" role="status">
+            {#if store.loading}
+              {t('gameDetails.renodx.fresh.checking')}
+            {/if}
+          </span>
         {/if}
 
         {#if visiblePrimaryAction && primaryActionLabel}

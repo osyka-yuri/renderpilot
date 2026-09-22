@@ -1,6 +1,7 @@
 <script lang="ts">
   import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+  import { cn } from '@shared/classnames';
 
   import {
     Button,
@@ -67,14 +68,27 @@
           </ItemDescription>
         </ItemContent>
         <ItemActions>
-          <Button variant="secondary" size="sm" disabled={isDisabled} onclick={onCheckForUpdates}>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={isDisabled}
+            aria-busy={showSpinner}
+            onclick={onCheckForUpdates}
+          >
             {#if updateAction === 'open-update'}
               <CircleArrowUpIcon aria-hidden="true" />
             {:else}
-              <RefreshCwIcon class={showSpinner ? 'animate-spin' : undefined} aria-hidden="true" />
+              <RefreshCwIcon class={cn(showSpinner && 'animate-spin')} aria-hidden="true" />
             {/if}
             {buttonLabel}
           </Button>
+          <span class="sr-only" role="status">
+            {#if showSpinner}
+              {updateAction === 'busy'
+                ? t('settings.about.updateInProgress')
+                : t('settings.about.checkingForUpdates')}
+            {/if}
+          </span>
         </ItemActions>
       </Item>
     </ItemGroup>

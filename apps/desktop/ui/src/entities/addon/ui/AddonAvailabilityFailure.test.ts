@@ -45,12 +45,13 @@ describe('AddonAvailabilityFailure', () => {
     render();
 
     const alert = target.querySelector('[role="alert"]');
-    const retry = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent === 'Retry',
+    const retry = [...target.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent.includes('Retry'),
     );
 
     expect(alert?.textContent).toContain('Could not check');
     expect(retry?.disabled).toBe(false);
+    expect(target.querySelector('[role="status"]')?.textContent.trim()).toBe('');
 
     retry?.click();
 
@@ -60,11 +61,12 @@ describe('AddonAvailabilityFailure', () => {
   it('keeps retry unavailable while another operation is active', () => {
     render({ disabled: true });
 
-    const retry = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent === 'Retry',
+    const retry = [...target.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent.includes('Retry'),
     );
 
     expect(retry?.disabled).toBe(true);
+    expect(target.querySelector('[role="status"]')?.textContent.trim()).toBe('');
     retry?.click();
     expect(onRetry).not.toHaveBeenCalled();
   });
@@ -73,10 +75,12 @@ describe('AddonAvailabilityFailure', () => {
     render({ retrying: true });
 
     const retry = [...target.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-      button.textContent.includes('Checking…'),
+      button.textContent.includes('Retry'),
     );
 
     expect(retry?.disabled).toBe(true);
     expect(retry?.getAttribute('aria-busy')).toBe('true');
+    expect(retry?.querySelector('svg')?.classList.contains('animate-spin')).toBe(true);
+    expect(target.querySelector('[role="status"]')?.textContent.trim()).toBe('Checking…');
   });
 });

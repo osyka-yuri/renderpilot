@@ -45,7 +45,7 @@ describe('RenoDxCard', () => {
     expect(target.textContent).toContain('Could not check');
 
     const retry = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent === 'Retry',
+      (button) => button.textContent.trim() === 'Retry',
     );
     retry?.click();
 

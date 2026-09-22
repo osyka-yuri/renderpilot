@@ -363,4 +363,68 @@ describe('createOptiScalerStore', () => {
     await installing;
     expect(store.state?.installed).toBe(true);
   });
+
+  it('resets checkingUpdates to false when checkUpdate rejects', async () => {
+    let rejectCheck!: (error: Error) => void;
+    const checkPromise = new Promise<never>((_, reject) => {
+      rejectCheck = reject;
+    });
+    const checkUpdateApi = vi.fn(() => checkPromise);
+    const api = fakeApi({ checkUpdate: checkUpdateApi });
+    const store = createOptiScalerStore({ api });
+
+    expect(store.checkingUpdates).toBe(false);
+
+    const checking = store.checkForUpdates('steam:1');
+    expect(store.checkingUpdates).toBe(true);
+    expect(store.busy).toBe(true);
+
+    rejectCheck(new Error('network error'));
+    const result = await checking;
+
+    expect(result).toBe('failed');
+    expect(store.checkingUpdates).toBe(false);
+    expect(store.busy).toBe(false);
+  });
+
+  it('skips concurrent checkForUpdates without resetting an in-flight check', async () => {
+    let resolveCheck!: () => void;
+    const checkPromise = new Promise<{
+      overall: 'current';
+      installed_release: null;
+      available_release: null;
+      update_available: boolean;
+      repair_required: boolean;
+      drifted: boolean;
+    }>((resolve) => {
+      resolveCheck = () => {
+        resolve({
+          overall: 'current',
+          installed_release: null,
+          available_release: null,
+          update_available: false,
+          repair_required: false,
+          drifted: false,
+        });
+      };
+    });
+    const checkUpdateApi = vi.fn(() => checkPromise);
+    const api = fakeApi({ checkUpdate: checkUpdateApi });
+    const store = createOptiScalerStore({ api });
+
+    const first = store.checkForUpdates('steam:1');
+    expect(store.checkingUpdates).toBe(true);
+
+    const second = await store.checkForUpdates('steam:1');
+    expect(second).toBe('skipped');
+    // Ensure in-flight check state is preserved
+    expect(store.checkingUpdates).toBe(true);
+    expect(store.busy).toBe(true);
+
+    resolveCheck();
+    await first;
+
+    expect(store.checkingUpdates).toBe(false);
+    expect(store.busy).toBe(false);
+  });
 });

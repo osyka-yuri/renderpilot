@@ -137,9 +137,56 @@ describe('EngineConfigStatusRow', () => {
 
     const button = target.querySelector<HTMLButtonElement>('[data-slot="item-actions"] button');
     expect(button?.textContent).toContain('Check');
+    expect(button?.querySelector('svg.animate-spin')).toBeNull();
     button?.click();
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(target.querySelector('pre')).toBeNull();
+  });
+
+  it('spins RefreshCwIcon and sets aria-busy only during refreshing', () => {
+    component = mount(EngineConfigStatusRow, {
+      target,
+      props: {
+        availability: {
+          status: 'pending_first_launch',
+          path: null,
+          can_apply: false,
+        },
+        refreshing: true,
+        onRefresh: vi.fn(),
+      },
+    });
+    flushSync();
+
+    const button = target.querySelector<HTMLButtonElement>('[data-slot="item-actions"] button');
+    expect(button?.textContent).toContain('Check');
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute('aria-busy')).toBe('true');
+    expect(button?.querySelector('svg.animate-spin')).not.toBeNull();
+    expect(target.querySelector('[role="status"]')?.textContent.trim()).toBe('Checking…');
+  });
+
+  it('disables check button without spinning icon when busy but not refreshing', () => {
+    component = mount(EngineConfigStatusRow, {
+      target,
+      props: {
+        availability: {
+          status: 'pending_first_launch',
+          path: null,
+          can_apply: false,
+        },
+        busy: true,
+        refreshing: false,
+        onRefresh: vi.fn(),
+      },
+    });
+    flushSync();
+
+    const button = target.querySelector<HTMLButtonElement>('[data-slot="item-actions"] button');
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute('aria-busy')).toBe('false');
+    expect(button?.querySelector('svg.animate-spin')).toBeNull();
+    expect(target.querySelector('[role="status"]')?.textContent.trim()).toBe('');
   });
 
   it('does not add a guidance wrapper when no manual guidance is supplied', () => {

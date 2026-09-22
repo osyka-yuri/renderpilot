@@ -4,8 +4,9 @@
   import CalendarIcon from '@lucide/svelte/icons/calendar';
   import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import ClockIcon from '@lucide/svelte/icons/clock';
-  import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
   import WrenchIcon from '@lucide/svelte/icons/wrench';
+  import { cn } from '@shared/classnames';
   import { formatLocalShortDate, formatRelativeTime, formatUtcShortDate } from '@shared/format';
   import { getLocale, t } from '@shared/i18n';
   import { Badge, Button, ItemGroup, Spinner } from '@shared/ui';
@@ -232,16 +233,20 @@
         variant="outline"
         size="sm"
         disabled={checkUpdatesDisabled}
+        aria-busy={isCheckingForUpdates}
         onclick={handleCheckForUpdates}
       >
-        {#if isCheckingForUpdates}
-          <Spinner class="size-4" />
-          {t(labels.checking)}
-        {:else}
-          <RotateCwIcon class="size-4" aria-hidden="true" />
-          {t(labels.actionCheckUpdates)}
-        {/if}
+        <RefreshCwIcon
+          class={cn('size-4', isCheckingForUpdates && 'animate-spin')}
+          aria-hidden="true"
+        />
+        {t(labels.actionCheckUpdates)}
       </Button>
+      <span class="sr-only" role="status">
+        {#if isCheckingForUpdates}
+          {t(labels.checking)}
+        {/if}
+      </span>
 
       {#if store.updateAvailable}
         <Button

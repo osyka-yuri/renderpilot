@@ -4,6 +4,7 @@
   import FileCode2Icon from '@lucide/svelte/icons/file-code-2';
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
   import WrenchIcon from '@lucide/svelte/icons/wrench';
+  import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
   import {
     Button,
@@ -112,15 +113,17 @@
             variant="outline"
             size="sm"
             disabled={actionBusy}
+            aria-busy={refreshing}
             onclick={onRefresh}
           >
-            {#if actionBusy}
-              {t('gameDetails.engineConfig.action.checking')}
-            {:else}
-              <RefreshCwIcon class="size-4" aria-hidden="true" />
-              {t('gameDetails.engineConfig.action.check')}
-            {/if}
+            <RefreshCwIcon class={cn('size-4', refreshing && 'animate-spin')} aria-hidden="true" />
+            {t('gameDetails.engineConfig.action.check')}
           </Button>
+          <span class="sr-only" role="status">
+            {#if refreshing}
+              {t('gameDetails.engineConfig.action.checking')}
+            {/if}
+          </span>
         {/if}
         {#if canConfigureManually}
           <Button

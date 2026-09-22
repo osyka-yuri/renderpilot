@@ -61,7 +61,7 @@ describe('AddonCardShell', () => {
     expect(target.querySelector('[data-testid="shell-body"]')).toBeNull();
 
     const retry = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent === 'Retry',
+      (button) => button.textContent.trim() === 'Retry',
     );
     retry?.click();
 

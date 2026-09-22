@@ -28,6 +28,7 @@ export function createOptiScalerStore(
   let report = $state<OptiScalerAvailability | null>(null);
   let loading = $state(false);
   let busy = $state(false);
+  let checkingUpdates = $state(false);
   let loadError = $state<string | null>(null);
   let safetyContextError = $state<unknown>(null);
   let requestId = 0;
@@ -42,6 +43,7 @@ export function createOptiScalerStore(
       loadedGameId = gameId;
       report = null;
       safetyContextError = null;
+      checkingUpdates = false;
     }
     const token = ++requestId;
     loading = true;
@@ -147,6 +149,7 @@ export function createOptiScalerStore(
     loadedGameId = null;
     report = null;
     loading = false;
+    checkingUpdates = false;
     loadError = null;
     safetyContextError = null;
   }
@@ -189,6 +192,9 @@ export function createOptiScalerStore(
     get busy() {
       return busy;
     },
+    get checkingUpdates() {
+      return checkingUpdates;
+    },
     get loadError() {
       return loadError;
     },
@@ -206,14 +212,23 @@ export function createOptiScalerStore(
     load,
     retry: load,
     deactivate,
-    checkForUpdates: (gameId: string) =>
-      runMutation({
-        gameId,
-        errorKey: 'gameDetails.optiscaler.updateError',
-        action: () => api.checkUpdate(gameId),
-        reload: true,
-        invalidatePeers: false,
-      }),
+    checkForUpdates: async (gameId: string) => {
+      if (activeMutation !== null) {
+        return 'skipped';
+      }
+      checkingUpdates = true;
+      try {
+        return await runMutation({
+          gameId,
+          errorKey: 'gameDetails.optiscaler.updateError',
+          action: () => api.checkUpdate(gameId),
+          reload: true,
+          invalidatePeers: false,
+        });
+      } finally {
+        checkingUpdates = false;
+      }
+    },
     install,
     update: (gameId: string) =>
       runMutation({

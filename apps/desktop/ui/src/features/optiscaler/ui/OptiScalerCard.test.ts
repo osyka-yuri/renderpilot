@@ -423,4 +423,59 @@ describe('OptiScalerCard', () => {
     expect(findButton('Configure', target)).toBeDefined();
     expect(findButton('Check for updates', target)).toBeDefined();
   });
+
+  it('keeps check for updates label stable, disables button, and spins RefreshCwIcon while checking', async () => {
+    const current = report();
+    const checkDeferred = deferred<{
+      overall: 'current';
+      installed_release: null;
+      available_release: null;
+      update_available: boolean;
+      repair_required: boolean;
+      drifted: boolean;
+    }>();
+    const currentApi = api(current);
+    currentApi.checkUpdate = vi.fn(() => checkDeferred.promise);
+    const store = createOptiScalerStore({ api: currentApi });
+    await store.load(gameId);
+    component = mount(OptiScalerCardTestHost, {
+      target,
+      props: { gameId, store },
+    });
+    flushSync();
+
+    const checkButton = findButton('Check for updates', target);
+    expect(checkButton).toBeDefined();
+    expect(checkButton?.disabled).toBe(false);
+    expect(checkButton?.querySelector('svg.animate-spin')).toBeNull();
+    expect(target.querySelector('[role="status"]')?.textContent.trim()).toBe('');
+
+    checkButton?.click();
+    await vi.waitFor(() => {
+      expect(currentApi.checkUpdate).toHaveBeenCalledOnce();
+      const checking = findButton('Check for updates', target);
+      expect(checking).toBeDefined();
+      expect(checking?.disabled).toBe(true);
+      expect(checking?.getAttribute('aria-busy')).toBe('true');
+      expect(checking?.querySelector('svg.animate-spin')).not.toBeNull();
+      expect(target.querySelector('[role="status"]')?.textContent.trim()).toBe('Checking…');
+    });
+
+    checkDeferred.resolve({
+      overall: 'current',
+      installed_release: null,
+      available_release: null,
+      update_available: false,
+      repair_required: false,
+      drifted: false,
+    });
+    await vi.waitFor(() => {
+      expect(store.checkingUpdates).toBe(false);
+      const finished = findButton('Check for updates', target);
+      expect(finished?.disabled).toBe(false);
+      expect(finished?.getAttribute('aria-busy')).toBe('false');
+      expect(finished?.querySelector('svg.animate-spin')).toBeNull();
+      expect(target.querySelector('[role="status"]')?.textContent.trim()).toBe('');
+    });
+  });
 });

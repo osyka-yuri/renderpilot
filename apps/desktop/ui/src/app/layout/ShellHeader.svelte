@@ -3,6 +3,7 @@
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
   import type { ScreenHandler } from '@app/navigation/screen';
   import type { ShellNavigation } from '@app/navigation/shell-navigation';
+  import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
   import {
     Breadcrumb,
@@ -95,10 +96,16 @@
       variant="outline"
       size="icon"
       disabled={busy}
+      aria-busy={refreshing}
       onclick={onRefresh}
       aria-label={t('shell.refresh')}
     >
-      <RefreshCwIcon class={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
+      <RefreshCwIcon class={cn(refreshing && 'animate-spin')} aria-hidden="true" />
     </Button>
+    <span class="sr-only" role="status">
+      {#if refreshing}
+        {t('shell.refreshing')}
+      {/if}
+    </span>
   </div>
 </header>

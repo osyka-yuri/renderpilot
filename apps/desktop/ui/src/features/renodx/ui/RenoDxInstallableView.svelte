@@ -59,7 +59,7 @@
     if (key) {
       return t(key);
     }
-    return GENERIC_ENGINE_FALLBACK[genericProfile.engine] ?? null;
+    return GENERIC_ENGINE_FALLBACK[genericProfile.engine];
   });
 
   const genericProfileTooltip = $derived.by((): string => {

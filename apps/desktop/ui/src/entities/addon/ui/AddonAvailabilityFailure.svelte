@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { t } from '@shared/i18n';
-  import { Alert, AlertDescription, Button, Spinner } from '@shared/ui';
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
+  import { cn } from '@shared/classnames';
+  import { t } from '@shared/i18n';
+  import { Alert, AlertDescription, Button } from '@shared/ui';
 
   type Props = {
     /** Disables retry while another add-on operation is in progress. */
@@ -26,12 +28,13 @@
       aria-busy={retrying}
       onclick={onRetry}
     >
-      {#if retrying}
-        <Spinner class="size-4" />
-        {t('addon.availability.checking')}
-      {:else}
-        {t('addon.availability.retry')}
-      {/if}
+      <RefreshCwIcon class={cn('size-4', retrying && 'animate-spin')} aria-hidden="true" />
+      {t('addon.availability.retry')}
     </Button>
+    <span class="sr-only" role="status">
+      {#if retrying}
+        {t('addon.availability.checking')}
+      {/if}
+    </span>
   </AlertDescription>
 </Alert>

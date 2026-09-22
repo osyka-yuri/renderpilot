@@ -4,6 +4,7 @@
   import Settings2Icon from '@lucide/svelte/icons/settings-2';
   import WrenchIcon from '@lucide/svelte/icons/wrench';
   import { untrack } from 'svelte';
+  import { cn } from '@shared/classnames';
 
   import {
     AddonAttribution,
@@ -314,13 +315,22 @@
                 variant="outline"
                 size="sm"
                 disabled={combinedBusy}
+                aria-busy={store.checkingUpdates}
                 onclick={() => {
                   void store.checkForUpdates(gameId);
                 }}
               >
-                <RefreshCwIcon class="size-4" aria-hidden="true" />
+                <RefreshCwIcon
+                  class={cn('size-4', store.checkingUpdates && 'animate-spin')}
+                  aria-hidden="true"
+                />
                 {t('gameDetails.optiscaler.checkUpdates')}
               </Button>
+              <span class="sr-only" role="status">
+                {#if store.checkingUpdates}
+                  {t('addon.availability.checking')}
+                {/if}
+              </span>
             {/if}
 
             <AddonUninstallAction
