@@ -265,6 +265,25 @@ describe('createAddonStore', () => {
     expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
   });
 
+  it('safely discards local readiness when deactivated during availability load', async () => {
+    const pending = Promise.withResolvers<TestAvailabilityReport>();
+    const api = fakeApi({
+      getAvailability: vi.fn(() => pending.promise),
+    });
+    const { store } = createTestStore(api);
+
+    const loading = store.load('game1');
+    const token = store.requestToken;
+    const localReady = store.whenLocalReady(token);
+
+    store.deactivate();
+
+    expect(await localReady).toBe(false);
+
+    pending.resolve(INSTALLED_AVAILABILITY);
+    await expect(loading).resolves.toBeUndefined();
+  });
+
   it('normalizes navigation game ids before resetting tool state and issuing I/O', async () => {
     const api = fakeApi();
     const { store, resetToolState } = createTestStore(api);

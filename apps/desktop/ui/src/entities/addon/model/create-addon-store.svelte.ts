@@ -140,6 +140,11 @@ export function createAddonStore<
   let core = $state.raw(createInitialAddonCoreSnapshot<TState, TUpdateReport>());
   let safetyContextError = $state.raw<unknown>(null);
   let loadedGameId: string | null = null;
+  let localReadyResolvers: {
+    token: number;
+    promise: Promise<boolean>;
+    resolve: (ok: boolean) => void;
+  } | null = null;
 
   const isInstalled = $derived(core.state?.status === 'installed');
   const updateAvailable = $derived(
@@ -165,6 +170,22 @@ export function createAddonStore<
     return token === core.requestId;
   }
 
+  function resolveLocalReady(token: number, ready: boolean): void {
+    if (localReadyResolvers?.token === token) {
+      localReadyResolvers.resolve(ready);
+    }
+  }
+
+  function whenLocalReady(token: number): Promise<boolean> {
+    if (token !== core.requestId) {
+      return Promise.resolve(false);
+    }
+    if (localReadyResolvers?.token === token) {
+      return localReadyResolvers.promise;
+    }
+    return Promise.resolve(core.loaded && !core.loadError);
+  }
+
   function notifyExclusivityChange(gameId: string): void {
     onExclusivityChange?.(gameId);
   }
@@ -181,6 +202,15 @@ export function createAddonStore<
     const retainChrome = preserveLoadError || isRefresh;
     const { next, token } = withLoadBegin(core, preserveLoadError, retainChrome);
     core = next;
+    if (localReadyResolvers) {
+      localReadyResolvers.resolve(false);
+    }
+    const localResolvers = Promise.withResolvers<boolean>();
+    localReadyResolvers = {
+      token,
+      promise: localResolvers.promise,
+      resolve: localResolvers.resolve,
+    };
     // Navigation loads clear tool chrome so outcome flags from the previous game
     // cannot drive the card while the new game's availability is in flight.
     if (!retainChrome) {
@@ -190,12 +220,15 @@ export function createAddonStore<
     try {
       const report = await api.getAvailability(normalizedGameId);
       if (token !== core.requestId) {
+        resolveLocalReady(token, false);
         return;
       }
       core = withLoadSuccess(core, report.state);
       applyLoadReport(report);
       succeeded = true;
+      resolveLocalReady(token, true);
     } catch (error) {
+      resolveLocalReady(token, false);
       if (token !== core.requestId) {
         return;
       }
@@ -222,6 +255,10 @@ export function createAddonStore<
 
   /** Invalidates pending work and clears core state without issuing I/O. */
   function deactivate(): void {
+    if (localReadyResolvers) {
+      localReadyResolvers.resolve(false);
+      localReadyResolvers = null;
+    }
     core = withDeactivation(core);
     resetToolState?.(null);
     loadedGameId = null;
@@ -433,6 +470,7 @@ export function createAddonStore<
     retry,
     checkForUpdates,
     isCurrentRequest,
+    whenLocalReady,
     runBusyMutation,
     runSidecarMutation,
     notifyExclusivityChange,

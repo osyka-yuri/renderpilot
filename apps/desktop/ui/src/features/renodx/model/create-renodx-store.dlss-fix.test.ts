@@ -123,6 +123,88 @@ describe('createRenoDxStore', () => {
     expect(store.dlssFix).toEqual({ kind: 'hidden' });
   });
 
+  it('preserves DLSS-Fix availability while checking for updates', async () => {
+    const checkDeferred = Promise.withResolvers<RenoDxUpdateReport>();
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+      checkUpdate: vi
+        .fn()
+        .mockResolvedValueOnce({
+          addon: 'current',
+          host: 'current',
+          dlssFix: null,
+          overall: 'current',
+        })
+        .mockImplementationOnce(() => checkDeferred.promise),
+      dlssFixAvailability: vi
+        .fn()
+        .mockResolvedValueOnce(DLSS_FIX_INSTALLABLE)
+        .mockResolvedValueOnce(DLSS_FIX_MANAGED),
+    });
+    const store = createRenoDxStore({ api });
+
+    await store.load('steam:1091500');
+    expect(store.dlssFix).toMatchObject({
+      kind: 'component',
+      primaryAction: { kind: 'install' },
+    });
+
+    const checkPromise = store.checkForUpdates('steam:1091500');
+    // Preserve the last known availability while the refresh is in flight.
+    expect(store.dlssFix).toMatchObject({
+      kind: 'component',
+      primaryAction: { kind: 'install' },
+    });
+
+    checkDeferred.resolve({
+      addon: 'current',
+      host: 'current',
+      dlssFix: null,
+      overall: 'current',
+    });
+    await checkPromise;
+
+    expect(api.dlssFixAvailability).toHaveBeenCalledTimes(2);
+    expect(store.dlssFix).toMatchObject({
+      kind: 'component',
+      primaryAction: null,
+      canRemove: true,
+    });
+  });
+
+  it('makes DLSS-Fix available immediately without waiting for background update check', async () => {
+    let loadSettled = false;
+    const checkDeferred = Promise.withResolvers<RenoDxUpdateReport>();
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+      checkUpdate: vi.fn(() => checkDeferred.promise),
+      dlssFixAvailability: vi.fn(() => Promise.resolve(DLSS_FIX_INSTALLABLE)),
+    });
+    const store = createRenoDxStore({ api });
+
+    const loadPromise = store.load('steam:1091500').then(() => {
+      loadSettled = true;
+    });
+
+    await vi.waitFor(() => {
+      expect(store.dlssFix).toMatchObject({
+        kind: 'component',
+        primaryAction: { kind: 'install' },
+      });
+    });
+
+    expect(loadSettled).toBe(false);
+
+    checkDeferred.resolve({
+      addon: 'current',
+      host: 'current',
+      dlssFix: null,
+      overall: 'current',
+    });
+    await loadPromise;
+    expect(loadSettled).toBe(true);
+  });
+
   it('does not apply a stale DLSS-Fix probe after a newer core request', async () => {
     const staleProbe = Promise.withResolvers<DlssFixAvailability>();
     const api = fakeApi({

@@ -18,6 +18,7 @@ type RenoDxCore = Pick<
   | 'requestToken'
   | 'loadError'
   | 'isCurrentRequest'
+  | 'whenLocalReady'
 >;
 
 export type RenoDxCompanionStoreOptions = {
@@ -59,20 +60,22 @@ export function createRenoDxCompanionStore(options: RenoDxCompanionStoreOptions)
     clear();
     const loading = core.load(gameId);
     const token = core.requestToken;
-    await loading;
-    if (core.isCurrentRequest(token) && !core.loadError) {
+    const localReady = await core.whenLocalReady(token);
+    if (localReady && core.isCurrentRequest(token)) {
       await probeDlssFixAvailability(gameId, token);
     }
+    await loading;
   }
 
   async function retry(gameId: string): Promise<void> {
     clear();
     const loading = core.retry(gameId);
     const token = core.requestToken;
-    await loading;
-    if (core.isCurrentRequest(token) && !core.loadError) {
+    const localReady = await core.whenLocalReady(token);
+    if (localReady && core.isCurrentRequest(token)) {
       await probeDlssFixAvailability(gameId, token);
     }
+    await loading;
   }
 
   async function refreshAvailability(gameId: string): Promise<void> {
@@ -80,7 +83,6 @@ export function createRenoDxCompanionStore(options: RenoDxCompanionStoreOptions)
   }
 
   async function checkForUpdates(gameId: string): Promise<void> {
-    clear();
     const checking = core.checkForUpdates(gameId);
     const token = core.requestToken;
     await checking;
