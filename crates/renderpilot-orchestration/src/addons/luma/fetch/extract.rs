@@ -106,7 +106,7 @@ pub(super) fn extract_luma_payload(
         }
         let relative = entry.name().replace('\\', "/");
         let Some(classification) = classify_entry(&relative) else {
-            log::debug!("Luma fetch: skipping entry `{relative}`");
+            tracing::debug!("Luma fetch: skipping entry `{relative}`");
             continue;
         };
 
@@ -162,7 +162,7 @@ pub(super) fn extract_luma_payload(
         let key = relative.to_ascii_lowercase();
         if let Some(&existing_index) = seen.get(&key) {
             if files[existing_index].bytes == buf {
-                log::debug!(
+                tracing::debug!(
                     "Luma fetch: duplicate case-collision entry `{relative}` (identical bytes, skipped)"
                 );
                 continue;

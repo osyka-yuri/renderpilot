@@ -254,7 +254,7 @@ pub(super) fn write_new_no_clobber(path: &Path, bytes: &[u8]) -> Result<(), Serv
                 Ok(()) => crate::fs::sync_directory_best_effort(parent),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                 Err(error) => {
-                    log::warn!(
+                    tracing::warn!(
                         "failed to remove unchanged v2 empty reservation {}: {error}",
                         path.display()
                     );
@@ -265,7 +265,7 @@ pub(super) fn write_new_no_clobber(path: &Path, bytes: &[u8]) -> Result<(), Serv
             Ok(()) => crate::fs::sync_directory_best_effort(parent),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => {
-                log::warn!(
+                tracing::warn!(
                     "failed to remove staged v2 file {}: {error}",
                     staged.display()
                 );

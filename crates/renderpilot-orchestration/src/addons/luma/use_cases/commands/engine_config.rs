@@ -76,7 +76,7 @@ pub(crate) async fn reconcile_after_commit(
     }
     .await;
     if let Err(error) = result {
-        log::warn!("Luma Engine.ini reconcile failed after committed lifecycle: {error}");
+        tracing::warn!("Luma Engine.ini reconcile failed after committed lifecycle: {error}");
     }
     Ok(())
 }

@@ -136,7 +136,7 @@ pub(crate) fn create_sidecar(live: &Path, sidecar: &Path) -> Result<(), ServiceE
     } else if let Err(error) = fs::remove_file(sidecar)
         && error.kind() != io::ErrorKind::NotFound
     {
-        log::warn!(
+        tracing::warn!(
             "failed to remove partial sidecar {}: {error}",
             sidecar.display()
         );

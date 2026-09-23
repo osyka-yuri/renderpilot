@@ -98,7 +98,7 @@ pub fn try_gc_orphan_cover_files_startup(context: &crate::Context) -> Result<(),
 /// Removes orphan cover files from disk at application startup, best-effort.
 pub fn gc_orphan_cover_files_startup(context: &crate::Context) {
     if let Err(error) = try_gc_orphan_cover_files_startup(context) {
-        log::warn!("startup cover orphan cleanup failed: {error}");
+        tracing::warn!("startup cover orphan cleanup failed: {error}");
     }
 }
 
@@ -170,7 +170,7 @@ pub fn clear_game_cover_with_observation(
 pub fn clear_game_cover(context: &crate::Context, game_id: &GameId) -> Result<(), ServiceError> {
     let observation = clear_game_cover_with_observation(context, game_id)?;
     if let Some(error) = observation.cleanup_issue {
-        log::warn!("cover was cleared but orphan cleanup failed: {error}");
+        tracing::warn!("cover was cleared but orphan cleanup failed: {error}");
     }
     Ok(())
 }

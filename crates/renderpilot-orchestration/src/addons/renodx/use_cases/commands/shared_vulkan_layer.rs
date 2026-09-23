@@ -276,7 +276,7 @@ fn remove_empty_layer_dir_best_effort(path: &Path) {
             std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
         )
     {
-        log::debug!(
+        tracing::debug!(
             "shared Vulkan layer directory cleanup skipped for `{}`: {error}",
             path.display()
         );

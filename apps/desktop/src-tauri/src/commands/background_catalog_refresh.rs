@@ -308,7 +308,12 @@ impl CatalogRefreshEventSink for TauriCatalogRefreshEventSink<'_> {
 
 fn publish_catalog_refresh(outcome: CatalogRefreshOutcome, sink: &impl CatalogRefreshEventSink) {
     for issue in outcome.issues {
-        log::warn!("background {} issue: {}", issue.phase, issue.message);
+        tracing::warn!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
+            "background {} issue: {}",
+            issue.phase,
+            issue.message
+        );
         backend_diagnostics::record(BackendDiagnosticEvent::catalog_issue(
             issue.phase.diagnostic_phase(),
         ));
@@ -316,13 +321,21 @@ fn publish_catalog_refresh(outcome: CatalogRefreshOutcome, sink: &impl CatalogRe
     if let Some(delta) = outcome.delta
         && let Err(error) = sink.emit_delta(delta)
     {
-        log::warn!("failed to publish catalog delta: {error}");
+        tracing::warn!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
+            "failed to publish catalog delta: {}",
+            error
+        );
         backend_diagnostics::record(BackendDiagnosticEvent::event_publication_failure(
             EventPublicationOperation::CatalogDelta,
         ));
     }
     if let Err(error) = sink.emit_ready() {
-        log::warn!("failed to publish catalog sync state: {error}");
+        tracing::warn!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
+            "failed to publish catalog sync state: {}",
+            error
+        );
         backend_diagnostics::record(BackendDiagnosticEvent::event_publication_failure(
             EventPublicationOperation::CatalogSyncState,
         ));
@@ -397,7 +410,11 @@ pub(super) async fn start(context: Arc<Context>, app: tauri::AppHandle) -> Backg
     .await;
 
     if let Some(error) = execution.cover_gc_error {
-        log::warn!("background cover GC failed: {error}");
+        tracing::warn!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
+            "background cover GC failed: {}",
+            error
+        );
         backend_diagnostics::record(BackendDiagnosticEvent::cover_gc_failure(
             CoverGcOperation::StartupCoverGc,
         ));

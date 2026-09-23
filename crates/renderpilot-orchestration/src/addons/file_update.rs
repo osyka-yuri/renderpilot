@@ -118,7 +118,7 @@ pub(crate) fn restore_originals(originals: &[OriginalFile]) -> Result<(), Servic
 pub(crate) fn restore_originals_best_effort(originals: &[OriginalFile]) {
     let failures = restore_originals_inner(originals);
     if failures > 0 {
-        log::warn!("addon update rollback failed to restore {failures} file(s)");
+        tracing::warn!("addon update rollback failed to restore {failures} file(s)");
     }
 }
 
@@ -130,7 +130,7 @@ fn restore_originals_inner(originals: &[OriginalFile]) -> usize {
             None => crate::fs::remove_file_if_exists(&original.path),
         };
         if let Err(error) = result {
-            log::warn!(
+            tracing::warn!(
                 "addon update rollback: failed to restore `{}`: {error}",
                 original.path.display()
             );

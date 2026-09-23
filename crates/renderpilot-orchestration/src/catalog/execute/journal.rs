@@ -113,7 +113,7 @@ pub(crate) fn record_operation_journal_entry(
     } = params;
 
     let Ok(op_id) = renderpilot_domain::OperationId::new(ulid::Ulid::generate().to_string()) else {
-        log::warn!("Failed to generate operation id for journal");
+        tracing::warn!("Failed to generate operation id for journal");
         return;
     };
     let timestamp = UnixTimestampMillis::now().unwrap_or(UnixTimestampMillis::EPOCH);
@@ -127,7 +127,7 @@ pub(crate) fn record_operation_journal_entry(
     ) {
         Ok(metadata) => metadata,
         Err(error) => {
-            log::warn!("Failed to build operation journal metadata: {error}");
+            tracing::warn!("Failed to build operation journal metadata: {error}");
             return;
         }
     };
@@ -145,7 +145,7 @@ pub(crate) fn record_operation_journal_entry(
     let item_records = match build_item_records(&op_id, component_id, items) {
         Ok(items) => items,
         Err(error) => {
-            log::warn!("Failed to build operation journal items: {error}");
+            tracing::warn!("Failed to build operation journal items: {error}");
             return;
         }
     };
@@ -153,7 +153,7 @@ pub(crate) fn record_operation_journal_entry(
     if let Ok(entry) = OperationJournalEntry::try_new(operation_record, item_records)
         && let Err(e) = OperationRepository::save_operation_entry(storage, &entry)
     {
-        log::warn!("Failed to save operation journal entry: {e}");
+        tracing::warn!("Failed to save operation journal entry: {e}");
     }
 }
 

@@ -54,7 +54,7 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
     };
 
     if let Err(error) = crate::catalog::refresh_game_components(context, game_id).await {
-        log::warn!("failed to refresh game components after Luma install: {error}");
+        tracing::warn!("failed to refresh game components after Luma install: {error}");
     }
     engine_config::reconcile_after_commit(context, manifest, game_id, safety).await?;
 

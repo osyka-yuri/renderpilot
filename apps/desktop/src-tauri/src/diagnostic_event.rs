@@ -1,12 +1,10 @@
-//! Closed backend events admitted to the portable App diagnostic transcript.
+//! Closed backend events admitted to installed and portable App diagnostics.
 //!
-//! None of these variants accepts error prose, paths, identifiers supplied by
-//! a caller, or formatting arguments. Console logging remains the sole owner
-//! of operational detail.
+//! Command failures retain only allowlisted reason codes and a selected game
+//! root for stale inspection. Arbitrary error prose and formatting arguments
+//! remain in console logging.
 
-use crate::command_error_contract::CommandErrorKind;
-#[cfg(any(all(windows, feature = "portable"), test))]
-use crate::command_error_contract::CommandErrorSeverity;
+use crate::command_error_contract::{CommandErrorKind, CommandErrorSeverity};
 
 macro_rules! closed_codes {
     ($(#[$impl_meta:meta])* $name:ident { $($variant:ident => $code:literal),+ $(,)? }) => {
@@ -106,7 +104,6 @@ closed_codes! {
 }
 
 closed_codes! {
-    #[cfg(any(all(windows, feature = "portable"), test))]
     CatalogRefreshPhase {
         Scan => "catalog_scan",
         RemoteCatalog => "catalog_remote_catalog",
@@ -117,7 +114,6 @@ closed_codes! {
 }
 
 closed_codes! {
-    #[cfg(any(all(windows, feature = "portable"), test))]
     CapabilityOperation {
         RefreshCatalogCapabilities => "refresh_catalog_capabilities",
         RefreshGameCatalogAddonCapabilities => "refresh_game_catalog_addon_capabilities"
@@ -125,7 +121,6 @@ closed_codes! {
 }
 
 closed_codes! {
-    #[cfg(any(all(windows, feature = "portable"), test))]
     CoverGcOperation {
         StartupCoverGc => "startup_cover_gc",
         ClearGameCover => "clear_game_cover"
@@ -133,21 +128,21 @@ closed_codes! {
 }
 
 closed_codes! {
-    #[cfg(any(all(windows, feature = "portable"), test))]
     EventPublicationOperation {
         CatalogDelta => "catalog_delta",
         CatalogSyncState => "catalog_sync_state"
     }
 }
 
-/// A type-safe event closed over the only backend failures approved for
-/// persistence. Each constructor fixes every field combination admitted to
-/// the portable diagnostic v1 schema.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// A type-safe event closed over the backend failures approved for persistence.
+/// Reason codes and paths are validated before the event enters a profile.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum BackendDiagnosticEvent {
     CommandFailure {
         operation: CommandOperation,
         kind: CommandErrorKind,
+        reason_code: Option<&'static str>,
+        path: Option<String>,
     },
     CatalogIssue {
         phase: CatalogRefreshPhase,
@@ -167,8 +162,15 @@ impl BackendDiagnosticEvent {
     pub(crate) const fn command_failure(
         operation: CommandOperation,
         kind: CommandErrorKind,
+        reason_code: Option<&'static str>,
+        path: Option<String>,
     ) -> Self {
-        Self::CommandFailure { operation, kind }
+        Self::CommandFailure {
+            operation,
+            kind,
+            reason_code,
+            path,
+        }
     }
 
     pub(crate) const fn catalog_issue(phase: CatalogRefreshPhase) -> Self {
@@ -187,10 +189,14 @@ impl BackendDiagnosticEvent {
         Self::EventPublicationFailure { operation }
     }
 
-    #[cfg(any(all(windows, feature = "portable"), test))]
-    pub(crate) const fn record(self) -> BackendDiagnosticRecord {
+    pub(crate) fn record(&self) -> BackendDiagnosticRecord<'_> {
         match self {
-            Self::CommandFailure { operation, kind } => BackendDiagnosticRecord {
+            Self::CommandFailure {
+                operation,
+                kind,
+                reason_code,
+                path,
+            } => BackendDiagnosticRecord {
                 level: match kind.severity() {
                     CommandErrorSeverity::Warning => BackendDiagnosticLevel::Warning,
                     CommandErrorSeverity::Error => BackendDiagnosticLevel::Error,
@@ -198,36 +204,48 @@ impl BackendDiagnosticEvent {
                 phase: "command",
                 code: kind.code(),
                 operation: Some(operation.code()),
+                reason_code: reason_code.filter(|code| kind.allows_reason_code(code)),
+                path: path.as_deref().filter(|path| {
+                    *kind == CommandErrorKind::StaleInstallInspection
+                        && crate::diagnostics::is_valid_diagnostic_path(path)
+                }),
             },
             Self::CatalogIssue { phase } => BackendDiagnosticRecord {
                 level: BackendDiagnosticLevel::Warning,
                 phase: phase.code(),
                 code: "catalog_refresh_failed",
                 operation: None,
+                reason_code: None,
+                path: None,
             },
             Self::CapabilityFailure { operation } => BackendDiagnosticRecord {
                 level: BackendDiagnosticLevel::Warning,
                 phase: "capability_refresh",
                 code: "capability_refresh_failed",
                 operation: Some(operation.code()),
+                reason_code: None,
+                path: None,
             },
             Self::CoverGcFailure { operation } => BackendDiagnosticRecord {
                 level: BackendDiagnosticLevel::Warning,
                 phase: "cover_gc",
                 code: "orphan_cleanup_failed",
                 operation: Some(operation.code()),
+                reason_code: None,
+                path: None,
             },
             Self::EventPublicationFailure { operation } => BackendDiagnosticRecord {
                 level: BackendDiagnosticLevel::Warning,
                 phase: "event_publication",
                 code: "event_publication_failed",
                 operation: Some(operation.code()),
+                reason_code: None,
+                path: None,
             },
         }
     }
 }
 
-#[cfg(any(all(windows, feature = "portable"), test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BackendDiagnosticLevel {
     Warning,
@@ -235,31 +253,39 @@ pub(crate) enum BackendDiagnosticLevel {
 }
 
 /// Internal rendering data. Its fields come exclusively from closed enums.
-#[cfg(any(all(windows, feature = "portable"), test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct BackendDiagnosticRecord {
+pub(crate) struct BackendDiagnosticRecord<'a> {
     level: BackendDiagnosticLevel,
     phase: &'static str,
     code: &'static str,
     operation: Option<&'static str>,
+    reason_code: Option<&'static str>,
+    path: Option<&'a str>,
 }
 
-#[cfg(all(windows, feature = "portable"))]
-impl BackendDiagnosticRecord {
-    pub(crate) const fn level(self) -> BackendDiagnosticLevel {
+impl<'a> BackendDiagnosticRecord<'a> {
+    pub(crate) const fn level(&self) -> BackendDiagnosticLevel {
         self.level
     }
 
-    pub(crate) const fn phase(self) -> &'static str {
+    pub(crate) const fn phase(&self) -> &'static str {
         self.phase
     }
 
-    pub(crate) const fn code(self) -> &'static str {
+    pub(crate) const fn code(&self) -> &'static str {
         self.code
     }
 
-    pub(crate) const fn operation(self) -> Option<&'static str> {
+    pub(crate) const fn operation(&self) -> Option<&'static str> {
         self.operation
+    }
+
+    pub(crate) const fn reason_code(&self) -> Option<&'static str> {
+        self.reason_code
+    }
+
+    pub(crate) const fn path(&self) -> Option<&'a str> {
+        self.path
     }
 }
 
@@ -273,35 +299,86 @@ mod tests {
 
     #[test]
     fn command_failure_is_closed_and_preserves_the_generated_severity() {
-        let record = BackendDiagnosticEvent::command_failure(
-            CommandOperation::ClearGameCover,
-            CommandErrorKind::StorageFailed,
-        )
-        .record();
-        assert_eq!(record.level, BackendDiagnosticLevel::Error);
+        let event = BackendDiagnosticEvent::command_failure(
+            CommandOperation::InspectGameInstall,
+            CommandErrorKind::InvalidInstallRoot,
+            Some("contains_proven_install"),
+            Some("D:/Games/Example".to_owned()),
+        );
+        let record = event.record();
+        assert_eq!(record.level, BackendDiagnosticLevel::Warning);
         assert_eq!(record.phase, "command");
-        assert_eq!(record.code, "storage_failed");
-        assert_eq!(record.operation, Some("clear_game_cover"));
+        assert_eq!(record.code, "invalid_install_root");
+        assert_eq!(record.operation, Some("inspect_game_install"));
+        assert_eq!(record.reason_code(), Some("contains_proven_install"));
+        assert_eq!(record.path, None);
+    }
+
+    #[test]
+    fn command_failure_keeps_only_the_stale_inspection_path() {
+        let allowed_event = BackendDiagnosticEvent::command_failure(
+            CommandOperation::InspectGameInstall,
+            CommandErrorKind::StaleInstallInspection,
+            None,
+            Some("D:/Games/Example".to_owned()),
+        );
+        let allowed = allowed_event.record();
+        assert_eq!(allowed.path, Some("D:/Games/Example"));
+
+        let disallowed_event = BackendDiagnosticEvent::CommandFailure {
+            operation: CommandOperation::InspectGameInstall,
+            kind: CommandErrorKind::StorageFailed,
+            reason_code: Some("contains_proven_install"),
+            path: Some("D:/Games/Example".to_owned()),
+        };
+        let disallowed = disallowed_event.record();
+        assert_eq!(disallowed.path, None);
+        assert_eq!(disallowed.reason_code(), None);
+
+        let malformed_event = BackendDiagnosticEvent::CommandFailure {
+            operation: CommandOperation::InspectGameInstall,
+            kind: CommandErrorKind::StaleInstallInspection,
+            reason_code: None,
+            path: Some("D:/Games\n/Example".to_owned()),
+        };
+        let malformed = malformed_event.record();
+        assert_eq!(malformed.path, None);
     }
 
     #[test]
     fn soft_failure_shapes_have_no_detail_slot() {
-        let catalog = BackendDiagnosticEvent::catalog_issue(CatalogRefreshPhase::Scan).record();
-        let capability = BackendDiagnosticEvent::capability_failure(
+        let catalog_event = BackendDiagnosticEvent::catalog_issue(CatalogRefreshPhase::Scan);
+        let catalog = catalog_event.record();
+        let capability_event = BackendDiagnosticEvent::capability_failure(
             CapabilityOperation::RefreshCatalogCapabilities,
-        )
-        .record();
-        let cover =
-            BackendDiagnosticEvent::cover_gc_failure(CoverGcOperation::StartupCoverGc).record();
-        let event = BackendDiagnosticEvent::event_publication_failure(
+        );
+        let capability = capability_event.record();
+        let cover_event =
+            BackendDiagnosticEvent::cover_gc_failure(CoverGcOperation::StartupCoverGc);
+        let cover = cover_event.record();
+        let publication_event = BackendDiagnosticEvent::event_publication_failure(
             EventPublicationOperation::CatalogDelta,
-        )
-        .record();
+        );
+        let event = publication_event.record();
 
         assert_eq!(catalog.operation, None);
         assert_eq!(catalog.phase, "catalog_scan");
         assert_eq!(capability.operation, Some("refresh_catalog_capabilities"));
         assert_eq!(cover.code, "orphan_cleanup_failed");
         assert_eq!(event.phase, "event_publication");
+    }
+
+    #[test]
+    fn command_failure_drops_unapproved_reason_codes_and_invalid_paths() {
+        let event = BackendDiagnosticEvent::command_failure(
+            CommandOperation::InspectGameInstall,
+            CommandErrorKind::StorageFailed,
+            Some("contains_proven_install"),
+            Some("D:/Games\n/Example".to_owned()),
+        );
+        let record = event.record();
+        assert!(record.reason_code().is_none());
+        assert!(record.path.is_none());
+        assert_eq!(record.code(), "storage_failed");
     }
 }

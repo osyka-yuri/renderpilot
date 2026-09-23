@@ -23,7 +23,7 @@ fn scan_auto_libraries_with_mode(
 
     let changed_game_ids = result.delta.changed_game_ids();
     for error in &result.errors {
-        log::warn!(
+        tracing::warn!(
             "Automatic library scan partial failure at {}: {}",
             error.root,
             error.message

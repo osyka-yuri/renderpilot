@@ -16,14 +16,14 @@ pub(in crate::addons::luma) fn install_state_from_record(
     launch_args: Vec<String>,
 ) -> LumaInstallState {
     let installed_at = record.installed_at().unwrap_or_else(|| {
-        log::warn!(
+        tracing::warn!(
             "Luma install record for `{}` is missing installed_at; emitting 0 for wire compatibility",
             record.game_id()
         );
         0
     });
     let updated_at = record.updated_at().unwrap_or_else(|| {
-        log::warn!(
+        tracing::warn!(
             "Luma install record for `{}` is missing updated_at; emitting 0 for wire compatibility",
             record.game_id()
         );

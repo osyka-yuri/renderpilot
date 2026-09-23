@@ -60,7 +60,9 @@ impl PeerMutationExecutor {
             .runtime
             .commit_metadata_aggregate(permit, final_read_guards)?;
         if let Err(error) = self.runtime.cleanup_metadata_aggregate(committed) {
-            log::warn!("peer reused-claim membership committed but cleanup is pending: {error}");
+            tracing::warn!(
+                "peer reused-claim membership committed but cleanup is pending: {error}"
+            );
         }
         Ok(())
     }

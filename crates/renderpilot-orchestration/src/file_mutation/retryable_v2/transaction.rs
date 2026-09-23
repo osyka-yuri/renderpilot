@@ -187,7 +187,7 @@ impl RetryableFileMutationV2 {
         match self.apply().and_then(|()| work(&self.id)) {
             Ok(value) => {
                 if let Err(error) = self.cleanup_committed(context) {
-                    log::warn!("v2 transaction committed but cleanup is pending: {error}");
+                    tracing::warn!("v2 transaction committed but cleanup is pending: {error}");
                 }
                 Ok(value)
             }
@@ -220,7 +220,7 @@ impl RetryableFileMutationV2 {
         if let Err(error) =
             super::super::remove_dir_if_exists(Path::new(&self.manifest.transaction_dir))
         {
-            log::warn!(
+            tracing::warn!(
                 "rolled-back v2 transaction retained its directory; it is not auto-cleaned: {error}"
             );
         }

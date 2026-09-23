@@ -87,7 +87,7 @@ pub(crate) fn install_pending(
             if failure.rollback_complete {
                 commit.finish_rolled_back();
             } else {
-                log::warn!(
+                tracing::warn!(
                     "addon install rollback was incomplete; leaving sentinel `{}` to flag a torn install",
                     commit.path().display()
                 );
@@ -142,7 +142,7 @@ pub(crate) fn install_with_options_outcome(
                 if rollback_complete {
                     sentinel.finish_rolled_back();
                 } else {
-                    log::warn!(
+                    tracing::warn!(
                         "addon install rollback was incomplete; leaving sentinel `{}` to flag a torn install",
                         sentinel.path().display()
                     );

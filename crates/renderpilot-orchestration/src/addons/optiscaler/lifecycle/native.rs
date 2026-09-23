@@ -5,7 +5,7 @@ pub(in crate::addons::optiscaler) fn apply_release_off_runtime(
 ) -> Result<OptiScalerOperationResult, ServiceError> {
     let started = Instant::now();
     let result = apply_release(prepared);
-    log::debug!(
+    tracing::debug!(
         "OptiScaler release apply {} for {} finished in {} ms",
         prepared.release.id,
         prepared.game_id.as_str(),

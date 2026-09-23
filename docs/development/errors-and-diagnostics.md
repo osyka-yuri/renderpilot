@@ -6,7 +6,7 @@ Desktop errors cross a trust boundary. Internal chains may contain paths, URLs, 
 
 The effective mapping is `AppError` to `ServiceError` to `ApiError` to `CommandError`. The Tauri command boundary exposes only an allowlisted code and structured fields for the recognized failure. Severity, supported actions, and presentation metadata come from `data/contracts/desktop-command-errors.json`; the generated frontend projection is checked against that manifest and normalized once when a response enters the UI.
 
-Raw error causes remain development-only and are not serialized across IPC. User-facing messages must be selected from a stable code plus sanitized parameters, not from `Display` output or arbitrary upstream text. A new desktop failure therefore needs coordinated Rust mapping, manifest entry, generated/frontend contract, localization, and tests.
+Raw error causes are not serialized across IPC. User-facing messages must be selected from a stable code plus sanitized parameters, not from `Display` output or arbitrary upstream text. A new desktop failure therefore needs coordinated Rust mapping, manifest entry, generated/frontend contract, localization, and tests.
 
 ## Add-game warnings
 
@@ -14,9 +14,27 @@ Non-fatal game inspection outcomes use the separate `data/contracts/add-game-war
 
 ## Diagnostic ownership
 
-Technical logging has one owner: the backend records diagnostic error chains. The desktop command boundary registers a mapped command failure once. The frontend receives and presents the sanitized projection and must not duplicate the same raw technical event. This avoids three near-identical log records while preserving the most useful cause chain where it can be protected.
+`tracing-subscriber` writes Rust diagnostics to stderr. `RUST_LOG` controls its filter (default `info`), and `tracing-log` forwards `log` events from dependencies.
 
-Use structured context such as operation ID, game ID, technology, phase, and safe state classification. Avoid secrets, API keys, full private paths, download query credentials, or unfiltered third-party response bodies. Frontend notifications should remain actionable without asking the user to interpret Rust or Windows error text.
+File diagnostics are independent of `RUST_LOG`. A sealed, typed observer records native workspace `Warn` and `Error` callsites with a fixed category, Rust module, line, and deterministic site ID. Selected recovery and uninstall callsites may include a validated game or affected-file path. The file never stores the original message, raw error chain, URL, response body, or arbitrary tracing fields.
+
+Desktop command failures are recorded once at the Rust command boundary. Other backend observations use typed events; a callsite marker prevents their generic tracing projection from duplicating them. The frontend bridge starts before i18n and application bootstrap. It sends fixed i18n metadata, coarse client-boundary and IPC transport failures, and recognized frontend-only errors without their original causes. Preview mode remains console-only.
+
+## Diagnostic files
+
+Files are NDJSON, with a 4 KiB line limit and 2 MiB segment limit. Each normal event has `timestamp_utc` (RFC3339 UTC, milliseconds) and `unix_ms`.
+
+| Build | Directory | Filename |
+| --- | --- | --- |
+| Installed App | `<app data>/logs/installed/app/` | `YYYY-MM-DD_HH-MM-SSZ-<16-hex-session-prefix>-s<8-hex-segment>.log` |
+| Portable App | `<portable root>/data/logs/portable/app/` | `YYYY-MM-DD_HH-MM-SSZ-<16-hex-transaction-prefix>-s<8-hex-segment>.log` |
+| Portable supervisor | `<portable root>/data/logs/portable/supervisor/` | `YYYY-MM-DD_HH-MM-SSZ-<16-hex-session-prefix>.log` |
+
+For installed builds, `RENDERPILOT_APP_DIR` overrides the default `%LOCALAPPDATA%\RenderPilot` (with `%APPDATA%\RenderPilot` as fallback). A second installed launch focuses the existing window. Portable App logging begins after runtime-path authentication. Both portable roles use schema version 1; every App record includes its segment. Segments of one run keep the same filename time and ID. Sort by filename to find the latest run, compare first-record timestamps for starts in the same second, then choose the highest segment.
+
+Successful cleanup keeps up to eight verified completed files plus the active file per role. It reads at most 4 KiB from each candidate's first record and checks its schema, role, segment, and whether the filename's short ID matches the full identity prefix. Unrecognized, incomplete, or mismatching files are left untouched. Scanning stops at 256 directory entries or 64 canonical candidates; a cleanup failure leaves the active writer running and reports `installed_diagnostics_retention_failed` or `portable_diagnostics_retention_failed` on stderr. Open, write, sync, or rollover failure disables that file observer and reports a fixed diagnostic marker.
+
+Keep new durable events typed and bounded. Never put secrets, API keys, raw error text, URLs, or response bodies in them. A selected game path can contain a Windows account name; review it before sharing a log publicly.
 
 ## Contract workflow
 

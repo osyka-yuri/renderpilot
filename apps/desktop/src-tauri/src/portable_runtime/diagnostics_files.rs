@@ -4,12 +4,18 @@
 //! root/object capabilities and feeds only concrete portable profile values to
 //! the bounded writer.
 
-use std::sync::{Mutex, Once, OnceLock};
+use std::{
+    io::Write,
+    sync::{Mutex, Once, OnceLock},
+    time::SystemTime,
+};
 
 use crate::diagnostic_event::BackendDiagnosticEvent;
 use crate::diagnostics::{
-    DiagnosticCloseStatus, DiagnosticEmitStatus, PortableDiagnosticWriter, PortableFailureClass,
-    PortableFailureSite, PortableMilestone, PortableRole, Sha256Id, first_event_matches,
+    DiagnosticCloseStatus, DiagnosticEmitStatus, FrontendDiagnosticEvent, PortableDiagnosticName,
+    PortableDiagnosticWriter, PortableFailureClass, PortableFailureSite, PortableMilestone,
+    PortableRole, PortableSessionEvent, RustLogEvent, Sha256Id, canonical_filename_prefix,
+    first_event_matches_display_id, format_filename_timestamp, parse_portable_diagnostic_name,
 };
 
 use super::{
@@ -41,15 +47,20 @@ pub(super) struct PortableDiagnosticSession {
     role_directory: DiagnosticsRoleDirectory,
     role: PortableRole,
     active_name: CanonicalDiagnosticName,
+    app_identity: Option<(Sha256Id, Sha256Id, u32)>,
+    start_timestamp: String,
 }
 
 enum SessionIdentity {
     Supervisor {
         session: Sha256Id,
+        start_timestamp: String,
     },
     App {
         session: Sha256Id,
         transaction: Sha256Id,
+        start_timestamp: String,
+        segment: u32,
     },
 }
 
@@ -61,48 +72,43 @@ impl SessionIdentity {
         }
     }
 
-    const fn session(&self) -> &Sha256Id {
+    fn canonical_file_name(&self) -> Option<String> {
         match self {
-            Self::Supervisor { session } | Self::App { session, .. } => session,
-        }
-    }
-
-    const fn transaction(&self) -> Option<&Sha256Id> {
-        match self {
-            Self::Supervisor { .. } => None,
-            Self::App { transaction, .. } => Some(transaction),
-        }
-    }
-
-    fn canonical_file_name(&self) -> String {
-        match self.transaction() {
-            None => format!("{}{LOG_SUFFIX}", self.session().as_str()),
-            Some(transaction) => format!(
-                "{}-{}{LOG_SUFFIX}",
-                self.session().as_str(),
-                transaction.as_str()
-            ),
+            Self::Supervisor {
+                session,
+                start_timestamp,
+            } => {
+                let prefix = canonical_filename_prefix(start_timestamp, session.as_str(), 64)?;
+                Some(format!("{prefix}{LOG_SUFFIX}"))
+            }
+            Self::App {
+                transaction,
+                start_timestamp,
+                segment,
+                ..
+            } => {
+                let prefix = canonical_filename_prefix(start_timestamp, transaction.as_str(), 64)?;
+                Some(format!("{prefix}-s{segment:08x}{LOG_SUFFIX}"))
+            }
         }
     }
 
     fn into_writer(self, file: std::fs::File) -> Option<PortableDiagnosticWriter> {
         match self {
-            Self::Supervisor { session } => PortableDiagnosticWriter::supervisor(file, session),
+            Self::Supervisor { session, .. } => PortableDiagnosticWriter::supervisor(file, session),
             Self::App {
                 session,
                 transaction,
-            } => PortableDiagnosticWriter::app(file, session, transaction),
+                segment,
+                ..
+            } => PortableDiagnosticWriter::app(file, session, transaction, segment),
         }
     }
 }
 
 impl PortableDiagnosticSession {
     pub(super) fn milestone(&mut self, milestone: PortableMilestone) -> DiagnosticEmitStatus {
-        self.writer
-            .as_mut()
-            .map_or(DiagnosticEmitStatus::Disabled, |writer| {
-                writer.milestone(milestone)
-            })
+        self.emit(&PortableSessionEvent::Milestone(milestone))
     }
 
     pub(super) fn failure(
@@ -110,19 +116,87 @@ impl PortableDiagnosticSession {
         site: PortableFailureSite,
         class: PortableFailureClass,
     ) -> DiagnosticEmitStatus {
-        self.writer
-            .as_mut()
-            .map_or(DiagnosticEmitStatus::Disabled, |writer| {
-                writer.failure(site, class)
-            })
+        self.emit(&PortableSessionEvent::Failure(site, class))
     }
 
     pub(super) fn backend(&mut self, event: BackendDiagnosticEvent) -> DiagnosticEmitStatus {
-        self.writer
-            .as_mut()
-            .map_or(DiagnosticEmitStatus::Disabled, |writer| {
-                writer.backend(event)
-            })
+        self.emit(&PortableSessionEvent::Backend(event))
+    }
+
+    pub(super) fn rust_log(&mut self, event: RustLogEvent) -> DiagnosticEmitStatus {
+        self.emit(&PortableSessionEvent::RustLog(event))
+    }
+
+    pub(super) fn frontend(&mut self, event: FrontendDiagnosticEvent) -> DiagnosticEmitStatus {
+        self.emit(&PortableSessionEvent::Frontend(event))
+    }
+
+    fn emit(&mut self, event: &PortableSessionEvent) -> DiagnosticEmitStatus {
+        let Some(writer) = self.writer.as_mut() else {
+            return DiagnosticEmitStatus::Disabled;
+        };
+        let status = writer.emit(event);
+        if status != DiagnosticEmitStatus::Capacity {
+            return status;
+        }
+        if self.role != PortableRole::App {
+            return DiagnosticEmitStatus::Sealed;
+        }
+        self.rollover(event)
+    }
+
+    fn rollover(&mut self, event: &PortableSessionEvent) -> DiagnosticEmitStatus {
+        let Some(mut previous) = self.writer.take() else {
+            return DiagnosticEmitStatus::Disabled;
+        };
+        if matches!(previous.close(), DiagnosticCloseStatus::Failed) {
+            report_diagnostics_failure();
+            return DiagnosticEmitStatus::Disabled;
+        }
+        drop(previous);
+        if retain_completed(&self.role_directory, self.role, None).is_err() {
+            report_retention_failure();
+        }
+        let Some((session, transaction, segment)) = self.app_identity.take() else {
+            report_diagnostics_failure();
+            return DiagnosticEmitStatus::Disabled;
+        };
+        let Some(next_segment) = segment.checked_add(1) else {
+            report_diagnostics_failure();
+            return DiagnosticEmitStatus::Disabled;
+        };
+        let identity = SessionIdentity::App {
+            session: session.clone(),
+            transaction: transaction.clone(),
+            start_timestamp: self.start_timestamp.clone(),
+            segment: next_segment,
+        };
+        let Some(file_name) = identity.canonical_file_name() else {
+            report_diagnostics_failure();
+            return DiagnosticEmitStatus::Disabled;
+        };
+        let Ok(active_name) = canonical_diagnostic_name(&self.role_directory, &file_name) else {
+            report_diagnostics_failure();
+            return DiagnosticEmitStatus::Disabled;
+        };
+        let Ok(file) = create_active_diagnostic(&self.role_directory, &active_name) else {
+            report_diagnostics_failure();
+            return DiagnosticEmitStatus::Disabled;
+        };
+        let Some(mut writer) = identity.into_writer(file) else {
+            report_diagnostics_failure();
+            return DiagnosticEmitStatus::Disabled;
+        };
+        let status = writer.emit(event);
+        if status != DiagnosticEmitStatus::Written {
+            let _ = writer.close();
+            report_diagnostics_failure();
+            return DiagnosticEmitStatus::Disabled;
+        }
+        self.active_name = active_name;
+        self.app_identity = Some((session, transaction, next_segment));
+        self.writer = Some(writer);
+        DiagnosticEmitStatus::Written
     }
 
     /// Closes/syncs and drops the active leaf before exact-handle retention.
@@ -135,7 +209,7 @@ impl PortableDiagnosticSession {
             drop(writer);
         }
         if retain_completed(&self.role_directory, self.role, None).is_err() {
-            report_diagnostics_failure();
+            report_retention_failure();
         }
     }
 }
@@ -153,7 +227,13 @@ pub(super) fn open_supervisor(
             "supervisor transcript was not a canonical diagnostic identity",
         )
     })?;
-    open_session(root, SessionIdentity::Supervisor { session })
+    open_session(
+        root,
+        SessionIdentity::Supervisor {
+            session,
+            start_timestamp: format_filename_timestamp(SystemTime::now()),
+        },
+    )
 }
 
 /// Opens the App observer only from the atomically authenticated runtime root.
@@ -186,6 +266,8 @@ pub(super) fn open_app(startup: &PortableAppSessionV2) -> Result<PortableDiagnos
         SessionIdentity::App {
             session,
             transaction,
+            start_timestamp: format_filename_timestamp(SystemTime::now()),
+            segment: 0,
         },
     )
 }
@@ -202,8 +284,30 @@ fn open_session(
             PortableRole::App => DiagnosticsRole::App,
         },
     )?;
-    let name = identity.canonical_file_name();
-    let active_name = canonical_diagnostic_name(&role_directory, &name)?;
+    let file_name = identity.canonical_file_name().ok_or_else(|| {
+        PortableRuntimeError::new(
+            "portable_diagnostics_open",
+            "portable diagnostic identity could not form a canonical filename",
+        )
+    })?;
+    let active_name = canonical_diagnostic_name(&role_directory, &file_name)?;
+    let app_identity = match &identity {
+        SessionIdentity::App {
+            session,
+            transaction,
+            segment,
+            ..
+        } => Some((session.clone(), transaction.clone(), *segment)),
+        SessionIdentity::Supervisor { .. } => None,
+    };
+    let start_timestamp = match &identity {
+        SessionIdentity::Supervisor {
+            start_timestamp, ..
+        }
+        | SessionIdentity::App {
+            start_timestamp, ..
+        } => start_timestamp.clone(),
+    };
     let file = create_active_diagnostic(&role_directory, &active_name)?;
     let writer = identity.into_writer(file).ok_or_else(|| {
         PortableRuntimeError::new(
@@ -217,9 +321,14 @@ fn open_session(
         role_directory,
         role,
         active_name,
+        app_identity,
+        start_timestamp,
     };
-    // The only active leaf is explicitly skipped while still consuming its
-    // directory budget. Any other canonical uncertainty stops retention.
+    // The active leaf is skipped while still consuming its directory budget.
+    // Other canonical leaves are retained only after their first records have
+    // been verified; bounded but incomplete or mismatching leaves stay in place.
+    // Retention is maintenance: failure is reported, but the active writer stays
+    // open and usable. A later close or rollover makes another attempt.
     if retain_completed(
         &result.role_directory,
         result.role,
@@ -227,14 +336,16 @@ fn open_session(
     )
     .is_err()
     {
-        report_diagnostics_failure();
+        report_retention_failure();
     }
     Ok(result)
 }
 
-/// Retention commits only after `visit_diagnostic_entries` reaches clean
-/// STATUS_NO_MORE_FILES.  Every uncertainty drops retained candidates and
-/// returns before any exact-object deletion is attempted.
+/// Classification commits only after `visit_diagnostic_entries` reaches clean
+/// STATUS_NO_MORE_FILES. Enumeration, authority, and budget errors return
+/// before deletion; an error during deletion can follow earlier successful
+/// deletions. Bounded leaves with incomplete or mismatching first records are
+/// simply left in place.
 fn retain_completed(
     role_directory: &DiagnosticsRoleDirectory,
     role: PortableRole,
@@ -245,9 +356,12 @@ fn retain_completed(
     visit_diagnostic_entries(role_directory, |entry: DiagnosticDirectoryEntry| {
         budget.charge_directory_entry(entry.record_bytes)?;
         if entry.is_native_pseudoentry {
-            return (entry.is_directory && !entry.is_reparse)
-                .then_some(())
-                .ok_or_else(|| retention_uncertain("native pseudoentry metadata was invalid"));
+            if !entry.is_directory || entry.is_reparse {
+                return Err(retention_uncertain(
+                    "native pseudoentry metadata was invalid",
+                ));
+            }
+            return Ok(());
         }
         if active_name == Some(entry.name.as_str()) {
             return Ok(());
@@ -262,15 +376,12 @@ fn retain_completed(
         let candidate_name = canonical_diagnostic_name(role_directory, &entry.name)?;
         let mut candidate = open_completed_canonical_diagnostic(role_directory, &candidate_name)?;
         let first = candidate.read_first_record()?;
-        if !first_event_matches(
-            &first,
-            role,
-            &identity.session,
-            identity.transaction.as_deref(),
-        ) {
-            return Err(retention_uncertain(
-                "canonical diagnostic did not have its matching first record",
-            ));
+        if !first_event_matches_display_id(&first, role, &identity.display_id, identity.segment) {
+            // A process may have stopped after creating this canonical leaf
+            // but before completing its first record. It is not ours to
+            // delete, and it must not prevent a later healthy session.
+            drop(candidate);
+            return Ok(());
         }
         let modified = candidate.last_write()?;
         candidates.push(RetentionCandidate {
@@ -290,9 +401,7 @@ fn retain_completed(
             .cmp(&right.modified)
             .then_with(|| left.name.cmp(&right.name))
     });
-    let delete_count = candidates
-        .len()
-        .saturating_sub(retained_candidate_count(candidates.len()));
+    let delete_count = candidates.len().saturating_sub(MAX_COMPLETED_FILES);
     for candidate in candidates.into_iter().take(delete_count) {
         candidate.candidate.delete_exact()?;
     }
@@ -311,9 +420,12 @@ impl RetentionBudget {
     fn charge_directory_entry(&mut self, record_bytes: usize) -> Result<()> {
         self.entries = self.entries.saturating_add(1);
         self.directory_bytes = self.directory_bytes.saturating_add(record_bytes);
-        (self.entries <= MAX_DIRECTORY_ENTRIES && self.directory_bytes <= MAX_DIRECTORY_BYTES)
-            .then_some(())
-            .ok_or_else(|| retention_uncertain("directory enumeration budget was exhausted"))
+        if self.entries > MAX_DIRECTORY_ENTRIES || self.directory_bytes > MAX_DIRECTORY_BYTES {
+            return Err(retention_uncertain(
+                "directory enumeration budget was exhausted",
+            ));
+        }
+        Ok(())
     }
 
     fn charge_canonical_attempt(&mut self) -> Result<()> {
@@ -321,15 +433,15 @@ impl RetentionBudget {
         self.canonical_bytes = self
             .canonical_bytes
             .saturating_add(CANONICAL_ATTEMPT_RESERVE);
-        (self.canonical_attempts <= MAX_CANONICAL_ATTEMPTS
-            && self.canonical_bytes <= MAX_CANONICAL_BYTES)
-            .then_some(())
-            .ok_or_else(|| retention_uncertain("canonical classification budget was exhausted"))
+        if self.canonical_attempts > MAX_CANONICAL_ATTEMPTS
+            || self.canonical_bytes > MAX_CANONICAL_BYTES
+        {
+            return Err(retention_uncertain(
+                "canonical classification budget was exhausted",
+            ));
+        }
+        Ok(())
     }
-}
-
-fn retained_candidate_count(candidates: usize) -> usize {
-    candidates.min(MAX_COMPLETED_FILES)
 }
 
 fn retention_uncertain(message: &'static str) -> PortableRuntimeError {
@@ -345,35 +457,31 @@ struct RetentionCandidate {
 
 #[derive(Debug, Eq, PartialEq)]
 struct FileIdentity {
-    session: String,
-    transaction: Option<String>,
+    display_id: String,
+    segment: Option<u32>,
 }
 
 fn parse_canonical_filename(role: PortableRole, name: &str) -> Option<FileIdentity> {
-    let stem = name.strip_suffix(LOG_SUFFIX)?;
-    match role {
-        PortableRole::Supervisor if is_canonical_hex_64(stem) => Some(FileIdentity {
-            session: stem.to_owned(),
-            transaction: None,
-        }),
-        PortableRole::App => {
-            let (session, transaction) = stem.split_once('-')?;
-            (is_canonical_hex_64(session) && is_canonical_hex_64(transaction)).then(|| {
-                FileIdentity {
-                    session: session.to_owned(),
-                    transaction: Some(transaction.to_owned()),
-                }
+    match (role, parse_portable_diagnostic_name(name)?) {
+        (PortableRole::Supervisor, PortableDiagnosticName::Supervisor { display_id, .. }) => {
+            Some(FileIdentity {
+                display_id,
+                segment: None,
             })
         }
-        PortableRole::Supervisor => None,
+        (
+            PortableRole::App,
+            PortableDiagnosticName::App {
+                display_id,
+                segment,
+                ..
+            },
+        ) => Some(FileIdentity {
+            display_id,
+            segment: Some(segment),
+        }),
+        _ => None,
     }
-}
-
-fn is_canonical_hex_64(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
 }
 
 pub(super) fn failure_class(error: &PortableRuntimeError) -> PortableFailureClass {
@@ -434,11 +542,20 @@ enum AppDiagnosticObserver {
 
 static APP_DIAGNOSTICS: OnceLock<Mutex<AppDiagnosticObserver>> = OnceLock::new();
 static DIAGNOSTICS_STDERR_ONCE: Once = Once::new();
+static RETENTION_STDERR_ONCE: Once = Once::new();
 
 /// Sink faults are reduced to one fixed safe stderr line; no unsafe detail is
 /// persisted into diagnostics or sent to the generic writer.
 pub(super) fn report_diagnostics_failure() {
     DIAGNOSTICS_STDERR_ONCE.call_once(|| eprintln!("RenderPilot: portable_diagnostics_disabled"));
+}
+
+fn report_retention_failure() {
+    RETENTION_STDERR_ONCE.call_once(|| {
+        let _ = std::io::stderr()
+            .lock()
+            .write_all(b"RenderPilot: portable_diagnostics_retention_failed\n");
+    });
 }
 
 pub(super) fn report_emit_failure(status: DiagnosticEmitStatus) {
@@ -475,6 +592,14 @@ pub(crate) fn app_failure(site: PortableFailureSite, error: &PortableRuntimeErro
 
 pub(crate) fn record_app_backend_event(event: BackendDiagnosticEvent) {
     emit_app(|session| session.backend(event));
+}
+
+pub(crate) fn record_app_log_event(event: RustLogEvent) {
+    emit_app(|session| session.rust_log(event));
+}
+
+pub(crate) fn record_app_frontend_event(event: FrontendDiagnosticEvent) {
+    emit_app(|session| session.frontend(event));
 }
 
 fn emit_app(emit: impl FnOnce(&mut PortableDiagnosticSession) -> DiagnosticEmitStatus) {
@@ -517,6 +642,7 @@ const fn app_emit_transition(status: DiagnosticEmitStatus) -> AppEmitTransition 
     match status {
         DiagnosticEmitStatus::Written => AppEmitTransition::KeepActive,
         DiagnosticEmitStatus::Sealed => AppEmitTransition::DisableWithoutReport,
+        DiagnosticEmitStatus::Capacity => AppEmitTransition::DisableAndReport,
         DiagnosticEmitStatus::Disabled => AppEmitTransition::DisableAndReport,
     }
 }
@@ -542,34 +668,121 @@ pub(crate) fn shutdown_app() {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use crate::diagnostics::{PortableFailureClass, PortableRole};
 
     use super::{
-        AppEmitTransition, FileIdentity, RetentionBudget, app_emit_transition, failure_class,
-        parse_canonical_filename, retained_candidate_count,
+        AppEmitTransition, FileIdentity, MAX_CANONICAL_ATTEMPTS, RetentionBudget, SessionIdentity,
+        app_emit_transition, failure_class, open_session, parse_canonical_filename,
+        retain_completed,
     };
-    use crate::diagnostics::DiagnosticEmitStatus;
+    use crate::diagnostics::{
+        DiagnosticCloseStatus, DiagnosticEmitStatus, DiagnosticLevel, PortableDiagnosticWriter,
+        PortableMilestone, RustLogEvent, Sha256Id, canonical_filename_prefix,
+    };
     use crate::portable_runtime::error::PortableRuntimeError;
+    use crate::portable_runtime::win32::object::{
+        DiagnosticsRole, canonical_diagnostic_name, create_active_diagnostic,
+        open_diagnostics_role_directory,
+    };
+
+    fn app_identity(session: char, transaction: char, segment: u32) -> SessionIdentity {
+        SessionIdentity::App {
+            session: Sha256Id::parse(&session.to_string().repeat(64)).expect("session identity"),
+            transaction: Sha256Id::parse(&transaction.to_string().repeat(64))
+                .expect("transaction identity"),
+            start_timestamp: "2026-09-23_14-35-12Z".to_owned(),
+            segment,
+        }
+    }
+
+    fn test_app_tree() -> (
+        tempfile::TempDir,
+        super::super::root_authority::PortableRootAuthority,
+        super::super::win32::object::DiagnosticsRoleDirectory,
+    ) {
+        let directory = tempfile::tempdir().expect("temporary portable data root");
+        fs::create_dir_all(directory.path().join("data/logs/portable/app"))
+            .expect("create fixture directories");
+        let root = super::super::root_authority::PortableRootAuthority::open(directory.path())
+            .expect("open retained fixture root");
+        let role_directory = open_diagnostics_role_directory(root.object(), DiagnosticsRole::App)
+            .expect("open app diagnostics directory");
+        (directory, root, role_directory)
+    }
+
+    fn app_filename(_session: char, transaction: char, segment: u32) -> String {
+        let transaction = transaction.to_string().repeat(64);
+        let prefix = canonical_filename_prefix("2026-09-23_14-35-12Z", &transaction, 64)
+            .expect("canonical filename prefix");
+        format!("{prefix}-s{segment:08x}.log")
+    }
+
+    fn app_filename_for_index(index: u32, segment: u32) -> String {
+        let transaction = format!("{index:016x}{}", "0".repeat(48));
+        let prefix = canonical_filename_prefix("2026-09-23_14-35-12Z", &transaction, 64)
+            .expect("canonical filename prefix");
+        format!("{prefix}-s{segment:08x}.log")
+    }
+
+    fn write_app_record(
+        role_directory: &super::super::win32::object::DiagnosticsRoleDirectory,
+        file_session: char,
+        file_transaction: char,
+        file_segment: u32,
+        record_session: char,
+        record_transaction: char,
+        record_segment: u32,
+    ) -> String {
+        let name = app_filename(file_session, file_transaction, file_segment);
+        let canonical =
+            canonical_diagnostic_name(role_directory, &name).expect("canonical fixture file name");
+        let file = create_active_diagnostic(role_directory, &canonical)
+            .expect("create fixture diagnostic");
+        let mut writer = PortableDiagnosticWriter::app(
+            file,
+            Sha256Id::parse(&record_session.to_string().repeat(64)).expect("record session"),
+            Sha256Id::parse(&record_transaction.to_string().repeat(64))
+                .expect("record transaction"),
+            record_segment,
+        )
+        .expect("write fixture first record");
+        assert_eq!(writer.close(), DiagnosticCloseStatus::Synced);
+        name
+    }
 
     #[test]
     fn canonical_filename_parser_rejects_foreign_and_wrong_role_names() {
         let session = "a".repeat(64);
         let transaction = "b".repeat(64);
+        let supervisor_name = format!("2026-09-23_14-35-12Z-{}.log", &session[..16]);
         assert_eq!(
-            parse_canonical_filename(PortableRole::Supervisor, &format!("{session}.log")),
+            parse_canonical_filename(PortableRole::Supervisor, &supervisor_name),
             Some(FileIdentity {
-                session: session.clone(),
-                transaction: None,
+                display_id: session[..16].to_owned(),
+                segment: None,
             })
         );
+        assert!(parse_canonical_filename(PortableRole::App, &supervisor_name).is_none());
         assert_eq!(
-            parse_canonical_filename(PortableRole::App, &format!("{session}-{transaction}.log")),
+            parse_canonical_filename(
+                PortableRole::App,
+                &format!("2026-09-23_14-35-12Z-{}-s0000000f.log", &transaction[..16])
+            ),
             Some(FileIdentity {
-                session,
-                transaction: Some(transaction),
+                display_id: transaction[..16].to_owned(),
+                segment: Some(15)
             })
         );
         assert!(parse_canonical_filename(PortableRole::App, "untrusted.log").is_none());
+        assert!(
+            parse_canonical_filename(
+                PortableRole::App,
+                &format!("{session}-{transaction}-s00000000.log")
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -605,10 +818,280 @@ mod tests {
                 .expect("64 fixed reservations stay within the class budget");
         }
         assert!(canonical.charge_canonical_attempt().is_err());
+    }
 
-        assert_eq!(retained_candidate_count(17), 8);
-        assert_eq!(retained_candidate_count(18), 8);
-        assert_eq!(retained_candidate_count(64), 8);
+    #[test]
+    fn portable_retention_keeps_eight_verified_and_leaves_unverified_canonical_files() {
+        let (directory, _root, role_directory) = test_app_tree();
+        let mut verified = Vec::new();
+        for index in 0..9_u32 {
+            let session = char::from_digit(index, 16).expect("fixture session");
+            verified.push(write_app_record(
+                &role_directory,
+                session,
+                'f',
+                index,
+                session,
+                'f',
+                index,
+            ));
+        }
+
+        let empty = app_filename('e', 'd', 0);
+        let partial = app_filename('f', 'd', 0);
+        let bad_schema = app_filename('d', 'c', 0);
+        let wrong_transaction = write_app_record(&role_directory, 'a', 'b', 0, 'a', 'c', 0);
+        let wrong_segment = write_app_record(&role_directory, 'b', 'c', 9, 'b', 'c', 8);
+        let app_directory = directory.path().join("data/logs/portable/app");
+        fs::write(app_directory.join(&empty), b"").expect("seed empty crash orphan");
+        let partial_bytes = b"{\"schema\":\"renderpilot.diagnostics\"";
+        fs::write(app_directory.join(&partial), partial_bytes).expect("seed partial crash orphan");
+        fs::write(
+            app_directory.join(&bad_schema),
+            b"{\"schema\":\"foreign\"}\n",
+        )
+        .expect("seed mismatching schema");
+        let old_dev_name = format!("{}-{}-s00000000.log", "a".repeat(64), "b".repeat(64));
+        fs::write(app_directory.join(&old_dev_name), b"old dev log\n")
+            .expect("seed a prior development filename");
+
+        retain_completed(&role_directory, PortableRole::App, None)
+            .expect("ignore bounded unverified leaves and retain verified records");
+
+        assert_eq!(
+            verified
+                .iter()
+                .filter(|name| app_directory.join(name).exists())
+                .count(),
+            8
+        );
+        for name in [
+            &empty,
+            &partial,
+            &bad_schema,
+            &wrong_transaction,
+            &wrong_segment,
+        ] {
+            assert!(
+                app_directory.join(name.as_str()).exists(),
+                "unverified file is preserved"
+            );
+        }
+        assert_eq!(
+            fs::read(app_directory.join(partial)).unwrap(),
+            partial_bytes
+        );
+        assert_eq!(
+            fs::read(app_directory.join(old_dev_name)).unwrap(),
+            b"old dev log\n",
+            "legacy development names remain outside retention"
+        );
+    }
+
+    #[test]
+    fn startup_and_rollover_continue_writing_when_retention_budget_is_exceeded() {
+        let (directory, root, _role_directory) = test_app_tree();
+        let app_directory = directory.path().join("data/logs/portable/app");
+        let mut budget_orphans = Vec::new();
+        for index in 0..=MAX_CANONICAL_ATTEMPTS as u32 {
+            let name = app_filename_for_index(index, 1);
+            fs::write(app_directory.join(&name), b"").expect("seed over-budget canonical leaf");
+            budget_orphans.push(name);
+        }
+        let startup_orphan = app_filename('a', 'b', 0);
+        let startup_bytes = b"{\"partial\":";
+        fs::write(app_directory.join(&startup_orphan), startup_bytes).expect("seed startup orphan");
+
+        let mut startup = open_session(root.clone(), app_identity('c', 'd', 0))
+            .expect("startup keeps the active writer when retention exceeds its budget");
+        let startup_name = startup.active_name.as_str().to_owned();
+        assert_eq!(
+            startup.milestone(PortableMilestone::DesktopShellReady),
+            DiagnosticEmitStatus::Written
+        );
+        startup.close();
+        let startup_contents = fs::read_to_string(app_directory.join(startup_name))
+            .expect("startup segment remains readable");
+        let startup_lines = startup_contents.lines().collect::<Vec<_>>();
+        assert_eq!(
+            startup_lines.len(),
+            2,
+            "first record and following milestone"
+        );
+        assert!(startup_lines[0].contains("runtime_paths_authenticated"));
+        assert!(startup_lines[1].contains("desktop_shell_ready"));
+        assert_eq!(
+            fs::read(app_directory.join(startup_orphan)).unwrap(),
+            startup_bytes
+        );
+        assert!(
+            budget_orphans
+                .iter()
+                .all(|name| fs::read(app_directory.join(name)).unwrap().is_empty())
+        );
+
+        let rollover_orphan = app_filename('b', 'e', 0);
+        let rollover_bytes = b"{\"partial\":\"rollover";
+        fs::write(app_directory.join(&rollover_orphan), rollover_bytes)
+            .expect("seed rollover orphan");
+        let mut rollover =
+            open_session(root, app_identity('a', 'c', 0)).expect("open healthy rollover fixture");
+        let initial_name = rollover.active_name.as_str().to_owned();
+        for _ in 0..20_000 {
+            assert_eq!(
+                rollover.milestone(PortableMilestone::DesktopShellReady),
+                DiagnosticEmitStatus::Written
+            );
+            if rollover.active_name.as_str() != initial_name {
+                break;
+            }
+        }
+        assert_ne!(rollover.active_name.as_str(), initial_name);
+        assert_eq!(rollover.active_name.as_str(), app_filename('a', 'c', 1));
+        assert_eq!(
+            initial_name.get(..20),
+            rollover.active_name.as_str().get(..20),
+            "rollover preserves the original UTC start timestamp"
+        );
+        let previous =
+            fs::read_to_string(app_directory.join(&initial_name)).expect("read completed segment");
+        assert_eq!(
+            previous
+                .matches("\"code\":\"diagnostics_capacity\"")
+                .count(),
+            1,
+            "capacity marker appears once in the completed segment"
+        );
+        let next = fs::read_to_string(app_directory.join(rollover.active_name.as_str()))
+            .expect("read next segment");
+        let next_lines = next.lines().collect::<Vec<_>>();
+        assert_eq!(
+            next_lines.len(),
+            2,
+            "new segment header and one replayed trigger"
+        );
+        assert!(next_lines[0].contains("runtime_paths_authenticated"));
+        assert!(next_lines[1].contains("desktop_shell_ready"));
+        assert_eq!(
+            fs::read(app_directory.join(rollover_orphan)).unwrap(),
+            rollover_bytes
+        );
+        assert_eq!(
+            rollover.milestone(PortableMilestone::DesktopShellReady),
+            DiagnosticEmitStatus::Written
+        );
+        rollover.close();
+        assert!(
+            budget_orphans
+                .iter()
+                .all(|name| fs::read(app_directory.join(name)).unwrap().is_empty())
+        );
+    }
+
+    #[test]
+    fn app_rollover_replays_owned_structured_path_once() {
+        let (directory, root, _) = test_app_tree();
+        let mut session =
+            open_session(root, app_identity('a', 'c', 0)).expect("open App diagnostics session");
+        let initial_name = session.active_name.as_str().to_owned();
+        let mut event = RustLogEvent::from_site(
+            tracing::Level::WARN,
+            "renderpilot_orchestration::addons::luma::install::recovery",
+            147,
+        )
+        .expect("first-party warning callsite");
+        event.path = Some("D:/Games/Example/ReShade.ini".to_owned());
+
+        for _ in 0..20_000 {
+            assert_eq!(
+                session.rust_log(event.clone()),
+                DiagnosticEmitStatus::Written
+            );
+            if session.active_name.as_str() != initial_name {
+                break;
+            }
+        }
+
+        assert_ne!(session.active_name.as_str(), initial_name);
+        let next = fs::read_to_string(
+            directory
+                .path()
+                .join("data/logs/portable/app")
+                .join(session.active_name.as_str()),
+        )
+        .expect("read next App segment");
+        let lines = next.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 2, "header plus one replayed triggering event");
+        assert!(lines[1].contains("\"seq\":2"));
+        assert!(lines[1].contains("\"path\":\"D:/Games/Example/ReShade.ini\""));
+        assert_eq!(lines[1].matches("\"path\"").count(), 1);
+        assert_eq!(event.level, DiagnosticLevel::Warning);
+        session.close();
+    }
+
+    #[test]
+    fn portable_retention_io_failure_keeps_all_verified_files() {
+        let (directory, _root, role_directory) = test_app_tree();
+        let mut verified = Vec::new();
+        for index in 0..9_u32 {
+            let session = char::from_digit(index, 16).expect("fixture session");
+            verified.push(write_app_record(
+                &role_directory,
+                session,
+                'f',
+                index,
+                session,
+                'f',
+                index,
+            ));
+        }
+        let app_directory = directory.path().join("data/logs/portable/app");
+        let invalid_type = app_filename('a', 'e', 0);
+        fs::create_dir(app_directory.join(&invalid_type)).expect("seed invalid canonical type");
+
+        assert!(retain_completed(&role_directory, PortableRole::App, None).is_err());
+        assert_eq!(
+            verified
+                .iter()
+                .filter(|name| app_directory.join(name).exists())
+                .count(),
+            9
+        );
+        assert!(app_directory.join(invalid_type).is_dir());
+    }
+
+    #[test]
+    fn canonical_attempt_budget_failure_precedes_every_deletion() {
+        let (directory, _root, role_directory) = test_app_tree();
+        let mut verified = Vec::new();
+        for index in 0..9_u32 {
+            let session = char::from_digit(index, 16).expect("fixture session");
+            verified.push(write_app_record(
+                &role_directory,
+                session,
+                'f',
+                index,
+                session,
+                'f',
+                index,
+            ));
+        }
+
+        let app_directory = directory.path().join("data/logs/portable/app");
+        for index in 0..65_u32 {
+            let name = app_filename_for_index(index, 1);
+            fs::write(app_directory.join(name), b"").expect("seed canonical orphan");
+        }
+
+        assert!(retain_completed(&role_directory, PortableRole::App, None).is_err());
+        assert_eq!(
+            verified
+                .iter()
+                .filter(|name| app_directory.join(name).exists())
+                .count(),
+            9,
+            "verified candidates are not removed before classification completes"
+        );
     }
 
     #[test]
@@ -620,6 +1103,10 @@ mod tests {
         assert_eq!(
             app_emit_transition(DiagnosticEmitStatus::Sealed),
             AppEmitTransition::DisableWithoutReport
+        );
+        assert_eq!(
+            app_emit_transition(DiagnosticEmitStatus::Capacity),
+            AppEmitTransition::DisableAndReport
         );
         assert_eq!(
             app_emit_transition(DiagnosticEmitStatus::Disabled),
@@ -645,7 +1132,8 @@ mod tests {
             "budget.charge_directory_entry(entry.record_bytes)?",
             "budget.charge_canonical_attempt()?",
             "candidate.delete_exact()?",
-            "canonical diagnostic did not have its matching first record",
+            "drop(candidate);",
+            "unverified canonical diagnostics are left untouched",
         ] {
             assert!(
                 source.contains(required),

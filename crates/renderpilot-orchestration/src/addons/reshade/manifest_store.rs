@@ -70,7 +70,7 @@ fn resolve_with_bundled_fallback(
             origin: ReshadeCatalogOrigin::CdnOrCache,
         }),
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "shared ReShade manifest unavailable ({error}); using the bundled release snapshot"
             );
             bundled_catalog()

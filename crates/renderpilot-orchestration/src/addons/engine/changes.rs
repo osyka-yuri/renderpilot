@@ -80,20 +80,20 @@ impl InstallChanges {
                     if let Err(e) = fs::remove_file(path)
                         && e.kind() != std::io::ErrorKind::NotFound
                     {
-                        log::warn!("rollback created {}: {}", path.display(), e);
+                        tracing::warn!("rollback created {}: {}", path.display(), e);
                         failures += 1;
                     }
                 }
                 Action::Replaced { path, bak } => {
                     let _ = fs::remove_file(path);
                     if let Err(e) = fs::rename(bak, path) {
-                        log::warn!("rollback restore {}: {}", path.display(), e);
+                        tracing::warn!("rollback restore {}: {}", path.display(), e);
                         failures += 1;
                     }
                 }
                 Action::Removed { path, bak } => {
                     if let Err(e) = fs::rename(bak, path) {
-                        log::warn!("rollback restore removed {}: {}", path.display(), e);
+                        tracing::warn!("rollback restore removed {}: {}", path.display(), e);
                         failures += 1;
                     }
                 }
@@ -104,7 +104,7 @@ impl InstallChanges {
                 } => match original_bytes {
                     Some(bytes) => {
                         if let Err(e) = crate::fs::write_file_atomically(path, bytes) {
-                            log::warn!("rollback update {}: {}", path.display(), e);
+                            tracing::warn!("rollback update {}: {}", path.display(), e);
                             failures += 1;
                         }
                     }
@@ -125,14 +125,14 @@ impl InstallChanges {
                     ) {
                         Ok(crate::fs::CreateFileNoReplace::Created { .. }) => {}
                         Ok(crate::fs::CreateFileNoReplace::Occupied) => {
-                            log::warn!(
+                            tracing::warn!(
                                 "rollback peer removal {} found a foreign postimage",
                                 path.display()
                             );
                             failures += 1;
                         }
                         Err(e) => {
-                            log::warn!("rollback peer removal {}: {}", path.display(), e);
+                            tracing::warn!("rollback peer removal {}: {}", path.display(), e);
                             failures += 1;
                         }
                     }
@@ -148,7 +148,7 @@ impl InstallChanges {
                         expected_post,
                         crate::fs::AuthorityMode::CooperativeSameUid,
                     ) {
-                        log::warn!(
+                        tracing::warn!(
                             "rollback peer create {} found a foreign or missing postimage: {}",
                             path.display(),
                             e
@@ -166,7 +166,7 @@ impl InstallChanges {
                     if let Err(e) =
                         parent.overwrite_regular_file(leaf, expected_post, original_bytes)
                     {
-                        log::warn!("rollback peer replace {}: {}", path.display(), e);
+                        tracing::warn!("rollback peer replace {}: {}", path.display(), e);
                         failures += 1;
                     }
                 }
@@ -183,11 +183,11 @@ impl InstallChanges {
                             )
                         });
                         if let Err(error) = result {
-                            log::warn!("rollback created directory {}: {error}", dir.display());
+                            tracing::warn!("rollback created directory {}: {error}", dir.display());
                             failures += 1;
                         }
                     } else if let Err(error) = helpers::remove_dir_if_empty(dir) {
-                        log::warn!("rollback created {}: {}", dir.display(), error);
+                        tracing::warn!("rollback created {}: {}", dir.display(), error);
                         failures += 1;
                     }
                 }

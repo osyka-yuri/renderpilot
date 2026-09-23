@@ -95,7 +95,7 @@ pub async fn delete_package(
     let catalog = match catalog::load_local_catalog() {
         Ok(catalog) => catalog,
         Err(error) => {
-            log::warn!("could not load catalog while deleting package registration: {error}");
+            tracing::warn!("could not load catalog while deleting package registration: {error}");
             None
         }
     };
@@ -122,7 +122,7 @@ pub async fn list_packages(
     let (catalog, status) = match catalog::get_or_fetch_validated_catalog().await {
         Ok(catalog) => (Some(catalog), LibraryCatalogStatus::Active),
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "library catalog unavailable; returning receipt-only local fallback: {error}"
             );
             (None, LibraryCatalogStatus::LocalFallback)
@@ -138,7 +138,7 @@ pub(crate) fn replacement_artifacts(
     let catalog = match catalog::load_local_catalog() {
         Ok(catalog) => catalog,
         Err(error) => {
-            log::warn!("could not load catalog replacement artifacts: {error}");
+            tracing::warn!("could not load catalog replacement artifacts: {error}");
             None
         }
     };

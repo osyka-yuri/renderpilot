@@ -30,12 +30,12 @@ renderpilot-platform-windows = { path = "crates/renderpilot-platform-windows" }
 renderpilot-storage-sqlite = { path = "crates/renderpilot-storage-sqlite" }
 
 base64 = { version = "0.23", default-features = false, features = ["std"] }
-env_logger = "0.11"
 futures-util = { version = "0.3", default-features = false }
 getrandom = "0.4"
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 http = "1"
 httpdate = "1"
+jiff = { version = "0.2", default-features = false, features = ["std"] }
 json-patch = "4.2.0"
 libloading = "0.9"
 log = "0.4"
@@ -52,6 +52,9 @@ sevenz-rust2 = { version = "0.23.0", default-features = false }
 sha2 = "0.11"
 tempfile = "3"
 tokio = { version = "1", default-features = false }
+tracing = "0.1"
+tracing-log = "0.2"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "registry", "tracing-log"] }
 ulid = "3"
 # Keep the Windows/WebView2 crate family aligned with the versions used by
 # Tauri/Wry to avoid duplicate bindings. Re-check `cargo tree -d` when upgrading Tauri.

@@ -16,7 +16,7 @@ test-instrumentation = []
 
 [dependencies]
 hex = { workspace = true }
-log = { workspace = true }
+tracing = { workspace = true }
 renderpilot-application = { workspace = true }
 renderpilot-domain = { workspace = true }
 serde = { workspace = true }

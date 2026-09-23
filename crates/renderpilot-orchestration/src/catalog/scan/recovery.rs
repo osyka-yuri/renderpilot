@@ -30,7 +30,7 @@ pub(super) fn recover_orphaned_backups(
                     )
                     .is_err()
                 {
-                    log::info!(
+                    tracing::info!(
                         "recovery: leaving indeterminate vendor Xiph baseline blocked for {}",
                         component.id()
                     );
@@ -80,7 +80,7 @@ pub(super) fn recover_orphaned_backups(
                             &executable,
                         )?;
                     } else {
-                        log::info!(
+                        tracing::info!(
                             "recovery: refusing to pair a patched executable with a DLL baseline that has no immutable sidecars for {}",
                             component.id()
                         );
@@ -89,7 +89,7 @@ pub(super) fn recover_orphaned_backups(
                 continue;
             }
             crate::coordinated_files::ComponentBackupAvailability::Unavailable(_) => {
-                log::info!(
+                tracing::info!(
                     "recovery: recorded backup for {} is no longer available on disk",
                     component.id()
                 );
@@ -121,7 +121,7 @@ pub(super) fn recover_orphaned_backups(
                 continue;
             }
             let Ok(bak_path) = crate::fs::backup_path(std::path::Path::new(original_path)) else {
-                log::warn!("recovery: cannot derive backup path for {original_path}, skipping");
+                tracing::warn!("recovery: cannot derive backup path for {original_path}, skipping");
                 continue;
             };
             if let Some(recovered_file) =
@@ -149,7 +149,7 @@ pub(super) fn recover_orphaned_backups(
             && !recovered_baseline.is_empty()
             && !has_complete_xiph_recovery(component, &recovered_baseline)
         {
-            log::info!(
+            tracing::info!(
                 "recovery: leaving incomplete or invalid Xiph sidecar set unpromoted for {}",
                 component.id()
             );
@@ -348,7 +348,7 @@ fn recover_orphaned_fsr_split_members(
     let read_dir = match std::fs::read_dir(&dir_path) {
         Ok(d) => d,
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "recovery: cannot read directory {}: {error}",
                 dir_path.display()
             );

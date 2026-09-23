@@ -96,7 +96,7 @@ impl ReshadeChannel {
         match val.parse() {
             Ok(channel) => RecordedChannelParse::Parsed(channel),
             Err(error) => {
-                log::warn!("{error}; falling back to default ReShade channel");
+                tracing::warn!("{error}; falling back to default ReShade channel");
                 RecordedChannelParse::InvalidDefaulted {
                     raw: val.to_owned(),
                 }

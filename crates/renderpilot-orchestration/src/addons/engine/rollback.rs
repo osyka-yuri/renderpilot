@@ -32,7 +32,7 @@ pub fn uninstall(
         let bak = match crate::fs::backup_path(path) {
             Ok(bak) => bak,
             Err(error) => {
-                log::warn!(
+                tracing::warn!(
                     "addon uninstall: cannot derive backup path for `{}`: {error}",
                     path.display()
                 );
@@ -40,7 +40,7 @@ pub fn uninstall(
             }
         };
         if !bak.exists() {
-            log::warn!(
+            tracing::warn!(
                 "addon uninstall: backup `{}` is missing; cannot restore the original file",
                 bak.display()
             );

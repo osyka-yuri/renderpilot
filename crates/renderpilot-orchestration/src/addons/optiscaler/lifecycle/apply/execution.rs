@@ -332,7 +332,7 @@ impl ApplyExecution<'_, '_, '_> {
                 installed,
                 baseline: runtime_plan.baseline(),
             });
-            log::debug!(
+            tracing::debug!(
                 "bound native OptiScaler module {} from {}",
                 target.module_id,
                 target.source.display()

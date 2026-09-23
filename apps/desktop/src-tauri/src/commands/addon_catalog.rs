@@ -75,7 +75,12 @@ fn report_game_capability_refresh_failure(
     failure: GameCapabilityRefreshFailure,
     error: &impl std::fmt::Display,
 ) {
-    log::warn!("{}: {error}", failure.console_prefix());
+    tracing::warn!(
+        __renderpilot_diagnostic_recorded = tracing::field::Empty,
+        "{}: {}",
+        failure.console_prefix(),
+        error
+    );
     backend_diagnostics::record(BackendDiagnosticEvent::capability_failure(
         CapabilityOperation::RefreshGameCatalogAddonCapabilities,
     ));

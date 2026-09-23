@@ -78,7 +78,7 @@ async fn load_cached_module_off_runtime(
     tokio::task::spawn_blocking(move || match std::fs::read(&cache_path) {
         Ok(bytes) if descriptor.validate_bytes(&bytes).is_ok() => Ok(Some(bytes)),
         Ok(_) => {
-            log::warn!(
+            tracing::warn!(
                 "discarding invalid OptiScaler module cache {}",
                 cache_path.display()
             );

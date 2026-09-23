@@ -294,7 +294,7 @@ fn load_luma_record(
     match records::record_of_kind(context, game_id, AddonKind::Luma) {
         Ok(record) => record,
         Err(error) => {
-            log::warn!("Luma {label}: failed to re-load install for `{game_id}`: {error}");
+            tracing::warn!("Luma {label}: failed to re-load install for `{game_id}`: {error}");
             None
         }
     }
@@ -336,13 +336,13 @@ fn persist_rebuilt(
     ) {
         Ok(record) => record,
         Err(error) => {
-            log::warn!("Luma {label}: failed to rebuild record for `{game_id}`: {error}");
+            tracing::warn!("Luma {label}: failed to rebuild record for `{game_id}`: {error}");
             return;
         }
     };
     if let Err(error) =
         crate::addons::luma::peer::commit_metadata(context, guard, current, &refreshed)
     {
-        log::warn!("Luma {label}: failed to persist for `{game_id}`: {error}");
+        tracing::warn!("Luma {label}: failed to persist for `{game_id}`: {error}");
     }
 }

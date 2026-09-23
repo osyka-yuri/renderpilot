@@ -4,8 +4,9 @@ mod backend_diagnostics;
 mod command_error_contract;
 mod commands;
 mod diagnostic_event;
-#[cfg(all(windows, feature = "portable"))]
 mod diagnostics;
+mod frontend_diagnostics;
+mod logging;
 #[cfg(all(windows, feature = "portable"))]
 mod portable_runtime;
 #[cfg(all(windows, feature = "portable"))]
@@ -38,14 +39,14 @@ pub fn run() {
         exit_with_portable_startup_error("runtime-path installation", &error);
     }
 
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-
     #[cfg(all(windows, feature = "portable"))]
     portable_runtime::diagnostics_files::install_app(&portable_startup);
 
+    logging::install();
+
     let context = tauri::generate_context!();
 
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "portable"))]
     webview_runtime::enforce_minimum_version(&context);
 
     #[cfg(all(windows, feature = "portable"))]
@@ -90,23 +91,41 @@ pub fn verify_updater_artifact(
 
 /// Builds and runs the Tauri application.
 fn run_desktop_shell(context: tauri::Context<Wry>) -> tauri::Result<()> {
-    let app = create_desktop_builder().build(context)?;
-    app.run(|_handle, _event| {
-        #[cfg(all(windows, feature = "portable"))]
-        match _event {
-            tauri::RunEvent::Ready => {
-                portable_runtime::diagnostics_files::app_milestone(
-                    diagnostics::PortableMilestone::DesktopShellReady,
-                );
-            }
-            tauri::RunEvent::Exit => {
-                portable_runtime::diagnostics_files::app_milestone(
-                    diagnostics::PortableMilestone::ControlledExit,
-                );
-                portable_runtime::diagnostics_files::shutdown_app();
-            }
-            _ => {}
+    let built = create_desktop_builder().build(context);
+    #[cfg(not(all(windows, feature = "portable")))]
+    diagnostics::install_installed();
+    let app = built?;
+
+    #[cfg(all(windows, not(feature = "portable")))]
+    if webview_runtime::check_minimum_version(app.config())
+        == webview_runtime::RuntimeCheckOutcome::Incompatible
+    {
+        exit_for_incompatible_webview_runtime(&app);
+    }
+
+    app.run(|_handle, event| match event {
+        tauri::RunEvent::Ready => {
+            #[cfg(all(windows, feature = "portable"))]
+            portable_runtime::diagnostics_files::app_milestone(
+                diagnostics::PortableMilestone::DesktopShellReady,
+            );
+            #[cfg(not(all(windows, feature = "portable")))]
+            diagnostics::installed_event(diagnostics::InstalledLifecycle::Ready);
         }
+        tauri::RunEvent::Exit => {
+            #[cfg(all(windows, feature = "portable"))]
+            portable_runtime::diagnostics_files::app_milestone(
+                diagnostics::PortableMilestone::ControlledExit,
+            );
+            #[cfg(all(windows, feature = "portable"))]
+            portable_runtime::diagnostics_files::shutdown_app();
+            #[cfg(not(all(windows, feature = "portable")))]
+            {
+                diagnostics::installed_event(diagnostics::InstalledLifecycle::Exit);
+                diagnostics::shutdown_installed();
+            }
+        }
+        _ => {}
     });
     Ok(())
 }
@@ -201,6 +220,14 @@ fn configure_cover_protocol(builder: DesktopBuilder) -> DesktopBuilder {
 ///
 /// Keep this function focused on plugin registration only.
 fn configure_plugins(builder: DesktopBuilder) -> DesktopBuilder {
+    #[cfg(all(
+        not(any(target_os = "android", target_os = "ios")),
+        not(all(windows, feature = "portable"))
+    ))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(
+        activate_existing_main_window,
+    ));
+
     let builder = builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -210,6 +237,37 @@ fn configure_plugins(builder: DesktopBuilder) -> DesktopBuilder {
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
     builder
+}
+
+#[cfg(all(
+    not(any(target_os = "android", target_os = "ios")),
+    not(all(windows, feature = "portable"))
+))]
+fn activate_existing_main_window(app: &tauri::AppHandle<Wry>, _args: Vec<String>, _cwd: String) {
+    let Some(window) = app.get_webview_window("main") else {
+        tracing::warn!("could not find the main window after a second RenderPilot launch");
+        return;
+    };
+
+    if let Err(error) = window.show() {
+        tracing::warn!("failed to show the main window after a second launch: {error}");
+    }
+    if let Err(error) = window.unminimize() {
+        tracing::warn!("failed to restore the main window after a second launch: {error}");
+    }
+    if let Err(error) = window.set_focus() {
+        tracing::warn!("failed to focus the main window after a second launch: {error}");
+    }
+}
+
+#[cfg(all(windows, not(feature = "portable")))]
+fn exit_for_incompatible_webview_runtime(app: &tauri::App<Wry>) -> ! {
+    diagnostics::installed_event(diagnostics::InstalledLifecycle::Failure);
+    diagnostics::installed_event(diagnostics::InstalledLifecycle::Exit);
+    diagnostics::shutdown_installed();
+    tauri_plugin_single_instance::destroy(app);
+    app.handle().cleanup_before_exit();
+    std::process::exit(webview_runtime::INCOMPATIBLE_RUNTIME_EXIT_CODE);
 }
 
 /// Registers commands exposed to the frontend.
@@ -306,6 +364,7 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::app_update_apply,
         commands::app_update_close,
         commands::portable_trial_ready,
+        frontend_diagnostics::record_frontend_diagnostic,
     ])
 }
 
@@ -330,6 +389,11 @@ fn exit_with_startup_error(error: &tauri::Error) -> ! {
             crate::diagnostics::PortableMilestone::ControlledExit,
         );
         portable_runtime::diagnostics_files::shutdown_app();
+    }
+    #[cfg(not(all(windows, feature = "portable")))]
+    {
+        diagnostics::installed_event(diagnostics::InstalledLifecycle::Failure);
+        diagnostics::shutdown_installed();
     }
     eprintln!("{APP_NAME}: failed to run desktop shell: {error}");
     std::process::exit(STARTUP_FAILURE_EXIT_CODE);

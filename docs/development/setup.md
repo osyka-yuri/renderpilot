@@ -64,7 +64,7 @@ cargo run -p renderpilot-cli -- --help
 - `RENDERPILOT_LIBRARIES_FIXTURE` points the ignored producer-contract test at its golden V2 fixture.
 - `TAURI_DEV_HOST` controls the Vite/Tauri development host.
 - `WEBVIEW2_USER_DATA_FOLDER` overrides the WebView2 profile location when set before desktop startup.
-- `RUST_LOG` controls backend logging through `env_logger` where the launched target enables it.
+- `RUST_LOG` controls desktop stderr logging through tracing-subscriber (default `info`); level and target directives are supported. Message-regex suffix filters from env_logger are not supported.
 - `RENDERPILOT_WINDOWS_MANIFEST` is build-only. Windows release builds accept only `production` or `release-tooling`; non-release Windows builds accept only `development` or an unset value. Use `Invoke-RenderPilotWithWindowsManifest` to scope a local selector instead of exporting the variable; the helper restores any previous value. The official production workflow remains the release authority and scopes its selector itself.
 
 For the complete application-data resolution order and portable layout, see [Storage locations](safety-and-storage.md#storage-locations).

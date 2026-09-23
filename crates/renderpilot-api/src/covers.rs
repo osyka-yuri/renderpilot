@@ -37,7 +37,7 @@ pub fn clear_game_cover(
 ) -> JsonResult {
     let output = clear_game_cover_with_observation(context, game_id)?;
     if let Some(error) = output.cleanup_issue {
-        log::warn!("cover was cleared but orphan cleanup failed: {error}");
+        tracing::warn!("cover was cleared but orphan cleanup failed: {error}");
     }
     Ok(output.json)
 }

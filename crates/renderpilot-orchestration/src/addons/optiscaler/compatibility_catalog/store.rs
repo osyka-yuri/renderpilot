@@ -88,14 +88,14 @@ where
     let candidate_bytes = match fetch().await {
         Ok(bytes) => bytes,
         Err(error) => {
-            log::warn!("OptiScaler compatibility catalog refresh failed: {error}");
+            tracing::warn!("OptiScaler compatibility catalog refresh failed: {error}");
             return Ok(admitted.clone());
         }
     };
     let candidate = match parse_catalog(&candidate_bytes) {
         Ok(candidate) => candidate,
         Err(error) => {
-            log::warn!("OptiScaler compatibility catalog rejected: {error}");
+            tracing::warn!("OptiScaler compatibility catalog rejected: {error}");
             return Ok(admitted.clone());
         }
     };
@@ -104,7 +104,9 @@ where
         AdmissionOrder::Older => {
             if let Err(error) = refresh_cache_freshness(path, observed.generation(), admitted_bytes)
             {
-                log::warn!("could not refresh OptiScaler compatibility catalog freshness: {error}");
+                tracing::warn!(
+                    "could not refresh OptiScaler compatibility catalog freshness: {error}"
+                );
             }
             Ok(admitted.clone())
         }
@@ -117,7 +119,9 @@ where
             admitted,
         ),
         AdmissionOrder::Divergent => {
-            log::warn!("OptiScaler compatibility catalog rejected: equal revision changes content");
+            tracing::warn!(
+                "OptiScaler compatibility catalog rejected: equal revision changes content"
+            );
             Ok(admitted.clone())
         }
     }
@@ -176,7 +180,7 @@ fn publish_candidate(
     ) {
         Ok(publication) => publication,
         Err(error) => {
-            log::warn!("OptiScaler compatibility catalog publication failed: {error}");
+            tracing::warn!("OptiScaler compatibility catalog publication failed: {error}");
             return Ok(fallback.clone());
         }
     };
@@ -199,7 +203,7 @@ fn latest_admitted(
         }
         Ok(_) => Ok(fallback.clone()),
         Err(error) => {
-            log::warn!("OptiScaler compatibility catalog re-observation failed: {error}");
+            tracing::warn!("OptiScaler compatibility catalog re-observation failed: {error}");
             Ok(fallback.clone())
         }
     }

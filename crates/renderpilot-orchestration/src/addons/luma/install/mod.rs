@@ -241,7 +241,7 @@ fn remove_owned_reshade_host_best_effort(record: &InstalledAddon) {
             && scan::is_reshade_proxy_file(&path)
             && let Err(error) = std::fs::remove_file(&path)
         {
-            log::warn!(
+            tracing::warn!(
                 "Luma uninstall: failed to remove owned ReShade host `{}`: {error}",
                 path.display()
             );

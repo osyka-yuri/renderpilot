@@ -4,13 +4,13 @@ RenderPilot can discover games from supported launcher libraries and from folder
 
 ## Launcher scan
 
-Launcher discovery supports Steam, Epic Games, GOG, EA App/Origin, Ubisoft Connect, and Xbox App/Microsoft Store. Start a scan from the Games page and review the resulting titles. A game's current location, launcher metadata, executable candidates, detected rendering components, and add-on capabilities are resolved from the installation that exists on disk.
+Launcher discovery supports Steam, Epic Games, GOG, EA App/Origin, Ubisoft Connect, and Xbox App/Microsoft Store. Use **Refresh** in the app header to scan launcher libraries, then review the resulting titles on the Games page. A game's current location, launcher metadata, executable candidates, detected rendering components, and add-on capabilities are resolved from the installation that exists on disk.
 
 Launcher metadata is useful evidence, not an instruction to trust a stale path. If a game was moved or imported, RenderPilot inspects the real folder and can retain its launcher identity when the files support that match.
 
 ## Manual folders
 
-Use a manual folder for a standalone game, an unusual launcher layout, or a title that discovery did not find. Select the game's root rather than an individual DLL. RenderPilot inspects the folder first and presents executable candidates. Confirm the executable that actually starts the game, especially when a directory also contains launchers, crash reporters, benchmark tools, or redistributable installers.
+Use a manual folder for a standalone game, an unusual launcher layout, or a title that discovery did not find. Select the game's root rather than an individual DLL. RenderPilot inspects the folder and may ask you to choose an executable. If it does, select the one that starts the game, especially when the directory also contains launchers, crash reporters, benchmark tools, or redistributable installers.
 
 The root and executable establish the boundary for later detection and mutation. If inspection indicates that the selected folder is above or below the likely root, RenderPilot requires an explicit correction. It does not silently redirect a planned operation to another directory.
 

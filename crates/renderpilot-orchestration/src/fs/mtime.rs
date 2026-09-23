@@ -73,6 +73,6 @@ pub(crate) fn stamp_mtime_best_effort(
         return;
     };
     if let Err(error) = set_file_mtime(path, time) {
-        log::warn!("mtime stamp skipped for `{}`: {error}", path.display());
+        tracing::warn!("mtime stamp skipped for `{}`: {error}", path.display());
     }
 }

@@ -154,7 +154,7 @@ pub(super) fn read_valid_archive(
     match super::validation::validate_transport(artifact, &bytes) {
         Ok(()) => Ok(Some(bytes)),
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "discarding invalid cached archive for {}: {error}",
                 artifact.artifact_id
             );

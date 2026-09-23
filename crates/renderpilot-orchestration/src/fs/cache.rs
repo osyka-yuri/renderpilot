@@ -194,7 +194,7 @@ where
                 match validate_current(&current.bytes) {
                     Ok(value) => return Ok(CachePublication::Current(value)),
                     Err(error) => {
-                        log::debug!(
+                        tracing::debug!(
                             "cache CAS: current cache `{}` became invalid while fetching; replacing it: {error}",
                             path.display()
                         );

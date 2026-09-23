@@ -542,7 +542,7 @@ pub(crate) fn components_for_candidate_matching<'components>(
                 {
                     Ok(snapshot) => Some(snapshot.into_component()),
                     Err(error) => {
-                        log::warn!(
+                        tracing::warn!(
                             "omitting stale OpenVR component {} from replacement candidates: {error}",
                             component.id().as_str()
                         );
@@ -571,7 +571,7 @@ pub(crate) fn components_for_candidate_matching_with_installed(
             match crate::coordinated_files::current_component_snapshot(component, managed_files) {
                 Ok(snapshot) => Some(snapshot.into_component()),
                 Err(error) => {
-                    log::warn!(
+                    tracing::warn!(
                         "omitting stale component {} from live catalog candidates for {}: {error}",
                         component.id().as_str(),
                         game_id.as_str(),
@@ -612,7 +612,7 @@ pub fn get_game_details(
             );
             return Ok(details);
         }
-        log::debug!(
+        tracing::debug!(
             "catalog changed during details build for {}; retrying",
             game_id.as_str()
         );

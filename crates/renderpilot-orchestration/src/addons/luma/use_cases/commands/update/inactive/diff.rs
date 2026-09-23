@@ -73,7 +73,7 @@ pub(super) fn recorded_payload_keys(
         })
         .filter_map(|path| {
             let Some(relative) = relative_under(payload_dir, &path) else {
-                log::warn!(
+                tracing::warn!(
                     "Luma update set-diff: tracked path `{}` is not under payload dir `{}`; \
                      excluding from payload diff rather than risking a wrong removal",
                     path.display(),

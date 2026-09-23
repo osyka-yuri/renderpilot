@@ -156,7 +156,7 @@ impl AppliedPeerFileMutation<'_> {
         let read_guards = observe_peer_read_guards(&package)?;
         executor.commit_ordinary_peer(permit, evidence, read_guards)?;
         if let Err(error) = transaction.cleanup_committed(executor.repositories()) {
-            log::warn!("peer transaction committed but cleanup is pending: {error}");
+            tracing::warn!("peer transaction committed but cleanup is pending: {error}");
         }
         Ok(())
     }
@@ -327,7 +327,7 @@ impl PeerMutationExecutor {
             ))?;
         let committed = self.runtime.commit_metadata_aggregate(permit, Vec::new())?;
         if let Err(error) = self.runtime.cleanup_metadata_aggregate(committed) {
-            log::warn!("peer metadata aggregate committed but cleanup is pending: {error}");
+            tracing::warn!("peer metadata aggregate committed but cleanup is pending: {error}");
         }
         Ok(())
     }

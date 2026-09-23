@@ -46,10 +46,10 @@ impl std::error::Error for SidecarPathError {}
 /// - **Mutating apply** (engine place/remove, catalog overlay/downgrade, renodx
 ///   adopt): surface as service/provider errors so a bad path cannot abort the
 ///   process mid-mutation without a failure signal.
-/// - **Best-effort discovery** (scan recovery, swap shadow plan): `log::warn!`
+/// - **Best-effort discovery** (scan recovery, swap shadow plan): `tracing::warn!`
 ///   and skip / proceed without shadow when the name cannot be formed.
 /// - **Restore / uninstall** (`revert_to_baseline_fs`, addon uninstall):
-///   `log::warn!` and skip -- never silent.
+///   `tracing::warn!` and skip -- never silent.
 /// - **Tests:** `.expect` is fine for fixture paths that always have a name.
 ///
 /// Re-processing a path already classified as a backup is a **workflow**

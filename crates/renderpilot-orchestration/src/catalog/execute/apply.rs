@@ -416,12 +416,12 @@ pub(super) fn apply_mutation_paths(prepared: &types::PreparedApplySwap) -> Vec<s
 
 fn invalidate_stale_artifact(storage: &SqliteStorage, artifact_id: &ArtifactId, reason: &str) {
     if let Err(error) = storage.delete_artifact(artifact_id) {
-        log::warn!(
+        tracing::warn!(
             "failed to invalidate stale artifact {} ({reason}): {error}",
             artifact_id.as_str()
         );
     } else {
-        log::info!(
+        tracing::info!(
             "invalidated stale artifact {} ({reason})",
             artifact_id.as_str()
         );

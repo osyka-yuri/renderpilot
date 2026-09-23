@@ -54,7 +54,7 @@ impl CatalogSnapshotCache {
             let mut validated = CatalogSnapshot::build_validated(context, revision)?;
             let final_generation = context.storage().catalog_generation();
             if final_generation != build_generation {
-                log::debug!(
+                tracing::debug!(
                     "catalog changed during live validation; retrying from revision={revision}"
                 );
                 continue;
@@ -63,7 +63,7 @@ impl CatalogSnapshotCache {
             let mut current_entry = self.entry.write().unwrap_or_else(PoisonError::into_inner);
             if context.storage().catalog_generation() != final_generation {
                 drop(current_entry);
-                log::debug!(
+                tracing::debug!(
                     "catalog changed before live validation install; retrying from revision={revision}"
                 );
                 continue;
@@ -156,7 +156,7 @@ impl CatalogSnapshotCache {
                 Ok(snapshot) => snapshot,
                 Err(error) => {
                     if !require_current_generation && let Some(previous) = previous.as_ref() {
-                        log::warn!(
+                        tracing::warn!(
                             "catalog snapshot rebuild failed; serving revision={} until retry: {error}",
                             previous.revision()
                         );
@@ -189,7 +189,9 @@ impl CatalogSnapshotCache {
                 return Ok(snapshot);
             }
 
-            log::debug!("catalog changed during snapshot build; retrying from revision={revision}");
+            tracing::debug!(
+                "catalog changed during snapshot build; retrying from revision={revision}"
+            );
             if !require_current_generation && let Some(previous) = previous.as_ref() {
                 return Ok(Arc::clone(previous));
             }

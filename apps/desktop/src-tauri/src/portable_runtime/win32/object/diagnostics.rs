@@ -2,6 +2,7 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_DISPOSITION_INFO, FileDispositionInfo, SetFileInformationByHandle,
 };
 
+use crate::diagnostics::{PortableDiagnosticName, parse_portable_diagnostic_name};
 use crate::portable_runtime::{
     error::{PortableRuntimeError, Result},
     win32::object::handle::{
@@ -126,22 +127,16 @@ pub(crate) fn open_completed_canonical_diagnostic(
 }
 
 fn canonical_for_role(role: DiagnosticsRole, name: &str) -> bool {
-    let Some(stem) = name.strip_suffix(".log") else {
-        return false;
-    };
-    match role {
-        DiagnosticsRole::Supervisor => lower_hex_64(stem),
-        DiagnosticsRole::App => stem.split_once('-').is_some_and(|(session, transaction)| {
-            lower_hex_64(session) && lower_hex_64(transaction)
-        }),
-    }
-}
-
-fn lower_hex_64(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    matches!(
+        (role, parse_portable_diagnostic_name(name)),
+        (
+            DiagnosticsRole::Supervisor,
+            Some(PortableDiagnosticName::Supervisor { .. })
+        ) | (
+            DiagnosticsRole::App,
+            Some(PortableDiagnosticName::App { .. })
+        )
+    )
 }
 
 impl CompletedDiagnosticCandidate {

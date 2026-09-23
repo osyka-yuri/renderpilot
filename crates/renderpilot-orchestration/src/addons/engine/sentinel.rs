@@ -77,7 +77,7 @@ impl OperationSentinel {
     /// Completes an attempt that returned to its pre-attempt state.
     pub(crate) fn finish_rolled_back(self) {
         if self.preexisting {
-            log::debug!(
+            tracing::debug!(
                 "rolled back current add-on operation; retaining pre-existing sentinel `{}`",
                 self.path.display()
             );
@@ -108,7 +108,7 @@ pub(crate) fn write_sentinel(path: &Path) -> Result<(), ServiceError> {
 /// Best-effort removal of the sentinel (logs on failure, never errors the caller).
 pub(crate) fn remove_sentinel(path: &Path) {
     if let Err(error) = remove_existing(path) {
-        log::warn!(
+        tracing::warn!(
             "addon install: failed to remove sentinel `{}`: {error}",
             path.display()
         );

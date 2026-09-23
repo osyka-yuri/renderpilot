@@ -199,14 +199,14 @@ fn cleanup_paths<'a>(entries: impl IntoIterator<Item = &'a str>, roots: &[PathBu
         let root = match root_for(path, roots) {
             Ok(root) => root,
             Err(error) => {
-                log::warn!("preserving peer ancestor {}: {error}", path.display());
+                tracing::warn!("preserving peer ancestor {}: {error}", path.display());
                 continue;
             }
         };
         match parent_state(path, root) {
             Ok(ParentState::Missing) => continue,
             Err(error) => {
-                log::warn!("preserving peer ancestor {}: {error}", path.display());
+                tracing::warn!("preserving peer ancestor {}: {error}", path.display());
                 continue;
             }
             Ok(ParentState::Reachable) => {}
@@ -214,7 +214,7 @@ fn cleanup_paths<'a>(entries: impl IntoIterator<Item = &'a str>, roots: &[PathBu
         let (parent, leaf) = match crate::fs::verified_parent(path) {
             Ok(value) => value,
             Err(error) => {
-                log::warn!("preserving peer ancestor {}: {error}", path.display());
+                tracing::warn!("preserving peer ancestor {}: {error}", path.display());
                 continue;
             }
         };
@@ -222,12 +222,12 @@ fn cleanup_paths<'a>(entries: impl IntoIterator<Item = &'a str>, roots: &[PathBu
             Ok(Some(observed)) => observed,
             Ok(None) => continue,
             Err(error) => {
-                log::warn!("preserving peer ancestor {}: {error}", path.display());
+                tracing::warn!("preserving peer ancestor {}: {error}", path.display());
                 continue;
             }
         };
         if !observed.is_directory() {
-            log::warn!("preserving non-directory peer ancestor {}", path.display());
+            tracing::warn!("preserving non-directory peer ancestor {}", path.display());
             continue;
         }
         if let Err(error) = parent.remove_empty_dir_exact(
@@ -235,7 +235,7 @@ fn cleanup_paths<'a>(entries: impl IntoIterator<Item = &'a str>, roots: &[PathBu
             &observed.identity,
             crate::fs::AuthorityMode::CooperativeSameUid,
         ) {
-            log::warn!("preserving peer ancestor {}: {error}", path.display());
+            tracing::warn!("preserving peer ancestor {}: {error}", path.display());
         }
     }
 }

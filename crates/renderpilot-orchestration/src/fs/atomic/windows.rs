@@ -235,7 +235,7 @@ impl PreparedNoReplaceWrite {
         let cleanup = self.discard_windows_exact();
         self.close_windows_handles();
         if let Err(error) = cleanup {
-            log::error!(
+            tracing::error!(
                 "failed to discard abandoned exact publication candidate `{}`: {error}",
                 self.destination.display()
             );

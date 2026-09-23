@@ -40,7 +40,7 @@ pub(super) fn catalog_as_artifacts(catalog: &ValidatedCatalog) -> Vec<LibraryArt
                 continue;
             }
             Err(error) => {
-                log::warn!(
+                tracing::warn!(
                     "catalog package `{}` cannot be represented by this client: {error}; skipping it",
                     package.package_id
                 );

@@ -24,7 +24,7 @@ pub async fn get_or_fetch_manifest() -> Result<RenoDxManifest, ServiceError> {
         Ok(manifest) => Ok(manifest),
         Err(error) if is_v2_contract_error(&error) => Err(error),
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "RenoDX v2 manifest is unavailable ({error}); trying the legacy v1 catalogue"
             );
             reshade_store::get_or_fetch_tool_catalog(

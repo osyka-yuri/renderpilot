@@ -43,6 +43,8 @@ use super::ObjectIdentity;
 
 const OBJECT_ATTRIBUTES_BYTES: u32 = std::mem::size_of::<OBJECT_ATTRIBUTES>() as u32;
 const GENERIC_ACCESS_MASK: u32 = GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE | GENERIC_ALL;
+const MAX_FIRST_RECORD_BYTES: usize = 4 * 1024;
+const FIRST_RECORD_READ_LIMIT: usize = MAX_FIRST_RECORD_BYTES + 1;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum RelativeDirectoryOpen {
@@ -161,11 +163,7 @@ impl VerifiedFile {
     }
 
     pub(super) fn read_first_record(&mut self) -> Result<Vec<u8>> {
-        self.file.seek(SeekFrom::Start(0))?;
-        let mut bytes = vec![0; 4 * 1024];
-        let read = self.file.read(&mut bytes)?;
-        bytes.truncate(read);
-        Ok(bytes)
+        read_first_record_bounded(&mut self.file).map_err(Into::into)
     }
 
     pub(super) fn into_file(self) -> File {
@@ -174,6 +172,35 @@ impl VerifiedFile {
 
     pub(super) fn handle(&self) -> HANDLE {
         self.file.as_raw_handle().cast()
+    }
+}
+
+fn read_first_record_bounded(reader: &mut (impl Read + Seek)) -> std::io::Result<Vec<u8>> {
+    reader.seek(SeekFrom::Start(0))?;
+    let mut bytes = Vec::with_capacity(FIRST_RECORD_READ_LIMIT);
+    let mut chunk = [0; 512];
+    loop {
+        let remaining = FIRST_RECORD_READ_LIMIT.saturating_sub(bytes.len());
+        if remaining == 0 {
+            return Ok(bytes);
+        }
+        let chunk_limit = remaining.min(chunk.len());
+        let read = reader.read(&mut chunk[..chunk_limit])?;
+        if read == 0 {
+            return Ok(bytes);
+        }
+        if let Some(newline) = chunk[..read].iter().position(|byte| *byte == b'\n') {
+            let record_end = bytes.len() + newline + 1;
+            if record_end <= MAX_FIRST_RECORD_BYTES {
+                bytes.extend_from_slice(&chunk[..=newline]);
+            } else {
+                // Keep the oversized prefix unterminated so the shared first
+                // event validator rejects it using the existing predicate.
+                bytes.extend_from_slice(&chunk[..newline]);
+            }
+            return Ok(bytes);
+        }
+        bytes.extend_from_slice(&chunk[..read]);
     }
 }
 
@@ -404,7 +431,46 @@ fn wide_nul(path: &Path) -> Result<Vec<u16>> {
 
 #[cfg(test)]
 mod access_profile_tests {
-    use super::{GENERIC_ACCESS_MASK, RelativeDirectoryOpen, RelativeFileOpen};
+    use std::io::{self, Cursor, Read, Seek, SeekFrom};
+
+    use super::{
+        FIRST_RECORD_READ_LIMIT, GENERIC_ACCESS_MASK, MAX_FIRST_RECORD_BYTES,
+        RelativeDirectoryOpen, RelativeFileOpen, read_first_record_bounded,
+    };
+
+    struct ShortReader {
+        inner: Cursor<Vec<u8>>,
+        max_read: usize,
+        fail_after: Option<u64>,
+    }
+
+    impl Read for ShortReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            let position = self.inner.position();
+            if self.fail_after.is_some_and(|limit| position >= limit) {
+                return Err(io::Error::other("injected read failure"));
+            }
+            let mut limit = buffer.len().min(self.max_read);
+            if let Some(fail_after) = self.fail_after {
+                limit = limit.min((fail_after - position) as usize);
+            }
+            self.inner.read(&mut buffer[..limit])
+        }
+    }
+
+    impl Seek for ShortReader {
+        fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+            self.inner.seek(position)
+        }
+    }
+
+    fn short_reader(bytes: Vec<u8>, max_read: usize) -> ShortReader {
+        ShortReader {
+            inner: Cursor::new(bytes),
+            max_read,
+            fail_after: None,
+        }
+    }
 
     #[test]
     fn relative_native_profiles_use_only_preexpanded_access_rights() {
@@ -427,5 +493,44 @@ mod access_profile_tests {
         ] {
             assert_eq!(desired_access & GENERIC_ACCESS_MASK, 0);
         }
+    }
+
+    #[test]
+    fn bounded_first_record_read_handles_short_reads_and_stops_at_newline() {
+        let mut reader = short_reader(b"first\nsecond\n".to_vec(), 2);
+
+        assert_eq!(
+            read_first_record_bounded(&mut reader).expect("read first record"),
+            b"first\n"
+        );
+    }
+
+    #[test]
+    fn bounded_first_record_read_keeps_incomplete_eof_unterminated() {
+        let mut reader = short_reader(b"partial first record".to_vec(), 3);
+
+        let bytes = read_first_record_bounded(&mut reader).expect("read through clean EOF");
+        assert_eq!(bytes, b"partial first record");
+        assert!(!bytes.contains(&b'\n'));
+    }
+
+    #[test]
+    fn bounded_first_record_read_rejects_a_line_longer_than_the_limit() {
+        let mut contents = vec![b'x'; MAX_FIRST_RECORD_BYTES];
+        contents.extend_from_slice(b"\nnext record\n");
+        let mut reader = short_reader(contents, 97);
+
+        let bytes = read_first_record_bounded(&mut reader).expect("read bounded prefix");
+        assert_eq!(bytes.len(), MAX_FIRST_RECORD_BYTES);
+        assert!(!bytes.contains(&b'\n'));
+        assert!(FIRST_RECORD_READ_LIMIT > bytes.len());
+    }
+
+    #[test]
+    fn bounded_first_record_read_propagates_stream_errors() {
+        let mut reader = short_reader(b"first record".to_vec(), 2);
+        reader.fail_after = Some(4);
+
+        assert!(read_first_record_bounded(&mut reader).is_err());
     }
 }

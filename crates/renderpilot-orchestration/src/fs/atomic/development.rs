@@ -66,7 +66,7 @@ impl PreparedNoReplaceWrite {
             return;
         };
         if let Err(error) = remove_owned_no_replace_temp(&temp_path) {
-            log::error!(
+            tracing::error!(
                 "failed to remove abandoned development publication temporary file `{}`: {error}",
                 temp_path.display()
             );

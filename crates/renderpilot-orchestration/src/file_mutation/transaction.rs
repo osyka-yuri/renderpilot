@@ -396,7 +396,7 @@ impl DurableFileTransaction {
         crate::peer_mutation_executor::ancestor_io::cleanup(&self.manifest.peer_ancestors, &roots);
         storage.complete_prepared_file_mutation_restored(fence)?;
         if let Err(error) = cleanup_manifest(&self.manifest) {
-            log::warn!(
+            tracing::warn!(
                 "rolled-back file transaction retained its directory; it is not auto-cleaned: {error}"
             );
         }
@@ -431,7 +431,7 @@ impl DurableFileTransaction {
             Ok(value) => {
                 on_committed(&value);
                 if let Err(error) = self.cleanup_committed(storage) {
-                    log::warn!("transaction committed but cleanup is pending: {error}");
+                    tracing::warn!("transaction committed but cleanup is pending: {error}");
                 }
                 Ok(value)
             }

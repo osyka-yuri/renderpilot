@@ -228,7 +228,7 @@ mod tests {
                         commit.finish_rolled_back();
                     }
                     Err(revert_error) => {
-                        log::warn!(
+                        tracing::warn!(
                             "addon install: record persistence failed and filesystem revert also \
                              failed (leaving torn sentinel `{}`): {revert_error}",
                             commit.path().display()

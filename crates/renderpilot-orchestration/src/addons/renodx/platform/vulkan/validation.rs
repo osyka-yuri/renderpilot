@@ -80,7 +80,7 @@ pub(crate) fn resolve_digest_verdict(
                 diagnostics: Vec::new(),
             };
         }
-        log::info!("Vulkan layer hash mismatch: actual={actual}, expected={expected_digest}");
+        tracing::info!("Vulkan layer hash mismatch: actual={actual}, expected={expected_digest}");
         return LayerUpdateVerdict {
             status: UpdateStatus::Available,
             diagnostics: vec![LayerDiagnosticReason::HashMismatch],
@@ -89,7 +89,7 @@ pub(crate) fn resolve_digest_verdict(
 
     if let Some(db) = db_digest {
         if db == expected_digest {
-            log::info!(
+            tracing::info!(
                 "Vulkan layer DB-only fallback: advisory digest matches upstream \
                  but DLL is missing/unreadable; degrading to needs-validation"
             );
@@ -98,7 +98,7 @@ pub(crate) fn resolve_digest_verdict(
                 diagnostics: vec![LayerDiagnosticReason::DbOnlyFallback],
             };
         }
-        log::info!("Vulkan layer DB-only fallback: db={db}, expected={expected_digest}");
+        tracing::info!("Vulkan layer DB-only fallback: db={db}, expected={expected_digest}");
         return LayerUpdateVerdict {
             status: UpdateStatus::Available,
             diagnostics: vec![LayerDiagnosticReason::DbOnlyFallback],

@@ -52,7 +52,7 @@ fn backup_before_schema_change(
         })?;
     validate_backup(&backup_path, operation)?;
 
-    log::warn!(
+    tracing::warn!(
         "{operation}: backed up database to {}",
         backup_path.display()
     );

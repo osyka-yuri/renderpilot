@@ -185,7 +185,7 @@ pub(crate) fn finish_sentinel_mutation(
     feature_label: &str,
 ) -> Result<(), ServiceError> {
     if result.is_err() && !local_rollback_complete {
-        log::warn!(
+        tracing::warn!(
             "{feature_label}'s local rollback was incomplete; using the durable before-state"
         );
     }
@@ -208,7 +208,7 @@ pub(crate) fn finish_sentinel_mutation(
         )
         .map_err(|error| {
             if error.is_rollback_also_failed() {
-                log::warn!(
+                tracing::warn!(
                     "{feature_label} rollback was incomplete; leaving sentinel `{sentinel_path}`: {error}"
                 );
             }

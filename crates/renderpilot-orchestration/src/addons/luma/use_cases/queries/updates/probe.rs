@@ -326,7 +326,7 @@ pub(super) async fn check_host(
 
     let status = host_status_from_digests(assessment.lifecycle, &current, &download.digest);
     if status == UpdateStatus::Unknown && matches!(assessment.lifecycle, HostLifecycle::ReuseUser) {
-        log::info!(
+        tracing::info!(
             "Luma host update skipped for `{}`: owned host has user ReShade content",
             record.game_id()
         );

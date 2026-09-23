@@ -137,7 +137,7 @@ pub(super) fn remove_payload_file(
             if let Err(error) = crate::fs::remove_file_if_exists(&bak_path) {
                 // Live path already holds the foreign original; bak leftover is
                 // recoverable on undo (recreates bak from bytes). Prefer Ok.
-                log::warn!(
+                tracing::warn!(
                     "Luma update: restored `{}` from backup but could not remove `{}`: {error}",
                     path.display(),
                     bak_path.display()
@@ -159,7 +159,7 @@ pub(super) fn remove_payload_file(
                 path.display()
             )));
         }
-        log::warn!(
+        tracing::warn!(
             "Luma update: backup `{}` is missing; removing `{}` outright",
             bak_path.display(),
             path.display()
@@ -181,14 +181,14 @@ fn undo_removed_files(undos: &[RemovedFileUndo]) -> Result<(), ServiceError> {
         if let Some((bak_path, bak_bytes)) = &undo.restored_original
             && let Err(error) = crate::fs::write_file_atomically(bak_path, bak_bytes)
         {
-            log::warn!(
+            tracing::warn!(
                 "Luma update rollback: failed to restore backup `{}`: {error}",
                 bak_path.display()
             );
             failures.push(format!("restore backup `{}`: {error}", bak_path.display()));
         }
         if let Err(error) = crate::fs::write_file_atomically(&undo.path, &undo.payload_bytes) {
-            log::warn!(
+            tracing::warn!(
                 "Luma update rollback: failed to restore `{}`: {error}",
                 undo.path.display()
             );

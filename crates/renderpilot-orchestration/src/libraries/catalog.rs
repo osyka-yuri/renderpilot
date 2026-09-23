@@ -69,7 +69,7 @@ async fn fetch_remote_catalog() -> Result<ValidatedCatalog, ServiceError> {
     let (supported, unsupported) =
         partition_vendor_references(&index, super::validation::is_supported_vendor);
     for reference in unsupported {
-        log::warn!(
+        tracing::warn!(
             "library index vendor `{}` is not supported by this client; skipping it",
             reference.vendor_id
         );
@@ -257,7 +257,7 @@ fn last_known_good_after_failure(
 ) -> Result<CatalogRefresh, ServiceError> {
     match observe_catalog(storage) {
         Ok(crate::fs::CacheObservation::Valid { value: catalog, .. }) => {
-            log::warn!(
+            tracing::warn!(
                 "library catalog refresh failed ({refresh_error}); using last-known-good snapshot"
             );
             Ok(CatalogRefresh {
@@ -271,7 +271,7 @@ fn last_known_good_after_failure(
             error: cache_error, ..
         })
         | Err(cache_error) => {
-            log::warn!(
+            tracing::warn!(
                 "library catalog refresh failed ({refresh_error}) and cached snapshot is invalid ({cache_error})"
             );
             Err(refresh_error)
@@ -282,7 +282,7 @@ fn last_known_good_after_failure(
 async fn download_presets_best_effort(storage: &LibraryStorage) {
     for url in preset_urls() {
         if let Err(error) = download_and_save_preset(storage, &url).await {
-            log::warn!("failed to download preset manifest {url}: {error}");
+            tracing::warn!("failed to download preset manifest {url}: {error}");
         }
     }
 }
@@ -310,7 +310,7 @@ pub(super) async fn get_or_fetch_validated_catalog() -> Result<ValidatedCatalog,
                 .catalog)
         }
         crate::fs::CacheObservation::Invalid { generation, error } => {
-            log::warn!("cached library catalog is invalid ({error}); refreshing it");
+            tracing::warn!("cached library catalog is invalid ({error}); refreshing it");
             Ok(fetch_catalog_after_observation(&storage, generation)
                 .await?
                 .catalog)

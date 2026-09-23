@@ -48,11 +48,13 @@ pub async fn get_or_fetch_manifest() -> Result<OptiScalerManifest, ServiceError>
     match cdn::get_or_fetch(&spec(), parse_manifest).await {
         Ok(manifest) if validate_manifest_update(&manifest, &bundled).is_ok() => Ok(manifest),
         Ok(_) | Err(_) => {
-            log::warn!(
+            tracing::warn!(
                 "OptiScaler manifest failed immutable-history validation; using bundled snapshot"
             );
             if let Err(cache_error) = cache_bundled_fallback().await {
-                log::warn!("could not cache bundled OptiScaler manifest fallback: {cache_error}");
+                tracing::warn!(
+                    "could not cache bundled OptiScaler manifest fallback: {cache_error}"
+                );
             }
             Ok(bundled)
         }

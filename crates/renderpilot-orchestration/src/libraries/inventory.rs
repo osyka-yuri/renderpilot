@@ -135,7 +135,7 @@ impl Inventory {
             entries.push(entry);
         }
         if ignored_registrations > 0 {
-            log::warn!(
+            tracing::warn!(
                 "stale catalog package registrations ignored; registration_count={ignored_registrations}; package_count={affected_packages}"
             );
         }
@@ -298,7 +298,7 @@ fn backfill_legacy_receipts(
     if !batch.is_empty()
         && let Err(error) = context.storage().upsert_artifacts(&batch)
     {
-        log::warn!(
+        tracing::warn!(
             "catalog receipt reconciliation backfill failed; count={}; reason={error}",
             batch.len()
         );

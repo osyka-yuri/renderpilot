@@ -142,7 +142,7 @@ fn recover_pending_ordinary(
                     .complete_prepared_file_mutation_restored(fence)?;
             }
             if let Err(error) = super::remove_dir_if_exists(&transaction_dir) {
-                log::warn!(
+                tracing::warn!(
                     "recovered file transaction {} retained its directory; it is not auto-cleaned: {error}",
                     row.id
                 );

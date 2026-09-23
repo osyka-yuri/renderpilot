@@ -30,6 +30,10 @@ pub struct CommandError {
     #[serde(skip)]
     diagnostic: Option<CommandErrorDiagnostic>,
 
+    /// Selected game root for the stale-installation diagnostic only.
+    #[serde(skip)]
+    diagnostic_path: Option<String>,
+
     /// Guards boundary helpers against accidental duplicate registration.
     #[serde(skip)]
     diagnostic_recorded: bool,
@@ -50,22 +54,28 @@ struct CommandDiagnosticRecord<'error> {
 
 fn write_command_diagnostic(record: CommandDiagnosticRecord<'_>) {
     match (record.severity, record.detail) {
-        (CommandErrorSeverity::Warning, Some(detail)) => log::warn!(
-            "Desktop command warning [operation={} code={}]: {detail}",
+        (CommandErrorSeverity::Warning, Some(detail)) => tracing::warn!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
+            "Desktop command warning [operation={} code={}]: {}",
             record.operation.code(),
-            record.code
+            record.code,
+            detail
         ),
-        (CommandErrorSeverity::Warning, None) => log::warn!(
+        (CommandErrorSeverity::Warning, None) => tracing::warn!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
             "Desktop command warning [operation={} code={}]",
             record.operation.code(),
             record.code
         ),
-        (CommandErrorSeverity::Error, Some(detail)) => log::error!(
-            "Desktop command error [operation={} code={}]: {detail}",
+        (CommandErrorSeverity::Error, Some(detail)) => tracing::error!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
+            "Desktop command error [operation={} code={}]: {}",
             record.operation.code(),
-            record.code
+            record.code,
+            detail
         ),
-        (CommandErrorSeverity::Error, None) => log::error!(
+        (CommandErrorSeverity::Error, None) => tracing::error!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
             "Desktop command error [operation={} code={}]",
             record.operation.code(),
             record.code
@@ -81,6 +91,7 @@ impl CommandError {
             reason_code: None,
             recovery_bundle_path: None,
             diagnostic: None,
+            diagnostic_path: None,
             diagnostic_recorded: false,
         }
     }
@@ -119,7 +130,12 @@ impl CommandError {
                 .map(|diagnostic| diagnostic.detail.as_str()),
         });
         backend_diagnostics::record(
-            crate::diagnostic_event::BackendDiagnosticEvent::command_failure(operation, self.kind),
+            crate::diagnostic_event::BackendDiagnosticEvent::command_failure(
+                operation,
+                self.kind,
+                self.reason_code,
+                self.diagnostic_path.take(),
+            ),
         );
         self.diagnostic_recorded = true;
         self
@@ -147,6 +163,13 @@ impl CommandError {
     fn with_reason_code(mut self, reason_code: &'static str) -> Self {
         if self.kind.allows_reason_code(reason_code) {
             self.reason_code = Some(reason_code);
+        }
+        self
+    }
+
+    fn with_diagnostic_path(mut self, path: String) -> Self {
+        if self.kind == CommandErrorKind::StaleInstallInspection {
+            self.diagnostic_path = Some(path);
         }
         self
     }
@@ -367,6 +390,19 @@ mod tests {
             recorded.recorded_with(CommandOperation::ClearGameCover, |_| record_count += 1);
         assert!(recorded_again.diagnostic_recorded);
         assert_eq!(record_count, 1);
+    }
+
+    #[test]
+    fn stale_inspection_path_is_file_diagnostic_only() {
+        let error = CommandError::from(ApiError::Service(ServiceError::StaleInstallInspection {
+            selected_root: "D:/Games/Example".into(),
+            current_fingerprint: "fingerprint".into(),
+        }));
+        assert_eq!(error.diagnostic_path.as_deref(), Some("D:/Games/Example"));
+        assert_eq!(
+            serde_json::to_value(error).expect("serialize command error"),
+            json!({ "code": "stale_install_inspection" })
+        );
     }
 
     #[test]

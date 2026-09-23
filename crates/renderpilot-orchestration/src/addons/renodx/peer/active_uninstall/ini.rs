@@ -69,7 +69,7 @@ pub(super) fn compose_ini(
                         NormalizedPathRelation::Equal
                     )
                 {
-                    log::warn!(
+                    tracing::warn!(
                         "skipping RenoDX configuration cleanup during active uninstall: receipt is invalid or targets a different ReShade.ini"
                     );
                     Cow::Borrowed(bytes)
@@ -80,7 +80,7 @@ pub(super) fn compose_ini(
                             .map(Cow::Owned)
                             .unwrap_or(Cow::Borrowed(bytes)),
                         Err(error) => {
-                            log::warn!(
+                            tracing::warn!(
                                 "skipping RenoDX configuration cleanup during active uninstall: {error}"
                             );
                             Cow::Borrowed(bytes)

@@ -413,7 +413,7 @@ fn strict_ini_in_directory(
 pub fn remove_reshade_logs_best_effort(base_path: &Path) {
     for path in reshade_log_paths(base_path) {
         if let Err(error) = fs::remove_file(&path) {
-            log::warn!(
+            tracing::warn!(
                 "failed to remove ReShade log `{}` during add-on cleanup: {error}",
                 path.display()
             );

@@ -49,7 +49,7 @@ pub fn try_gc_cover_orphans_on_startup(
 /// Best-effort legacy startup cleanup wrapper.
 pub fn gc_cover_orphans_on_startup(context: &renderpilot_orchestration::Context) {
     if let Err(error) = try_gc_cover_orphans_on_startup(context) {
-        log::warn!("startup cover orphan cleanup failed: {error}");
+        tracing::warn!("startup cover orphan cleanup failed: {error}");
     }
 }
 

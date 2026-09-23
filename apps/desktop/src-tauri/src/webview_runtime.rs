@@ -9,9 +9,12 @@ use std::{
     ffi::OsString,
     fmt::Display,
     path::{Path, PathBuf},
-    process,
 };
 
+#[cfg(feature = "portable")]
+use std::process;
+
+#[cfg(feature = "portable")]
 use tauri::Wry;
 use webview2_com_sys::Microsoft::Web::WebView2::Win32::CompareBrowserVersions;
 use windows_core::HSTRING;
@@ -23,7 +26,7 @@ use windows_sys::Win32::UI::{
 };
 
 const DOWNLOAD_URL: &str = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/";
-const INCOMPATIBLE_RUNTIME_EXIT_CODE: i32 = 2;
+pub(crate) const INCOMPATIBLE_RUNTIME_EXIT_CODE: i32 = 2;
 
 include!(concat!(env!("OUT_DIR"), "/webview_runtime_contract.rs"));
 
@@ -84,28 +87,41 @@ fn resolve_installed_data_root(
     temp_dir.join("RenderPilot")
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RuntimeCheckOutcome {
+    Supported,
+    Incompatible,
+}
+
+#[cfg(feature = "portable")]
 pub(crate) fn enforce_minimum_version(context: &tauri::Context<Wry>) {
-    let minimum_version = match configured_minimum_version(context) {
+    if check_minimum_version(context.config()) == RuntimeCheckOutcome::Incompatible {
+        flush_startup_exit_diagnostic();
+        process::exit(INCOMPATIBLE_RUNTIME_EXIT_CODE);
+    }
+}
+
+pub(crate) fn check_minimum_version(config: &tauri::Config) -> RuntimeCheckOutcome {
+    let minimum_version = match configured_minimum_version(config) {
         Ok(version) => version,
         Err(error) => {
-            log::error!("invalid WebView2 runtime contract: {error}");
-            flush_portable_webview_exit_diagnostic();
-            process::exit(INCOMPATIBLE_RUNTIME_EXIT_CODE);
+            tracing::error!("invalid WebView2 runtime contract: {error}");
+            return RuntimeCheckOutcome::Incompatible;
         }
     };
 
     let installed_version = installed_runtime_version(tauri::webview_version());
 
     if is_supported(installed_version.as_deref(), minimum_version) {
-        log::info!(
+        tracing::info!(
             "WebView2 Runtime {} satisfies the minimum version {minimum_version}",
             installed_version.as_deref().unwrap_or("unknown")
         );
-        return;
+        return RuntimeCheckOutcome::Supported;
     }
 
     let detected_version = installed_version.as_deref().unwrap_or("not detected");
-    log::error!(
+    tracing::error!(
         "WebView2 Runtime {detected_version} does not satisfy the minimum version {minimum_version}"
     );
 
@@ -113,15 +129,14 @@ pub(crate) fn enforce_minimum_version(context: &tauri::Context<Wry>) {
         open_download_page();
     }
 
-    flush_portable_webview_exit_diagnostic();
-    process::exit(INCOMPATIBLE_RUNTIME_EXIT_CODE);
+    RuntimeCheckOutcome::Incompatible
 }
 
 /// A portable App may terminate after stderr logging but before Tauri owns the
 /// event loop. Record only a fixed phase/code and synchronously close the
 /// bounded file before the direct process exit.
 #[cfg(feature = "portable")]
-fn flush_portable_webview_exit_diagnostic() {
+fn flush_startup_exit_diagnostic() {
     let error = crate::portable_runtime::error::PortableRuntimeError::new(
         "portable_webview_runtime",
         "WebView2 startup contract was not satisfied",
@@ -136,16 +151,8 @@ fn flush_portable_webview_exit_diagnostic() {
     crate::portable_runtime::diagnostics_files::shutdown_app();
 }
 
-#[cfg(not(feature = "portable"))]
-fn flush_portable_webview_exit_diagnostic() {}
-
-fn configured_minimum_version(context: &tauri::Context<Wry>) -> Result<&str, String> {
-    let runtime_value = context
-        .config()
-        .bundle
-        .windows
-        .minimum_webview2_version
-        .as_deref();
+fn configured_minimum_version(config: &tauri::Config) -> Result<&str, String> {
+    let runtime_value = config.bundle.windows.minimum_webview2_version.as_deref();
 
     // Tauri 2.11 parses this installer setting while building, but its Context
     // code generator currently omits it from the runtime WindowsConfig. The
@@ -175,7 +182,7 @@ fn installed_runtime_version<E: Display>(result: Result<String, E>) -> Option<St
     match result {
         Ok(version) => Some(version),
         Err(error) => {
-            log::error!("failed to determine the installed WebView2 Runtime version: {error}");
+            tracing::error!("failed to determine the installed WebView2 Runtime version: {error}");
             None
         }
     }
@@ -190,7 +197,7 @@ fn is_supported(installed_version: Option<&str>, minimum_version: &str) -> bool 
         Ok(Ordering::Equal | Ordering::Greater) => true,
         Ok(Ordering::Less) => false,
         Err(error) => {
-            log::error!(
+            tracing::error!(
                 "failed to compare WebView2 Runtime versions {installed_version:?} and {minimum_version:?}: {error}"
             );
             false
@@ -250,7 +257,9 @@ fn open_download_page() {
     };
 
     if result as isize <= 32 {
-        log::error!("failed to open the WebView2 Runtime download page: ShellExecuteW={result:?}");
+        tracing::error!(
+            "failed to open the WebView2 Runtime download page: ShellExecuteW={result:?}"
+        );
     }
 }
 

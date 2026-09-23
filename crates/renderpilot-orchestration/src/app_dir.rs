@@ -24,6 +24,12 @@ pub(crate) fn app_dir() -> Result<PathBuf, ServiceError> {
     resolve_app_dir(|name| std::env::var_os(name))
 }
 
+/// Returns the resolved application data directory without creating or
+/// mutating it. Desktop diagnostics use this as their one path-policy source.
+pub fn resolved_app_data_directory() -> Result<PathBuf, ServiceError> {
+    app_dir()
+}
+
 /// Resolves the app data directory using the supplied environment-variable lookup,
 /// so the order/precedence can be unit-tested without touching the process env.
 pub(crate) fn resolve_app_dir(

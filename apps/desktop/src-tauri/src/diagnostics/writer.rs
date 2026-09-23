@@ -4,6 +4,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use super::name::format_timestamp_utc;
+
 pub(super) const MAX_LINE_BYTES: usize = 4 * 1024;
 pub(super) const MAX_FILE_BYTES: usize = 2 * 1024 * 1024;
 const TERMINAL_RESERVE_BYTES: usize = MAX_LINE_BYTES;
@@ -21,25 +23,28 @@ pub(super) trait SealedProfile: sealed::Sealed {
     fn encode(
         metadata: WriterMetadata,
         context: &Self::Context,
-        event: Self::Event,
+        event: &Self::Event,
     ) -> Option<Vec<u8>>;
     fn encode_capacity(metadata: WriterMetadata, context: &Self::Context) -> Option<Vec<u8>>;
 }
 
 /// Metadata owned by the mechanism, not supplied by callers.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct WriterMetadata {
     pub(super) unix_ms: Option<u64>,
+    pub(super) timestamp_utc: Option<String>,
     pub(super) sequence: u64,
 }
 
 impl WriterMetadata {
     fn next(sequence: u64) -> Self {
+        let now = SystemTime::now();
         Self {
-            unix_ms: SystemTime::now()
+            unix_ms: now
                 .duration_since(UNIX_EPOCH)
                 .ok()
                 .and_then(|duration| u64::try_from(duration.as_millis()).ok()),
+            timestamp_utc: format_timestamp_utc(now),
             sequence,
         }
     }
@@ -56,13 +61,15 @@ impl DiagnosticSink for File {
 }
 
 /// The only observer outcomes consumed by the App session state machine.
-/// `Sealed` is the bounded capacity terminal marker, never a sink failure;
-/// `Disabled` is an unusable observer and must not trigger another attempt.
+/// `Capacity` means a bounded capacity marker was written and rollover is
+/// required; `Sealed` is a terminal writer state. `Disabled` is an unusable
+/// observer and must not trigger another attempt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[must_use = "observer emit status must drive the App observer state"]
 pub(crate) enum DiagnosticEmitStatus {
     Written,
     Sealed,
+    Capacity,
     Disabled,
 }
 
@@ -112,7 +119,7 @@ impl<P: SealedProfile, S: DiagnosticSink> DiagnosticWriter<P, S> {
         }
     }
 
-    pub(super) fn emit(&mut self, event: P::Event) -> DiagnosticEmitStatus {
+    pub(super) fn emit(&mut self, event: &P::Event) -> DiagnosticEmitStatus {
         match &self.state {
             WriterState::Active(_) => {}
             WriterState::Sealed(_) => return DiagnosticEmitStatus::Sealed,
@@ -153,7 +160,7 @@ impl<P: SealedProfile, S: DiagnosticSink> DiagnosticWriter<P, S> {
         match self.write_line(&line, true) {
             DiagnosticEmitStatus::Written => {
                 self.seal();
-                DiagnosticEmitStatus::Sealed
+                DiagnosticEmitStatus::Capacity
             }
             status => status,
         }
@@ -205,6 +212,14 @@ impl<P: SealedProfile, S: DiagnosticSink> DiagnosticWriter<P, S> {
     pub(super) fn state_is_sealed(&self) -> bool {
         matches!(&self.state, WriterState::Sealed(_))
     }
+
+    /// Takes the profile context after close has dropped the active sink.
+    #[cfg(not(all(windows, feature = "portable")))]
+    pub(super) fn into_closed_context(self) -> P::Context {
+        let Self { context, state, .. } = self;
+        debug_assert!(matches!(state, WriterState::Disabled));
+        context
+    }
 }
 
 fn valid_line(mut encoded: Vec<u8>) -> Option<Vec<u8>> {
@@ -229,6 +244,7 @@ mod tests {
         DiagnosticCloseStatus, DiagnosticEmitStatus, DiagnosticSink, DiagnosticWriter,
         MAX_FILE_BYTES, MAX_LINE_BYTES, SealedProfile, WriterMetadata, WriterState, sealed,
     };
+    use crate::diagnostics::name::is_valid_timestamp_utc;
 
     #[derive(Default)]
     struct TestSink {
@@ -287,7 +303,7 @@ mod tests {
         fn encode(
             metadata: WriterMetadata,
             _: &Self::Context,
-            event: Self::Event,
+            event: &Self::Event,
         ) -> Option<Vec<u8>> {
             Some(match event {
                 TestEvent::Normal => format!("event:{}", metadata.sequence).into_bytes(),
@@ -302,11 +318,34 @@ mod tests {
     }
 
     #[test]
+    fn metadata_keeps_unix_and_readable_timestamps_at_the_same_millisecond() {
+        let metadata = WriterMetadata::next(7);
+        let unix_ms = metadata.unix_ms.expect("current clock is after Unix epoch");
+        let timestamp_utc = metadata
+            .timestamp_utc
+            .as_deref()
+            .expect("current clock formats as UTC");
+        assert!(is_valid_timestamp_utc(timestamp_utc));
+
+        let timestamp_input = format!(
+            "{}+0000",
+            timestamp_utc.strip_suffix('Z').expect("UTC suffix")
+        );
+        let timestamp = jiff::Timestamp::strptime("%Y-%m-%dT%H:%M:%S%.3f%z", timestamp_input)
+            .expect("writer timestamp parses");
+        assert_eq!(
+            i64::try_from(unix_ms).expect("test clock fits signed milliseconds"),
+            timestamp.as_millisecond()
+        );
+        assert_eq!(metadata.sequence, 7);
+    }
+
+    #[test]
     fn profile_boundary_rejects_embedded_newlines_and_oversize_records() {
         let mut newline =
             DiagnosticWriter::<TestProfile, _>::from_test_sink(TestSink::default(), ());
         assert_eq!(
-            newline.emit(TestEvent::EmbeddedNewline),
+            newline.emit(&TestEvent::EmbeddedNewline),
             DiagnosticEmitStatus::Disabled
         );
         assert!(matches!(newline.state, WriterState::Disabled));
@@ -314,7 +353,7 @@ mod tests {
         let mut oversized =
             DiagnosticWriter::<TestProfile, _>::from_test_sink(TestSink::default(), ());
         assert_eq!(
-            oversized.emit(TestEvent::Oversized),
+            oversized.emit(&TestEvent::Oversized),
             DiagnosticEmitStatus::Disabled
         );
         assert!(matches!(oversized.state, WriterState::Disabled));
@@ -326,9 +365,9 @@ mod tests {
             DiagnosticWriter::<TestProfile, _>::from_test_sink(TestSink::default(), ());
         let mut terminal = DiagnosticEmitStatus::Written;
         while !writer.state_is_sealed() {
-            terminal = writer.emit(TestEvent::Normal);
+            terminal = writer.emit(&TestEvent::Normal);
         }
-        assert_eq!(terminal, DiagnosticEmitStatus::Sealed);
+        assert_eq!(terminal, DiagnosticEmitStatus::Capacity);
         let WriterState::Sealed(sink) = &writer.state else {
             panic!("capacity seals with retained sink");
         };
@@ -379,11 +418,11 @@ mod tests {
             (),
         );
         assert_eq!(
-            writer.emit(TestEvent::Normal),
+            writer.emit(&TestEvent::Normal),
             DiagnosticEmitStatus::Disabled
         );
         assert_eq!(
-            writer.emit(TestEvent::Normal),
+            writer.emit(&TestEvent::Normal),
             DiagnosticEmitStatus::Disabled
         );
         assert!(matches!(writer.state, WriterState::Disabled));
@@ -395,9 +434,12 @@ mod tests {
         let mut writer =
             DiagnosticWriter::<TestProfile, _>::from_test_sink(TestSink::default(), ());
         while !writer.state_is_sealed() {
-            let _ = writer.emit(TestEvent::Normal);
+            let _ = writer.emit(&TestEvent::Normal);
         }
-        assert_eq!(writer.emit(TestEvent::Normal), DiagnosticEmitStatus::Sealed);
+        assert_eq!(
+            writer.emit(&TestEvent::Normal),
+            DiagnosticEmitStatus::Sealed
+        );
         assert!(writer.state_is_sealed());
     }
 }

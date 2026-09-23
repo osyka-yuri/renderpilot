@@ -15,7 +15,7 @@ pub(super) async fn download_and_stage(
         Ok(Some(archive)) => return Ok(archive),
         Ok(None) => {}
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "discarding invalid OptiScaler archive cache {}: {error}",
                 cache_path.display()
             );
@@ -59,7 +59,7 @@ pub(super) async fn download_config_base(
         Ok(Some(config)) => return Ok(config),
         Ok(None) => {}
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "discarding invalid OptiScaler archive cache {}: {error}",
                 cache_path.display()
             );

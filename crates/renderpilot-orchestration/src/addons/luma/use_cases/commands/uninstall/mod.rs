@@ -27,7 +27,7 @@ pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError
     drop(guard);
 
     if let Err(error) = crate::catalog::refresh_game_components_sync(context, game_id) {
-        log::warn!("failed to refresh game components after Luma uninstall: {error}");
+        tracing::warn!("failed to refresh game components after Luma uninstall: {error}");
     }
 
     Ok(())

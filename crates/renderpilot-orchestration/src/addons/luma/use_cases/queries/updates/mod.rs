@@ -82,7 +82,7 @@ async fn check_record(
     deep: bool,
 ) -> LumaUpdateReport {
     if !record.has_addon_source() {
-        log::error!(
+        tracing::error!(
             "invalid Luma install record for `{}`: missing add-on payload provenance",
             record.game_id()
         );

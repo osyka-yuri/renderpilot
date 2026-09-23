@@ -258,7 +258,7 @@ pub(crate) async fn download_exact_with_url_chain(
                     resume_retry(&failure, bytes.len(), consecutive_resume_failures)
                 {
                     consecutive_resume_failures = consecutive_resume_failures.saturating_add(1);
-                    log::warn!(
+                    tracing::warn!(
                         "{operation} resume attempt {consecutive_resume_failures} failed: {message}; retrying from byte {}",
                         bytes.len(),
                     );
@@ -274,7 +274,7 @@ pub(crate) async fn download_exact_with_url_chain(
                 // The origin ignored Range and supplied a new full body. Drop
                 // the incomplete prefix before consuming it; accepting it is
                 // safe because it is not combined with prior response bytes.
-                log::warn!(
+                tracing::warn!(
                     "{operation} server ignored resume at byte {start}; restarting from this full response"
                 );
                 bytes.clear();
@@ -328,7 +328,7 @@ pub(crate) async fn download_exact_with_url_chain(
                     resume_retry(&failure, bytes.len(), consecutive_resume_failures)
                 {
                     consecutive_resume_failures = consecutive_resume_failures.saturating_add(1);
-                    log::warn!(
+                    tracing::warn!(
                         "{operation} resume attempt {consecutive_resume_failures} failed: {message}; retrying from byte {}",
                         bytes.len(),
                     );

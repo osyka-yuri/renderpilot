@@ -58,7 +58,7 @@ pub(crate) fn assess_reshade_content(
         Some(path) => match fs::read_to_string(path) {
             Ok(text) => Some(Ini::parse(&text)),
             Err(error) => {
-                log::debug!(
+                tracing::debug!(
                     "ReShade content scan: failed to read `{}`: {error}",
                     path.display()
                 );

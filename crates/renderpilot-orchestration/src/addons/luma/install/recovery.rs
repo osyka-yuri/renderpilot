@@ -27,7 +27,7 @@ pub(super) fn recover_torn_install(scan_dirs: &[&Path]) {
         recovery_complete &= recover_torn_install_in_dir(dir);
         if let Err(error) = restore_managed_backup_siblings(dir) {
             recovery_complete = false;
-            log::warn!("Luma torn-install recovery: managed bak restore failed: {error}");
+            tracing::warn!("Luma torn-install recovery: managed bak restore failed: {error}");
         }
     }
 
@@ -123,28 +123,31 @@ fn recovery_debris_present(scan_dirs: &[&Path]) -> bool {
             return true;
         };
         entries.flatten().any(|entry| {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let lower = name.to_ascii_lowercase();
+            let lower = entry.file_name().to_string_lossy().to_ascii_lowercase();
             let is_luma_payload = entry.file_type().is_ok_and(|kind| {
                 (kind.is_file()
                     && (is_luma_addon_file_name(&lower) || is_luma_addon_backup_file_name(&lower)))
                     || (kind.is_dir() && lower == "luma")
             });
             is_luma_payload
-                || std::iter::once(NVNGX_DLSS_FILE_NAME)
-                    .chain(
-                        crate::addons::luma::dgvoodoo::historical_dependency_basenames()
-                            .iter()
-                            .copied(),
-                    )
-                    .any(|managed| name.eq_ignore_ascii_case(&format!("{managed}.bak")))
+                || lower.strip_suffix(".bak").is_some_and(|stem| {
+                    std::iter::once(NVNGX_DLSS_FILE_NAME)
+                        .chain(
+                            crate::addons::luma::dgvoodoo::historical_dependency_basenames()
+                                .iter()
+                                .copied(),
+                        )
+                        .any(|managed| stem.eq_ignore_ascii_case(managed))
+                })
         })
     })
 }
 
 pub(super) fn remove_file_best_effort(path: &Path) -> bool {
     if let Err(error) = fs::remove_file(path) {
-        log::warn!(
+        let diagnostic_path = path.to_string_lossy();
+        tracing::warn!(
+            diagnostic_path = diagnostic_path.as_ref(),
             "Luma torn-install recovery: failed to remove `{}`: {error}",
             path.display()
         );
@@ -155,7 +158,9 @@ pub(super) fn remove_file_best_effort(path: &Path) -> bool {
 
 pub(super) fn remove_dir_best_effort(path: &Path) -> bool {
     if let Err(error) = fs::remove_dir_all(path) {
-        log::warn!(
+        let diagnostic_path = path.to_string_lossy();
+        tracing::warn!(
+            diagnostic_path = diagnostic_path.as_ref(),
             "Luma torn-install recovery: failed to remove directory `{}`: {error}",
             path.display()
         );

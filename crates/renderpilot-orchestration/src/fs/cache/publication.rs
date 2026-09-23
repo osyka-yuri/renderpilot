@@ -217,7 +217,7 @@ pub(super) fn quarantine_snapshot_at_locked(
             Err(error) => return Err(error),
         }
     }
-    log::debug!(
+    tracing::debug!(
         "cache quarantine: all diagnostic slots for `{}` are occupied; preserving the active cache until refresh",
         path.display()
     );

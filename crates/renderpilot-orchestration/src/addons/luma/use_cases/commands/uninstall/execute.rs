@@ -120,15 +120,15 @@ pub(super) fn execute_uninstall_body(
         if let Err(error) =
             crate::catalog::cascade::apply_cascade_rollback_fs(&apply.rollback_specs)
         {
-            log::warn!("luma metadata-only uninstall cascade FS failed: {error}");
+            tracing::warn!("luma metadata-only uninstall cascade FS failed: {error}");
         }
         for release in &apply.release_plans {
             if let Err(error) = release.execute() {
-                log::warn!("luma metadata-only uninstall managed release failed: {error}");
+                tracing::warn!("luma metadata-only uninstall managed release failed: {error}");
             }
         }
         if let Err(error) = uninstall_engine_files(&apply.record) {
-            log::warn!("luma metadata-only uninstall engine cleanup failed: {error}");
+            tracing::warn!("luma metadata-only uninstall engine cleanup failed: {error}");
         }
     } else {
         crate::catalog::cascade::apply_cascade_rollback_fs(&apply.rollback_specs)?;

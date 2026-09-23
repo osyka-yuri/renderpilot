@@ -72,7 +72,7 @@ pub(in crate::file_mutation) fn recover_pending_v2(
                 .storage()
                 .complete_prepared_file_mutation_without_restore(fence)?;
             if let Err(error) = super::super::remove_dir_if_exists(&transaction_dir) {
-                log::warn!(
+                tracing::warn!(
                     "v2 recovered transaction {} retained its directory; it is not auto-cleaned: {error}",
                     row.id
                 );

@@ -73,7 +73,7 @@ where
         } => match fetch_observed(spec, &parse, &generation).await {
             Ok(fresh) => Ok(fresh),
             Err(error) => {
-                log::warn!(
+                tracing::warn!(
                     "CDN manifest `{}` refresh failed ({error}); using the stale cache",
                     spec.file_name
                 );
@@ -89,7 +89,7 @@ where
             fetch_observed(spec, &parse, &generation).await
         }
         crate::fs::CacheObservation::Invalid { generation, error } => {
-            log::warn!(
+            tracing::warn!(
                 "CDN manifest cache `{}` is unreadable ({error}); refreshing",
                 spec.file_name
             );

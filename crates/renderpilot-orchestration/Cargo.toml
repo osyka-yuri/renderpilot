@@ -25,7 +25,7 @@ hex = { workspace = true }
 futures-util = { workspace = true, features = ["alloc"] }
 http = { workspace = true }
 httpdate = { workspace = true }
-log = { workspace = true }
+tracing = { workspace = true }
 percent-encoding = { workspace = true }
 reqwest = { workspace = true, features = ["blocking", "gzip", "json", "rustls"] }
 serde = { workspace = true }

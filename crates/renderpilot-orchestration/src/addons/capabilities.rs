@@ -274,7 +274,7 @@ pub async fn load_capability_probes() -> LoadedCapabilityProbes {
         .filter_map(|(kind, result)| match result {
             Ok(probe) => Some(probe),
             Err(error) => {
-                log::warn!("failed to load {kind:?} capability probe: {error}");
+                tracing::warn!("failed to load {kind:?} capability probe: {error}");
                 None
             }
         })

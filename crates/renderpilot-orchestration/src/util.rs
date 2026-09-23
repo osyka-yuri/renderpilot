@@ -15,7 +15,7 @@ pub(super) fn load_bundled_asset_or_default<T, E: Display>(
     match load() {
         Ok(value) => value,
         Err(error) => {
-            log::error!("Bundled asset `{name}` is invalid: {error}; using fallback");
+            tracing::error!("Bundled asset `{name}` is invalid: {error}; using fallback");
             fallback()
         }
     }

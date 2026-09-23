@@ -441,7 +441,7 @@ fn execute_with_topology_policy(
             if let Err(cleanup_error) =
                 super::recovery::cleanup_preparing_artifacts(&transaction_root)
             {
-                log::warn!(
+                tracing::warn!(
                     "could not clean failed shared Vulkan preparation; recovery remains armed: {cleanup_error}"
                 );
                 return Err(error.into());
@@ -474,7 +474,7 @@ fn execute_with_topology_policy(
             if let Err(cleanup_error) =
                 super::recovery::cleanup_preparing_artifacts(&transaction_root)
             {
-                log::warn!(
+                tracing::warn!(
                     "could not clean failed shared Vulkan manifest; recovery remains armed: {cleanup_error}"
                 );
                 return Err(MutationError::manifest(error).into());
@@ -544,7 +544,7 @@ fn execute_with_topology_policy(
         if let Err(recovery_error) =
             super::recovery::recover_pending_with_roots(context, &plan.roots, registry_authority)
         {
-            log::warn!(
+            tracing::warn!(
                 "shared Vulkan transaction failed and whole-set recovery could not converge: {recovery_error}"
             );
             return Err(recovery_error);
@@ -644,7 +644,7 @@ fn execute_prepared(request: PreparedRequest<'_>) -> Result<(), MutationError> {
         &plan.roots,
         io::ParticipantState::After,
     ) {
-        log::warn!(
+        tracing::warn!(
             "shared Vulkan mutation committed; deferred transaction-artifact cleanup: {error}"
         );
         return Ok(());
@@ -653,7 +653,9 @@ fn execute_prepared(request: PreparedRequest<'_>) -> Result<(), MutationError> {
         .storage()
         .cleanup_committed_shared_vulkan_mutation(id)
     {
-        log::warn!("shared Vulkan mutation committed; deferred committed-fence cleanup: {error}");
+        tracing::warn!(
+            "shared Vulkan mutation committed; deferred committed-fence cleanup: {error}"
+        );
     }
     Ok(())
 }

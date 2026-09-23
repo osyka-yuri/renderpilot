@@ -280,8 +280,10 @@ pub async fn refresh_catalog_capabilities(
     {
         Ok(refreshed) => refreshed,
         Err(error) => {
-            log::warn!(
-                "Desktop command warning [operation=refresh_catalog_capabilities code=capability_refresh_failed]: {error}"
+            tracing::warn!(
+                __renderpilot_diagnostic_recorded = tracing::field::Empty,
+                "Desktop command warning [operation=refresh_catalog_capabilities code=capability_refresh_failed]: {}",
+                error
             );
             backend_diagnostics::record(BackendDiagnosticEvent::capability_failure(
                 CapabilityOperation::RefreshCatalogCapabilities,
@@ -404,8 +406,10 @@ pub async fn clear_game_cover(
         .run_output(move || desktop::clear_game_cover_with_observation(&context, game_id))
         .await?;
     if let Some(error) = output.cleanup_issue {
-        log::warn!(
-            "Desktop command warning [operation=clear_game_cover code=orphan_cleanup_failed]: {error}"
+        tracing::warn!(
+            __renderpilot_diagnostic_recorded = tracing::field::Empty,
+            "Desktop command warning [operation=clear_game_cover code=orphan_cleanup_failed]: {}",
+            error
         );
         backend_diagnostics::record(BackendDiagnosticEvent::cover_gc_failure(
             CoverGcOperation::ClearGameCover,

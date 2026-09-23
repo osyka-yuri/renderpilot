@@ -19,7 +19,7 @@ serde_json = { workspace = true }
 
 [dependencies]
 base64 = { workspace = true }
-log = { workspace = true }
+tracing = { workspace = true }
 renderpilot-application = { workspace = true }
 renderpilot-domain = { workspace = true }
 rusqlite = { workspace = true, features = ["backup", "bundled", "hooks"] }

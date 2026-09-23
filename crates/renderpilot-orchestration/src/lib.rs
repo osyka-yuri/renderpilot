@@ -32,6 +32,8 @@ pub mod portable;
 pub mod storage;
 mod util;
 
+pub use app_dir::resolved_app_data_directory;
+
 pub use context::Context;
 pub use file_safety::{
     FileSafetyAuthority, GameFileSafetyAssessment, GameMutationSafetyPermits, GameSafetyPermit,

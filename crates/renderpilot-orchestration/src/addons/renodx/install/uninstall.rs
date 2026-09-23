@@ -95,7 +95,9 @@ impl PreparedRenoDxUninstall {
             let backup = match crate::fs::backup_path(&live) {
                 Ok(backup) => backup,
                 Err(error) => {
-                    log::warn!(
+                    let diagnostic_path = live.to_string_lossy();
+                    tracing::warn!(
+                        diagnostic_path = diagnostic_path.as_ref(),
                         "RenoDX uninstall: cannot derive backup path for `{}`: {error}",
                         live.display()
                     );
@@ -325,7 +327,7 @@ impl PreparedRenoDxUninstall {
                     .all(|path| scope.contains_reachable(path))
             });
             if !reachable {
-                log::warn!(
+                tracing::warn!(
                     "RenoDX uninstall: skipping unreachable planned {} operation",
                     operation.kind_name()
                 );
@@ -540,7 +542,9 @@ fn permits_remove(path: &Path, label: &str) -> bool {
     match observe(path) {
         V2DiskObservation::Absent | V2DiskObservation::Regular { .. } => true,
         observation => {
-            log::warn!(
+            let diagnostic_path = path.to_string_lossy();
+            tracing::warn!(
+                diagnostic_path = diagnostic_path.as_ref(),
                 "RenoDX uninstall: skipping unsafe {label} `{}` ({observation:?})",
                 path.display()
             );
@@ -560,7 +564,9 @@ fn permits_restore(live: &Path, backup: &Path) -> bool {
     if live_safe && backup_safe {
         return true;
     }
-    log::warn!(
+    let diagnostic_path = live.to_string_lossy();
+    tracing::warn!(
+        diagnostic_path = diagnostic_path.as_ref(),
         "RenoDX uninstall: skipping unsafe backup restore `{}` <- `{}` ({live_observation:?}, {backup_observation:?})",
         live.display(),
         backup.display()
@@ -594,7 +600,9 @@ fn append_ini_rewrite(
                     ) {
                         Ok(plan) => plan.after,
                         Err(error) => {
-                            log::warn!(
+                            let diagnostic_path = path.to_string_lossy();
+                            tracing::warn!(
+                                diagnostic_path = diagnostic_path.as_ref(),
                                 "RenoDX uninstall: cannot plan RenoDX config removal for `{}`: {error}",
                                 path.display()
                             );
@@ -607,7 +615,9 @@ fn append_ini_rewrite(
                 // text cleanup path. In particular, a receipt CAS failure
                 // must preserve the user's current RenoDX configuration bytes exactly.
                 let Ok(existing) = std::str::from_utf8(set_path_bytes) else {
-                    log::warn!(
+                    let diagnostic_path = path.to_string_lossy();
+                    tracing::warn!(
+                        diagnostic_path = diagnostic_path.as_ref(),
                         "RenoDX uninstall: skipping non-UTF8 ReShade.ini `{}`",
                         path.display()
                     );
@@ -622,15 +632,23 @@ fn append_ini_rewrite(
                     });
                 }
             }
-            Err(error) => log::warn!(
-                "RenoDX uninstall: skipping unreadable ReShade.ini `{}`: {error}",
-                path.display()
-            ),
+            Err(error) => {
+                let diagnostic_path = path.to_string_lossy();
+                tracing::warn!(
+                    diagnostic_path = diagnostic_path.as_ref(),
+                    "RenoDX uninstall: skipping unreadable ReShade.ini `{}`: {error}",
+                    path.display()
+                )
+            }
         },
-        observation => log::warn!(
-            "RenoDX uninstall: skipping unsafe ReShade.ini `{}` ({observation:?})",
-            path.display()
-        ),
+        observation => {
+            let diagnostic_path = path.to_string_lossy();
+            tracing::warn!(
+                diagnostic_path = diagnostic_path.as_ref(),
+                "RenoDX uninstall: skipping unsafe ReShade.ini `{}` ({observation:?})",
+                path.display()
+            )
+        }
     }
 }
 

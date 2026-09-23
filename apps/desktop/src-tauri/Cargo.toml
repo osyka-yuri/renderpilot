@@ -20,14 +20,16 @@ tauri-build = { version = "2.6.3", features = [] }
 [dependencies]
 renderpilot-api = { workspace = true }
 renderpilot-orchestration = { workspace = true }
-env_logger = { workspace = true }
 getrandom = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
-log = { workspace = true }
+tracing = { workspace = true }
+tracing-log = { workspace = true }
+tracing-subscriber = { workspace = true }
+jiff = { workspace = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }
 semver = { workspace = true, optional = true }
-sha2 = { workspace = true, optional = true }
+sha2 = { workspace = true }
 rusqlite = { workspace = true, features = ["backup", "bundled"], optional = true }
 reqwest = { workspace = true, features = ["blocking", "rustls"], optional = true }
 zip = { workspace = true, features = ["deflate"], optional = true }
@@ -59,6 +61,7 @@ windows-sys = { workspace = true, features = [
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+tauri-plugin-single-instance = "=2.4.4"
 
 [features]
 # Enables portable mode: data is stored in <exe_dir>/data instead of %LOCALAPPDATA%.
@@ -69,13 +72,14 @@ portable = [
     "dep:reqwest",
     "dep:rusqlite",
     "dep:semver",
-    "dep:sha2",
     "dep:zip",
 ]
 updater-artifact-verify = ["portable"]
 
 [dev-dependencies]
 json-patch = { workspace = true }
+tempfile = { workspace = true }
+log = { workspace = true }
 
 [target.'cfg(windows)'.dev-dependencies]
 renderpilot-storage-sqlite = { workspace = true, features = ["test-instrumentation"] }

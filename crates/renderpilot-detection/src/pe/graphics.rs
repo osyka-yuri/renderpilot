@@ -49,7 +49,7 @@ const MAX_DLL_NAME_LEN: usize = 256;
 /// Analyzes the executable at `path`, returning its imported graphics API set
 /// and architecture. Returns an empty API set / `None` when the file cannot be
 /// read or parsed. Unexpected I/O failures (permissions, locks) are logged via
-/// `log::warn!`; a missing file is silent (a stale candidate path is normal).
+/// `tracing::warn!`; a missing file is silent (a stale candidate path is normal).
 ///
 /// Reads only the PE header region and the specific import/delay-import
 /// descriptor + name-string bytes from disk (a few KB total), never the whole
@@ -63,7 +63,7 @@ pub fn analyze_executable(path: &Path) -> ExeGraphicsInfo {
             return ExeGraphicsInfo::new(Vec::new(), None);
         }
         Err(err) => {
-            log::warn!(
+            tracing::warn!(
                 "failed to open executable for graphics detection at {}: {err}",
                 path.display()
             );

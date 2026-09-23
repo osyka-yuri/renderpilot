@@ -106,7 +106,8 @@ impl CommandError {
                 format_args!(
                     "installation inspection for {selected_root} is stale; current fingerprint: {current_fingerprint}"
                 ),
-            ),
+            )
+            .with_diagnostic_path(selected_root),
             ServiceError::RootCorrectionCleanupRequired {
                 game_id,
                 component_ids,

@@ -1,9 +1,9 @@
 import { reportErrorDiagnostic } from '@shared/diagnostics';
 import {
+  DesktopCommandError,
   getErrorCode,
   getErrorContractStatus,
   getErrorSeverity,
-  type DesktopCommandError,
 } from './model';
 
 const reportedErrorObjects = new WeakSet();
@@ -36,9 +36,10 @@ export function reportClientError(
   if (!claimDiagnostic(error)) {
     return;
   }
+  const source = error instanceof DesktopCommandError ? 'desktop-command' : 'client-boundary';
   reportErrorDiagnostic(
     {
-      source: 'client-boundary',
+      source,
       operation,
       code: getErrorCode(error),
       contractStatus: getErrorContractStatus(error),

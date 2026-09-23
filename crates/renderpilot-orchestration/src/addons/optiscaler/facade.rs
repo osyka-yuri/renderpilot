@@ -124,7 +124,7 @@ pub async fn install(
     .await?;
 
     if let Err(error) = crate::catalog::refresh_game_components(context, &game_id).await {
-        log::warn!("failed to refresh game components after OptiScaler install: {error}");
+        tracing::warn!("failed to refresh game components after OptiScaler install: {error}");
     }
 
     Ok(result)
@@ -168,7 +168,7 @@ async fn mutate(
     };
 
     if let Err(error) = crate::catalog::refresh_game_components(context, &game_id).await {
-        log::warn!("failed to refresh game components after OptiScaler mutate: {error}");
+        tracing::warn!("failed to refresh game components after OptiScaler mutate: {error}");
     }
 
     Ok(result)
@@ -195,7 +195,7 @@ pub async fn set_modules(
     .await?;
 
     if let Err(error) = crate::catalog::refresh_game_components(context, &game_id).await {
-        log::warn!("failed to refresh game components after OptiScaler set_modules: {error}");
+        tracing::warn!("failed to refresh game components after OptiScaler set_modules: {error}");
     }
 
     Ok(result)
@@ -222,7 +222,7 @@ pub async fn relocate(
     .await?;
 
     if let Err(error) = crate::catalog::refresh_game_components(context, &game_id).await {
-        log::warn!("failed to refresh game components after OptiScaler relocate: {error}");
+        tracing::warn!("failed to refresh game components after OptiScaler relocate: {error}");
     }
 
     Ok(result)
@@ -264,7 +264,7 @@ pub async fn uninstall(
     let result = lifecycle::uninstall(context, game_id).await?;
 
     if let Err(error) = crate::catalog::refresh_game_components(context, game_id).await {
-        log::warn!("failed to refresh game components after OptiScaler uninstall: {error}");
+        tracing::warn!("failed to refresh game components after OptiScaler uninstall: {error}");
     }
 
     Ok(result)

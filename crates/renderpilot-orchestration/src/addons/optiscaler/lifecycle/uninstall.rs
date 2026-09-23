@@ -17,7 +17,7 @@ pub async fn uninstall(
         crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
     let started = Instant::now();
     let result = execution::uninstall_locked(context, game_id, &guard);
-    log::debug!(
+    tracing::debug!(
         "OptiScaler uninstall for {} finished in {} ms",
         game_id.as_str(),
         started.elapsed().as_millis()

@@ -169,7 +169,7 @@ fn attach_advisory_provenance(
             }
             None => {
                 if let Some(host_file) = candidate.host_file.as_deref() {
-                    log::debug!(
+                    tracing::debug!(
                         "Failed to inspect PE for adopted file: {}",
                         host_file.display()
                     );
@@ -200,7 +200,7 @@ fn build_advisory_host_source(
     let digest = match renderpilot_detection::sha256_file(host_file) {
         Ok(digest) => digest.to_string(),
         Err(error) => {
-            log::debug!(
+            tracing::debug!(
                 "Failed to hash adopted file {}: {error}",
                 host_file.display()
             );
@@ -227,7 +227,7 @@ fn build_advisory_addon_source(candidate: &OrphanedInstall) -> Option<TrackedSou
     let digest = match renderpilot_detection::sha256_file(&candidate.addon_file) {
         Ok(digest) => digest.to_string(),
         Err(error) => {
-            log::debug!(
+            tracing::debug!(
                 "Failed to hash adopted add-on {}: {error}",
                 candidate.addon_file.display()
             );
@@ -319,17 +319,17 @@ fn path_ref(label: &str, path: &Path) -> Result<PathRef, ServiceError> {
 /// it never blocks or fails the availability read the caller actually asked for.
 fn record_shared_vulkan_layer_best_effort(context: &Context) {
     let Some(_guard) = vulkan_lock::try_shared_vulkan_lock() else {
-        log::debug!("deferred adopted Vulkan layer record: local layer boundary is busy");
+        tracing::debug!("deferred adopted Vulkan layer record: local layer boundary is busy");
         return;
     };
     match context.storage().pending_shared_vulkan_mutation() {
         Ok(Some(_)) => {
-            log::debug!("deferred adopted Vulkan layer record: durable mutation is pending");
+            tracing::debug!("deferred adopted Vulkan layer record: durable mutation is pending");
             return;
         }
         Ok(None) => {}
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "skipped persisting adopted Vulkan layer record: pending mutation query failed: {error}"
             );
             return;
@@ -349,7 +349,7 @@ fn record_shared_vulkan_layer_best_effort(context: &Context) {
     ) {
         Ok(record) => record,
         Err(error) => {
-            log::warn!("failed to build adopted Vulkan layer record: {error}");
+            tracing::warn!("failed to build adopted Vulkan layer record: {error}");
             return;
         }
     };
@@ -359,9 +359,11 @@ fn record_shared_vulkan_layer_best_effort(context: &Context) {
     {
         Ok(renderpilot_storage_sqlite::ConditionalSharedArtifactWrite::Applied) => {}
         Ok(renderpilot_storage_sqlite::ConditionalSharedArtifactWrite::Deferred) => {
-            log::debug!("deferred adopted Vulkan layer record: reservation won the database race");
+            tracing::debug!(
+                "deferred adopted Vulkan layer record: reservation won the database race"
+            );
         }
-        Err(error) => log::warn!("failed to persist adopted Vulkan layer record: {error}"),
+        Err(error) => tracing::warn!("failed to persist adopted Vulkan layer record: {error}"),
     }
 }
 

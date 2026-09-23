@@ -177,12 +177,12 @@ async fn refresh_forced(gate: &ForceRefreshGate) -> ManifestRefreshReport {
     let _guard = match gate.try_begin(FORCE_MANIFEST_REFRESH_COOLDOWN) {
         ForceRefreshPermit::Granted(guard) => guard,
         ForceRefreshPermit::SkippedInFlight => {
-            log::info!("remote manifest force-refresh skipped: already in flight");
+            tracing::info!("remote manifest force-refresh skipped: already in flight");
             return ManifestRefreshReport::skipped_all(ManifestRefreshOutcome::SkippedInFlight);
         }
         ForceRefreshPermit::SkippedCooldown { retry_after } => {
             let retry_after_secs = retry_after.as_secs().max(1);
-            log::info!(
+            tracing::info!(
                 "remote manifest force-refresh skipped: cooldown ({retry_after_secs}s remaining)"
             );
             return ManifestRefreshReport::skipped_all(ManifestRefreshOutcome::SkippedCooldown {
@@ -231,16 +231,16 @@ fn log_kind_failures<E: std::fmt::Display>(
     reshade: &Result<impl Sized, E>,
 ) {
     if let Err(error) = libraries {
-        log::warn!("remote manifests ({mode}): libraries failed: {error}");
+        tracing::warn!("remote manifests ({mode}): libraries failed: {error}");
     }
     if let Err(error) = renodx {
-        log::warn!("remote manifests ({mode}): renodx failed: {error}");
+        tracing::warn!("remote manifests ({mode}): renodx failed: {error}");
     }
     if let Err(error) = luma {
-        log::warn!("remote manifests ({mode}): luma failed: {error}");
+        tracing::warn!("remote manifests ({mode}): luma failed: {error}");
     }
     if let Err(error) = reshade {
-        log::warn!("remote manifests ({mode}): reshade failed: {error}");
+        tracing::warn!("remote manifests ({mode}): reshade failed: {error}");
     }
 }
 

@@ -297,7 +297,7 @@ async fn check_proxy_host(
     ) {
         Ok(target) => target?,
         Err(error) => {
-            log::warn!(
+            tracing::warn!(
                 "RenoDX host update check skipped for {}: {error}",
                 record.game_id()
             );

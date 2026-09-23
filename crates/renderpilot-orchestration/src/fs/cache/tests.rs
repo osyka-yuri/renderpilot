@@ -49,7 +49,7 @@ fn quarantine_at(path: &Path) {
         quarantine_at_locked(path);
         Ok(())
     }) {
-        log::debug!(
+        tracing::debug!(
             "cache quarantine: could not acquire the cache transaction for `{}`: {error}",
             path.display()
         );
@@ -63,7 +63,7 @@ fn quarantine_at_locked(path: &Path) {
             let _ = quarantine_snapshot_at_locked(path, snapshot);
         }
         Ok(None) => {}
-        Err(error) => log::debug!(
+        Err(error) => tracing::debug!(
             "cache quarantine: could not capture cache `{}`: {error}",
             path.display()
         ),

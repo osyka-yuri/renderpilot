@@ -131,7 +131,7 @@ pub fn run_split_install(
             if failure.rollback_complete {
                 commit.finish_rolled_back();
             } else {
-                log::warn!(
+                tracing::warn!(
                     "split install rollback was incomplete; leaving sentinel `{}`",
                     commit.path().display()
                 );
@@ -218,7 +218,7 @@ fn rollback_payload(
         }
     };
     if let Err(revert_error) = &rollback_result {
-        log::warn!(
+        tracing::warn!(
             "split install: host-phase failed and payload rollback also failed: {revert_error}"
         );
     }

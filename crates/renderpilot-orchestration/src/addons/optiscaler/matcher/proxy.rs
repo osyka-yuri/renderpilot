@@ -194,7 +194,7 @@ pub(super) fn plan(
         match renderpilot_detection::sha256_file(source) {
             Ok(hash) => Some(hash),
             Err(error) => {
-                log::warn!(
+                tracing::warn!(
                     "failed to hash ReShade chain source {}: {error}",
                     source.display()
                 );

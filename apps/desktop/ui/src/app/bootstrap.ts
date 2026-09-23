@@ -4,6 +4,7 @@ import { isDesktopPreviewMode } from '@shared/api-preview';
 import { publishCommandErrorNotification } from '@shared/notifications';
 import { applyThemeMode, readStoredThemeMode } from '@shared/theme';
 import { initializeI18n } from '@shared/i18n';
+import { installDesktopDiagnosticSink } from '@shared/diagnostics';
 import { loadDesktopStartup } from './desktop-startup';
 
 function getAppRoot(): HTMLElement {
@@ -16,6 +17,10 @@ function getAppRoot(): HTMLElement {
   return root;
 }
 const appRoot = getAppRoot();
+
+// Install before the startup coordinator can initialize i18n or import the
+// application module. Preview keeps the default console-only diagnostics.
+installDesktopDiagnosticSink();
 
 async function preparePreview(): Promise<void> {
   if (isDesktopPreviewMode()) {

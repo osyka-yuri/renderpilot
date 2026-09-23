@@ -5,6 +5,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { I18nInitializationResult } from '@shared/i18n';
+import type * as DiagnosticsModule from '@shared/diagnostics';
+import {
+  configureErrorDiagnosticSink,
+  reportErrorDiagnostic,
+  type ErrorDiagnosticEvent,
+} from '@shared/diagnostics';
 
 const mocks = vi.hoisted(() => ({
   mount: vi.fn(),
@@ -14,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   initializeI18n: vi.fn(),
   publishCommandErrorNotification: vi.fn(),
   loadDesktopStartup: vi.fn(),
+  installDesktopDiagnosticSink: vi.fn(),
 }));
 
 vi.mock('svelte', () => ({ mount: mocks.mount }));
@@ -32,6 +39,10 @@ vi.mock('@shared/notifications', () => ({
 }));
 vi.mock('./desktop-startup', () => ({
   loadDesktopStartup: mocks.loadDesktopStartup,
+}));
+vi.mock('@shared/diagnostics', async (importOriginal) => ({
+  ...(await importOriginal<typeof DiagnosticsModule>()),
+  installDesktopDiagnosticSink: mocks.installDesktopDiagnosticSink,
 }));
 vi.mock('@app/routes/DesktopApp.svelte', () => ({
   default: 'DesktopApp',
@@ -68,9 +79,11 @@ describe('bootstrap', () => {
     mocks.initializeI18n.mockReset();
     mocks.publishCommandErrorNotification.mockReset();
     mocks.loadDesktopStartup.mockReset();
+    mocks.installDesktopDiagnosticSink.mockReset();
   });
 
   afterEach(() => {
+    configureErrorDiagnosticSink(null);
     document.body.replaceChildren();
     vi.resetModules();
   });
@@ -88,6 +101,10 @@ describe('bootstrap', () => {
     await vi.waitFor(() => {
       expect(mocks.loadDesktopStartup).toHaveBeenCalledOnce();
     });
+    expect(mocks.installDesktopDiagnosticSink).toHaveBeenCalledOnce();
+    expect(mocks.installDesktopDiagnosticSink.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.loadDesktopStartup.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
     expect(document.querySelector('[data-startup-skeleton]')).not.toBeNull();
     expect(mocks.mount).not.toHaveBeenCalled();
 
@@ -112,5 +129,41 @@ describe('bootstrap', () => {
     });
     expect(mocks.publishCommandErrorNotification).toHaveBeenCalledOnce();
     expect(mocks.publishCommandErrorNotification).toHaveBeenCalledWith(localeError);
+  });
+
+  it('installs diagnostics early enough to capture events while startup is pending', async () => {
+    const startup = Promise.withResolvers<{
+      i18n: I18nInitializationResult;
+      desktopAppModule: { default: string };
+    }>();
+    const received: ErrorDiagnosticEvent[] = [];
+    mocks.installDesktopDiagnosticSink.mockImplementation(() => {
+      configureErrorDiagnosticSink({ report: (event) => received.push(event) });
+    });
+    mocks.loadDesktopStartup.mockReturnValue(startup.promise);
+
+    const importBootstrap = import('./bootstrap');
+    await vi.waitFor(() => {
+      expect(mocks.loadDesktopStartup).toHaveBeenCalledOnce();
+    });
+    reportErrorDiagnostic({
+      source: 'client-boundary',
+      operation: 'startup',
+      code: 'malformed_response',
+      contractStatus: 'malformed',
+      severity: 'warning',
+    });
+    expect(received).toHaveLength(1);
+
+    startup.resolve({
+      i18n: {
+        activeMode: 'en',
+        activeLocale: 'en',
+        fallbackUsed: false,
+        error: null,
+      },
+      desktopAppModule: { default: 'DesktopApp' },
+    });
+    await importBootstrap;
   });
 });
