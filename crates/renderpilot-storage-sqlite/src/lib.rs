@@ -30,6 +30,12 @@ pub use peer_runtime::{
 pub use repositories::ScanWriteUnit;
 pub use repositories::game_covers::{DeletedGameInfo, GameCoverRecord};
 pub use repositories::game_ui_state::GameUiStateRow;
+pub use repositories::nvapi::{
+    NvapiGameSettingPreparation, NvapiGlobalSettingPreparation, NvapiOwnedProfileRow,
+    NvapiPendingOperationRow, NvapiProfileCreationCompletion, NvapiProfileMoveCompletion,
+    NvapiSettingOperationCompletion, NvapiSettingOperationScope, NvapiSettingState,
+    NvapiTargetSettingClaimRow, NvapiVerifiedProfileReceipt,
+};
 pub use repositories::{
     AuthorityCas, BeginFileMutationPreparation, BeginSharedVulkanMutation, CatalogReadiness,
     CatalogReadyProjection, ComponentBaselineMutation, ComponentRekey,

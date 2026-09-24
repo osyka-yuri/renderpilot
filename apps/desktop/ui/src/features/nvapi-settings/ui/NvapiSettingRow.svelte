@@ -17,6 +17,8 @@
     TooltipTrigger,
   } from '@shared/ui';
   import { t, translateExternalMessage } from '@shared/i18n';
+  import { canRestoreOriginal } from '../model/original-state';
+  import { canResetToDriverDefault } from '../model/setting-actions';
   import type { SettingStateResponse } from '../model/types';
 
   type Props = {
@@ -24,10 +26,10 @@
     disabled: boolean;
     onChange: (wire: string) => void;
     onRevertPredefined: () => void;
-    onRevertBaseline: () => void;
+    onRevertOriginal: () => void;
   };
 
-  const { state, disabled, onChange, onRevertPredefined, onRevertBaseline }: Props = $props();
+  const { state, disabled, onChange, onRevertPredefined, onRevertOriginal }: Props = $props();
 
   // Supported values first, preserving catalog order within each group.
   const orderedValues = $derived(
@@ -54,7 +56,7 @@
     onChange(value);
   }
 
-  const hasBaseline = $derived(state.baseline !== null);
+  const hasOriginal = $derived(state.original !== null);
 
   function translateNvapi(key: string, fallback: string): string {
     return translateExternalMessage({ key, fallback });
@@ -62,18 +64,18 @@
 
   // Each revert button is only meaningful when it would actually change
   // something — so they enable only then, instead of being permanently active.
-  // "Reset to driver default" applies when an override is present (the current
-  // value differs from the driver's predefined default).
-  const canReset = $derived(!state.is_current_predefined);
-  // "Restore pre-RenderPilot value" applies when a baseline exists and differs
-  // from the current value.
+  // Deleting an explicit override is meaningful even when its DWORD equals the
+  // driver default. Inherited values cannot be reset, regardless of value.
+  const canReset = $derived(canResetToDriverDefault(state.current_is_explicit));
+  // Original restore compares both explicit presence and value. A stored
+  // inherited state can differ from an explicit value equal to the default.
   const canRestore = $derived(
-    state.baseline !== null && state.baseline.dword !== state.current.dword,
+    canRestoreOriginal(state.original, state.current, state.current_is_explicit),
   );
 </script>
 
-<Item size="sm">
-  <ItemContent>
+<Item size="sm" class="grid min-w-0 grid-cols-1 gap-3 @min-[36rem]:grid-cols-[minmax(0,1fr)_auto]">
+  <ItemContent class="min-w-0">
     <ItemTitle>{translateNvapi(`nvapi.${state.setting_key}.label`, state.setting_label)}</ItemTitle>
     {#if state.description !== null || state.min_driver !== null}
       <ItemDescription>
@@ -89,9 +91,11 @@
       </ItemDescription>
     {/if}
   </ItemContent>
-  <ItemActions>
+  <ItemActions
+    class="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] @min-[36rem]:w-auto @min-[36rem]:shrink-0"
+  >
     <Select type="single" {disabled} bind:value={selected} onValueChange={handleChange}>
-      <SelectTrigger size="sm" class="w-60">
+      <SelectTrigger size="sm" class="w-full min-w-0 @min-[36rem]:w-60">
         <span class="truncate"
           >{translateNvapi(
             `nvapi.${state.setting_key}.value.${state.current.wire}`,
@@ -140,7 +144,13 @@
         {/snippet}
       </TooltipTrigger>
       <TooltipContent>
-        {canReset ? t('gameDetails.nvapi.resetDefault') : t('gameDetails.nvapi.alreadyDefault')}
+        {#if canReset}
+          {t('gameDetails.nvapi.resetDefault')}
+        {:else if state.current_is_explicit === false}
+          {t('gameDetails.nvapi.noExplicitOverride')}
+        {:else}
+          {t('gameDetails.nvapi.resetStateUnknown')}
+        {/if}
       </TooltipContent>
     </Tooltip>
 
@@ -152,8 +162,8 @@
             variant="ghost"
             size="icon-sm"
             disabled={disabled || !canRestore}
-            onclick={onRevertBaseline}
-            aria-label={t('gameDetails.nvapi.restoreBaselineLabel')}
+            onclick={onRevertOriginal}
+            aria-label={t('gameDetails.nvapi.restoreOriginalLabel')}
           >
             <HistoryIcon class="size-4" aria-hidden="true" />
           </Button>
@@ -161,11 +171,11 @@
       </TooltipTrigger>
       <TooltipContent>
         {#if canRestore}
-          {t('gameDetails.nvapi.restoreBaseline')}
-        {:else if hasBaseline}
-          {t('gameDetails.nvapi.alreadyBaseline')}
+          {t('gameDetails.nvapi.restoreOriginal')}
+        {:else if hasOriginal}
+          {t('gameDetails.nvapi.alreadyOriginal')}
         {:else}
-          {t('gameDetails.nvapi.noBaseline')}
+          {t('gameDetails.nvapi.noOriginal')}
         {/if}
       </TooltipContent>
     </Tooltip>

@@ -35,7 +35,34 @@ export type ExecutableCandidate = {
 export type EffectiveExecutable = {
   file_name: string;
   absolute_path: string;
+  auto_absolute_path: string | null;
   source: 'auto' | 'override';
+};
+
+/** Live NVIDIA DRS classification and the safe actions available for one game. */
+export type NvapiProfileStatus = {
+  selectedExecutable: string | null;
+  bindingPath: string | null;
+  profileName: string | null;
+  state:
+    | 'noExecutable'
+    | 'nvapiUnavailable'
+    | 'ambiguous'
+    | 'error'
+    | 'missing'
+    | 'predefined'
+    | 'external'
+    | 'owned'
+    | 'ownedByAnotherGame'
+    | 'conflict'
+    | 'pending';
+  isPredefined: boolean | null;
+  ownedByThisGame: boolean;
+  canCreate: boolean;
+  canDelete: boolean;
+  pendingOperation: string | null;
+  pendingOperationGameId: string | null;
+  detail: string | null;
 };
 
 export type ValueOption = {
@@ -50,13 +77,9 @@ export type ValueDescriptor = {
   dword: number;
 };
 
-export type BaselineDto = {
-  wire: string | null;
-  label: string | null;
-  dword: number;
-  was_predefined: boolean;
-  captured_at: number;
-  captured_exe: string;
+export type OriginalStateDto = {
+  present: boolean;
+  value: ValueDescriptor | null;
 };
 
 export type DllInfoDto = {
@@ -77,7 +100,9 @@ export type NvapiWarning =
   | 'noExecutable'
   | 'nvapiUnavailable'
   | 'nvapiInitFailed'
-  | 'drsFailed';
+  | 'drsFailed'
+  | 'executableAmbiguous'
+  | 'drsProfileLookupFailed';
 
 export type SettingStateResponse = {
   setting_key: string;
@@ -89,10 +114,10 @@ export type SettingStateResponse = {
   description: string | null;
   min_driver: string | null;
   current: ValueDescriptor;
+  current_is_explicit: boolean | null;
   predefined: ValueDescriptor | null;
-  baseline: BaselineDto | null;
+  original: OriginalStateDto | null;
   is_current_predefined: boolean;
-  is_modified_outside_renderpilot: boolean;
   effective_exe: string | null;
   effective_exe_source: 'auto' | 'override' | null;
   has_profile_for_exe: boolean;

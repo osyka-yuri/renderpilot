@@ -5,6 +5,7 @@ import type {
   DlssIndicatorState,
   EffectiveExecutable,
   ExecutableCandidate,
+  NvapiProfileStatus,
   SettingDescriptor,
   SettingStateResponse,
 } from '../model/types';
@@ -79,12 +80,42 @@ export async function setNvapiSettingValue(
 export async function revertNvapiSetting(
   gameId: string,
   settingKey: string,
-  target: 'predefined' | 'baseline',
+  target: 'predefined' | 'original',
 ): Promise<SettingStateResponse> {
   return invokeDesktop<SettingStateResponse>('revert_nvapi_setting', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     settingKey: requireNonBlankString(settingKey, 'settingKey'),
     target,
+  });
+}
+
+export async function getNvapiProfileStatus(gameId: string): Promise<NvapiProfileStatus> {
+  return invokeDesktop<NvapiProfileStatus>('get_nvapi_profile_status', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+export async function createNvapiProfile(gameId: string): Promise<void> {
+  await invokeDesktop('create_nvapi_profile', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+export async function deleteNvapiProfile(gameId: string): Promise<void> {
+  await invokeDesktop('delete_nvapi_profile', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+export async function moveNvapiProfile(
+  gameId: string,
+  absolutePath: string,
+  selectAutomatically = false,
+): Promise<void> {
+  await invokeDesktop('move_nvapi_profile', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+    absolutePath: requireNonBlankString(absolutePath, 'absolutePath'),
+    selectAutomatically,
   });
 }
 
@@ -109,7 +140,7 @@ export async function setGlobalNvapiSettingValue(
 
 export async function revertGlobalNvapiSetting(
   settingKey: string,
-  target: 'predefined' | 'baseline',
+  target: 'predefined',
 ): Promise<SettingStateResponse> {
   return invokeDesktop<SettingStateResponse>('revert_global_nvapi_setting', {
     settingKey: requireNonBlankString(settingKey, 'settingKey'),

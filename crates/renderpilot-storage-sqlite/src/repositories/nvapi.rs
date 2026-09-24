@@ -1,17 +1,11 @@
-//! NVAPI overrides and baselines tables.
-//!
-//! Both tables live in the composed catalog baseline and CASCADE on `games.id`,
-//! so deleting a game also tears down its NVAPI state.
+//! Durable storage for NVAPI executable overrides, profile ownership, and setting claims.
 
-use renderpilot_application::AppResult;
-use rusqlite::{OptionalExtension, params};
-
-use crate::{SqliteStorage, error::storage_context};
-
-// -----------------------------------------------------------------------------
-// Executable override
-// -----------------------------------------------------------------------------
-
+mod executable_overrides;
+mod owned_profiles;
+mod pending;
+mod setting_claims;
+#[cfg(test)]
+mod tests;
 /// One row from `nvapi_executable_overrides`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NvapiExecutableOverrideRow {
@@ -26,497 +20,203 @@ pub struct NvapiExecutableOverrideRow {
 }
 
 // -----------------------------------------------------------------------------
-// Setting baseline
+// Profile ownership
 // -----------------------------------------------------------------------------
 
-/// Represents a single immutable row within the `nvapi_setting_baselines` table.
-/// This acts as a historical snapshot recorded by RenderPilot immediately prior to
-/// modifying a specific `(game, setting)` pair for the first time. To ensure
-/// fidelity of the "revert to baseline" functionality, this snapshot is strictly
-/// preserved and never overwritten by subsequent modification attempts.
+/// Durable ownership receipt for a RenderPilot-created NVIDIA profile.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NvapiSettingBaselineRow {
-    /// Game this baseline applies to.
+pub struct NvapiOwnedProfileRow {
+    /// Owning game id.
     pub game_id: String,
-    /// Wire-stable setting identifier, e.g. `"dlss_sr_render_preset"`.
-    pub setting_key: String,
-    /// The DWORD value the setting had right before the first write.
-    pub baseline_dword: u32,
-    /// Whether the captured value matched the driver's predefined
-    /// value (`true`) — i.e. nothing had touched it before — or
-    /// differed (`false`, meaning another tool had already applied
-    /// an override before RenderPilot saw it).
-    pub baseline_was_predefined: bool,
-    /// The driver-predefined value at capture time, if NVAPI reported
-    /// `isPredefinedValid`. `None` when the driver had no opinion.
-    pub predefined_dword: Option<u32>,
-    /// Executable basename used when capturing.
-    pub captured_exe: String,
-    /// Unix milliseconds of capture.
-    pub captured_at: i64,
+    /// Exact profile name in the NVIDIA driver database.
+    pub profile_name: String,
+    /// The one full-path executable binding confirmed by RenderPilot.
+    pub binding_path: String,
+    /// Serialized NVDRS_APPLICATION identity witness.
+    pub application_witness_json: String,
+    /// Serialized confirmed profile application and setting composition.
+    pub composition_json: String,
+    /// Ownership state: active, pending, or conflict.
+    pub state: String,
+    /// Last durable update time in Unix milliseconds.
+    pub updated_at: i64,
 }
 
-// -----------------------------------------------------------------------------
-// SqliteStorage methods
-// -----------------------------------------------------------------------------
-
-impl SqliteStorage {
-    /// Returns every executable override in one stable query.
-    pub fn list_nvapi_executable_overrides(&self) -> AppResult<Vec<NvapiExecutableOverrideRow>> {
-        self.with_connection(|connection| {
-            let mut statement = connection
-                .prepare_cached(
-                    "SELECT game_id, selected_path, selected_basename, updated_at
-                     FROM nvapi_executable_overrides
-                     ORDER BY game_id",
-                )
-                .map_err(|error| {
-                    storage_context("could not prepare executable override list", error)
-                })?;
-            let rows = statement
-                .query_map([], |row| {
-                    Ok(NvapiExecutableOverrideRow {
-                        game_id: row.get(0)?,
-                        selected_path: row.get(1)?,
-                        selected_basename: row.get(2)?,
-                        updated_at: row.get(3)?,
-                    })
-                })
-                .map_err(|error| storage_context("could not read executable overrides", error))?;
-
-            rows.collect::<Result<Vec<_>, _>>()
-                .map_err(|error| storage_context("could not map executable overrides", error))
-        })
-    }
-
-    /// Inserts or replaces the executable override for `game_id`.
-    pub fn upsert_nvapi_executable_override(
-        &self,
-        game_id: &str,
-        selected_path: &str,
-        selected_basename: &str,
-    ) -> AppResult<()> {
-        self.with_connection(|connection| {
-            connection
-                .execute(
-                    "INSERT INTO nvapi_executable_overrides
-                    (game_id, selected_path, selected_basename, updated_at)
-                 VALUES (?1, ?2, ?3, CAST(unixepoch('subsec') * 1000 AS INTEGER))
-                 ON CONFLICT(game_id) DO UPDATE SET
-                    selected_path     = excluded.selected_path,
-                    selected_basename = excluded.selected_basename,
-                    updated_at        = excluded.updated_at",
-                    params![game_id, selected_path, selected_basename],
-                )
-                .map(|_| ())
-                .map_err(|error| {
-                    storage_context("could not upsert nvapi executable override", error)
-                })
-        })
-    }
-
-    /// Returns the executable override for `game_id`, if any.
-    pub fn get_nvapi_executable_override(
-        &self,
-        game_id: &str,
-    ) -> AppResult<Option<NvapiExecutableOverrideRow>> {
-        self.with_connection(|connection| {
-            connection
-                .query_row(
-                    "SELECT game_id, selected_path, selected_basename, updated_at
-                 FROM nvapi_executable_overrides
-                 WHERE game_id = ?1",
-                    params![game_id],
-                    |row| {
-                        Ok(NvapiExecutableOverrideRow {
-                            game_id: row.get(0)?,
-                            selected_path: row.get(1)?,
-                            selected_basename: row.get(2)?,
-                            updated_at: row.get(3)?,
-                        })
-                    },
-                )
-                .optional()
-                .map_err(|error| storage_context("could not read nvapi executable override", error))
-        })
-    }
-
-    /// Deletes the executable override for `game_id`, if any.
-    pub fn delete_nvapi_executable_override(&self, game_id: &str) -> AppResult<()> {
-        self.with_connection(|connection| {
-            connection
-                .execute(
-                    "DELETE FROM nvapi_executable_overrides WHERE game_id = ?1",
-                    params![game_id],
-                )
-                .map(|_| ())
-                .map_err(|error| {
-                    storage_context("could not delete nvapi executable override", error)
-                })
-        })
-    }
-
-    /// Records an initial baseline snapshot exclusively if no preexisting record
-    /// is found for the specified `(game_id, setting_key)` tuple. Yields `true`
-    /// upon successfully inserting a new snapshot, or `false` if a baseline was
-    /// already recorded.
-    ///
-    /// This mechanism serves as the foundational pillar for the "revert to baseline"
-    /// capability. Because the captured value strictly reflects the driver's state
-    /// *before* any RenderPilot intervention, subsequent application-driven writes
-    /// will purposefully bypass this function, safeguarding the original baseline.
-    pub fn capture_nvapi_baseline_if_missing(
-        &self,
-        game_id: &str,
-        setting_key: &str,
-        baseline_dword: u32,
-        baseline_was_predefined: bool,
-        predefined_dword: Option<u32>,
-        captured_exe: &str,
-    ) -> AppResult<bool> {
-        self.with_connection(|connection| {
-            let rows_affected = connection
-                .execute(
-                    "INSERT INTO nvapi_setting_baselines
-                    (game_id, setting_key, baseline_dword, baseline_was_predefined,
-                     predefined_dword, captured_exe, captured_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6,
-                     CAST(unixepoch('subsec') * 1000 AS INTEGER))
-                 ON CONFLICT (game_id, setting_key) DO NOTHING",
-                    params![
-                        game_id,
-                        setting_key,
-                        baseline_dword,
-                        i32::from(baseline_was_predefined),
-                        predefined_dword,
-                        captured_exe,
-                    ],
-                )
-                .map_err(|error| {
-                    storage_context("could not capture nvapi setting baseline", error)
-                })?;
-            Ok(rows_affected > 0)
-        })
-    }
-
-    /// Returns the baseline row for `(game_id, setting_key)`, if any.
-    pub fn get_nvapi_baseline(
-        &self,
-        game_id: &str,
-        setting_key: &str,
-    ) -> AppResult<Option<NvapiSettingBaselineRow>> {
-        self.with_connection(|connection| {
-            connection
-                .query_row(
-                    "SELECT game_id, setting_key, baseline_dword, baseline_was_predefined,
-                        predefined_dword, captured_exe, captured_at
-                 FROM nvapi_setting_baselines
-                 WHERE game_id = ?1 AND setting_key = ?2",
-                    params![game_id, setting_key],
-                    |row| {
-                        let was_predefined: i32 = row.get(3)?;
-                        Ok(NvapiSettingBaselineRow {
-                            game_id: row.get(0)?,
-                            setting_key: row.get(1)?,
-                            baseline_dword: row.get(2)?,
-                            baseline_was_predefined: was_predefined != 0,
-                            predefined_dword: row.get(4)?,
-                            captured_exe: row.get(5)?,
-                            captured_at: row.get(6)?,
-                        })
-                    },
-                )
-                .optional()
-                .map_err(|error| storage_context("could not read nvapi setting baseline", error))
-        })
-    }
-
-    /// Returns whether reverting at least one managed NVAPI value still
-    /// depends on a captured baseline for this game.
-    pub fn has_nvapi_baselines_for_game(&self, game_id: &str) -> AppResult<bool> {
-        self.with_connection(|connection| {
-            connection
-                .query_row(
-                    "SELECT EXISTS(
-                        SELECT 1
-                        FROM nvapi_setting_baselines
-                        WHERE game_id = ?1
-                    )",
-                    [game_id],
-                    |row| row.get::<_, bool>(0),
-                )
-                .map_err(|error| {
-                    storage_context("could not inspect nvapi setting baselines", error)
-                })
-        })
-    }
-
-    /// Returns every immutable NVAPI baseline for one game in stable key order.
-    pub fn list_nvapi_setting_baselines_for_game(
-        &self,
-        game_id: &str,
-    ) -> AppResult<Vec<NvapiSettingBaselineRow>> {
-        self.with_connection(|connection| {
-            let mut statement = connection
-                .prepare_cached(
-                    "SELECT game_id, setting_key, baseline_dword,
-                            baseline_was_predefined, predefined_dword,
-                            captured_exe, captured_at
-                     FROM nvapi_setting_baselines
-                     WHERE game_id = ?1
-                     ORDER BY setting_key",
-                )
-                .map_err(|error| storage_context("could not prepare NVAPI baseline list", error))?;
-            let rows = statement
-                .query_map([game_id], |row| {
-                    Ok(NvapiSettingBaselineRow {
-                        game_id: row.get(0)?,
-                        setting_key: row.get(1)?,
-                        baseline_dword: row.get(2)?,
-                        baseline_was_predefined: row.get::<_, i64>(3)? != 0,
-                        predefined_dword: row.get(4)?,
-                        captured_exe: row.get(5)?,
-                        captured_at: row.get(6)?,
-                    })
-                })
-                .map_err(|error| storage_context("could not read NVAPI baselines", error))?;
-            rows.collect::<Result<Vec<_>, _>>()
-                .map_err(|error| storage_context("could not map NVAPI baselines", error))
-        })
-    }
-
-    /// Erases any existing baseline snapshot associated with the `(game_id, setting_key)`
-    /// tuple. This capability is primarily utilized within testing environments, as
-    /// production workflows generally require the baseline to be durably persisted
-    /// for the entire lifecycle of the game's registration.
-    pub fn delete_nvapi_baseline(&self, game_id: &str, setting_key: &str) -> AppResult<()> {
-        self.with_connection(|connection| {
-            connection
-                .execute(
-                    "DELETE FROM nvapi_setting_baselines
-                 WHERE game_id = ?1 AND setting_key = ?2",
-                    params![game_id, setting_key],
-                )
-                .map(|_| ())
-                .map_err(|error| storage_context("could not delete nvapi setting baseline", error))
-        })
-    }
+/// Durable pre-mutation and last-confirmed state for a DRS setting.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NvapiTargetSettingClaimRow {
+    /// Game currently holding the setting claim.
+    pub game_id: String,
+    /// Verified DRS target identity.
+    pub target_id: String,
+    /// NVIDIA DRS setting identifier.
+    pub setting_id: u32,
+    /// Exact full-path application scope this game confirmed for this claim.
+    pub executable_path: String,
+    /// Whether the setting had an explicit profile value before RenderPilot.
+    pub original_present: bool,
+    /// Original explicit DWORD value, when present.
+    pub original_value: Option<u32>,
+    /// Whether the last confirmed RenderPilot state is explicit.
+    pub expected_present: bool,
+    /// Last confirmed RenderPilot DWORD value, when present.
+    pub expected_value: Option<u32>,
 }
 
-// -----------------------------------------------------------------------------
-// Tests
-// -----------------------------------------------------------------------------
+/// Unresolved DRS operation receipt. Rows fence overlapping target/path mutations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NvapiPendingOperationRow {
+    /// Stable operation receipt id.
+    pub op_id: String,
+    /// Affected game, or `None` for a global operation.
+    pub game_id: Option<String>,
+    /// Verified DRS profile identity, when available.
+    pub target_id: Option<String>,
+    /// Operation kind such as setting, create_profile, move_profile, or delete_profile.
+    pub kind: String,
+    /// Durable state observed before the driver mutation.
+    pub before_json: String,
+    /// Expected durable state after the driver mutation.
+    pub after_json: String,
+    /// Third-state observation for an operation that could not be reconciled.
+    pub observed_json: Option<String>,
+    /// Current reconciliation phase.
+    pub phase: String,
+    /// Receipt creation time in Unix milliseconds.
+    pub created_at: i64,
+    /// Last receipt update time in Unix milliseconds.
+    pub updated_at: i64,
+}
 
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
+/// Presence flag and optional DWORD as recorded for a DRS setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NvapiSettingState {
+    /// Whether the profile has an explicit value for this setting.
+    pub present: bool,
+    /// Recorded DWORD value, if any.
+    pub value: Option<u32>,
+}
 
-    use renderpilot_application::GameRepository;
-    use renderpilot_domain::{
-        GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
-    };
+/// Input for preparing a durable setting write scoped to one game executable.
+#[derive(Debug, Clone, Copy)]
+pub struct NvapiGameSettingPreparation<'a> {
+    /// Stable operation receipt id.
+    pub op_id: &'a str,
+    /// Game whose executable participates in the setting claim.
+    pub game_id: &'a str,
+    /// Exact NVIDIA profile name.
+    pub profile_name: &'a str,
+    /// RenderPilot ownership kind for the target profile.
+    pub target_kind: &'a str,
+    /// Whether the NVIDIA profile is predefined.
+    pub profile_is_predefined: bool,
+    /// Serialized profile identity receipt.
+    pub profile_identity_json: &'a str,
+    /// Full path of the participating game executable.
+    pub executable_path: &'a str,
+    /// Serialized full-path application witness.
+    pub application_witness_json: &'a str,
+    /// NVIDIA setting identifier.
+    pub setting_id: u32,
+    /// State before RenderPilot first claimed the setting.
+    pub original: NvapiSettingState,
+    /// Live state observed immediately before this write.
+    pub before: NvapiSettingState,
+    /// State requested by this write.
+    pub after: NvapiSettingState,
+}
 
-    use crate::SqliteStorage;
+/// Input for preparing a durable setting write on a global profile.
+#[derive(Debug, Clone, Copy)]
+pub struct NvapiGlobalSettingPreparation<'a> {
+    /// Stable operation receipt id.
+    pub op_id: &'a str,
+    /// Exact NVIDIA profile name.
+    pub profile_name: &'a str,
+    /// Whether the NVIDIA profile is predefined.
+    pub profile_is_predefined: bool,
+    /// Serialized profile identity receipt.
+    pub profile_identity_json: &'a str,
+    /// NVIDIA setting identifier.
+    pub setting_id: u32,
+    /// State before RenderPilot first claimed the setting.
+    pub original: NvapiSettingState,
+    /// Live state observed immediately before this write.
+    pub before: NvapiSettingState,
+    /// State requested by this write.
+    pub after: NvapiSettingState,
+}
 
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
+/// Scope of a verified setting operation receipt.
+#[derive(Debug, Clone, Copy)]
+pub enum NvapiSettingOperationScope<'a> {
+    /// A game-scoped claim tied to a confirmed executable.
+    Game {
+        /// Game whose executable participates in the setting claim.
+        game_id: &'a str,
+    },
+    /// A global write on a base profile.
+    Global,
+}
 
-    fn fresh_storage() -> (SqliteStorage, PathBuf, GameId) {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path =
-            std::env::temp_dir().join(format!("renderpilot-nvapi-test-{nanos}-{counter}.db"));
-        // Ensure clean slate.
-        let _ = std::fs::remove_file(&path);
-        let storage = SqliteStorage::open(&path).expect("open SqliteStorage");
-        let game_id = GameId::new("manual:test-game").expect("game id");
-        let identity =
-            GameIdentity::new(game_id.clone(), "Test Game", Launcher::Manual).expect("identity");
-        let installation = GameInstallation::new(
-            identity,
-            Platform::Windows,
-            GameRuntime::NativeWindows,
-            PathRef::new("C:/Games/Test").expect("install path"),
-        );
-        storage
-            .upsert_game(&installation)
-            .expect("upsert seed game");
-        (storage, path, game_id)
-    }
+/// Input for atomically publishing a setting write verified by a fresh DRS read.
+#[derive(Debug, Clone, Copy)]
+pub struct NvapiSettingOperationCompletion<'a> {
+    /// Stable operation receipt id.
+    pub op_id: &'a str,
+    /// Whether the setting write is game scoped or global.
+    pub scope: NvapiSettingOperationScope<'a>,
+    /// Exact NVIDIA profile identity key.
+    pub target_id: &'a str,
+    /// NVIDIA setting identifier.
+    pub setting_id: u32,
+    /// Verified setting state after the operation.
+    pub expected: NvapiSettingState,
+    /// Serialized profile identity receipt after verification.
+    pub profile_identity_json: &'a str,
+    /// Serialized owned-profile composition, when this setting belongs to an owned profile.
+    pub composition_json: Option<&'a str>,
+}
 
-    #[test]
-    fn executable_override_roundtrip() {
-        let (storage, _path, game_id) = fresh_storage();
+/// Profile identity, application witness, and composition verified together in DRS.
+#[derive(Debug, Clone, Copy)]
+pub struct NvapiVerifiedProfileReceipt<'a> {
+    /// Exact NVIDIA profile name.
+    pub profile_name: &'a str,
+    /// Serialized profile identity receipt.
+    pub profile_identity_json: &'a str,
+    /// Serialized full-path application witness.
+    pub application_witness_json: &'a str,
+    /// Serialized profile composition.
+    pub composition_json: &'a str,
+}
 
-        assert!(
-            storage
-                .get_nvapi_executable_override(game_id.as_str())
-                .unwrap()
-                .is_none()
-        );
+/// Input for publishing a newly created and verified owned profile.
+#[derive(Debug, Clone, Copy)]
+pub struct NvapiProfileCreationCompletion<'a> {
+    /// Stable operation receipt id.
+    pub op_id: &'a str,
+    /// Owning game id.
+    pub game_id: &'a str,
+    /// Confirmed full-path executable binding.
+    pub binding_path: &'a str,
+    /// Verified DRS profile receipt.
+    pub profile: NvapiVerifiedProfileReceipt<'a>,
+}
 
-        storage
-            .upsert_nvapi_executable_override(
-                game_id.as_str(),
-                "C:/Games/Test/Game.exe",
-                "Game.exe",
-            )
-            .unwrap();
-
-        let row = storage
-            .get_nvapi_executable_override(game_id.as_str())
-            .unwrap()
-            .expect("row present");
-        assert_eq!(row.selected_basename, "Game.exe");
-        assert_eq!(row.selected_path, "C:/Games/Test/Game.exe");
-        assert!(row.updated_at > 0);
-    }
-
-    #[test]
-    fn executable_override_upsert_replaces_existing() {
-        let (storage, _path, game_id) = fresh_storage();
-
-        storage
-            .upsert_nvapi_executable_override(game_id.as_str(), "C:/Games/Test/Old.exe", "Old.exe")
-            .unwrap();
-        storage
-            .upsert_nvapi_executable_override(game_id.as_str(), "C:/Games/Test/New.exe", "New.exe")
-            .unwrap();
-
-        let row = storage
-            .get_nvapi_executable_override(game_id.as_str())
-            .unwrap()
-            .unwrap();
-        assert_eq!(row.selected_basename, "New.exe");
-    }
-
-    #[test]
-    fn delete_executable_override_removes_row() {
-        let (storage, _path, game_id) = fresh_storage();
-
-        storage
-            .upsert_nvapi_executable_override(
-                game_id.as_str(),
-                "C:/Games/Test/Game.exe",
-                "Game.exe",
-            )
-            .unwrap();
-        storage
-            .delete_nvapi_executable_override(game_id.as_str())
-            .unwrap();
-
-        assert!(
-            storage
-                .get_nvapi_executable_override(game_id.as_str())
-                .unwrap()
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn capture_baseline_inserts_only_once() {
-        let (storage, _path, game_id) = fresh_storage();
-        let key = "dlss_sr_render_preset";
-
-        let first = storage
-            .capture_nvapi_baseline_if_missing(game_id.as_str(), key, 0, true, Some(0), "Game.exe")
-            .unwrap();
-        assert!(first, "first call should insert");
-
-        // Try to capture a different value; existing baseline must be preserved.
-        let second = storage
-            .capture_nvapi_baseline_if_missing(game_id.as_str(), key, 6, false, Some(0), "Game.exe")
-            .unwrap();
-        assert!(!second, "second call should be a no-op");
-
-        let row = storage
-            .get_nvapi_baseline(game_id.as_str(), key)
-            .unwrap()
-            .expect("baseline row");
-        assert_eq!(row.baseline_dword, 0);
-        assert!(row.baseline_was_predefined);
-        assert_eq!(row.predefined_dword, Some(0));
-    }
-
-    #[test]
-    fn get_baseline_returns_none_when_absent() {
-        let (storage, _path, game_id) = fresh_storage();
-        assert!(
-            storage
-                .get_nvapi_baseline(game_id.as_str(), "missing.setting")
-                .unwrap()
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn delete_baseline_removes_row() {
-        let (storage, _path, game_id) = fresh_storage();
-        let key = "dlss_sr_render_preset";
-
-        storage
-            .capture_nvapi_baseline_if_missing(game_id.as_str(), key, 5, false, None, "Game.exe")
-            .unwrap();
-        storage
-            .delete_nvapi_baseline(game_id.as_str(), key)
-            .unwrap();
-        assert!(
-            storage
-                .get_nvapi_baseline(game_id.as_str(), key)
-                .unwrap()
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn baseline_persists_predefined_dword_as_null_when_none() {
-        let (storage, _path, game_id) = fresh_storage();
-        let key = "dlss_sr_render_preset";
-
-        storage
-            .capture_nvapi_baseline_if_missing(game_id.as_str(), key, 3, false, None, "Game.exe")
-            .unwrap();
-        let row = storage
-            .get_nvapi_baseline(game_id.as_str(), key)
-            .unwrap()
-            .unwrap();
-        assert_eq!(row.predefined_dword, None);
-        assert!(!row.baseline_was_predefined);
-    }
-
-    #[test]
-    fn deleting_game_cascades_to_nvapi_rows() {
-        let (storage, _path, game_id) = fresh_storage();
-        let key = "dlss_sr_render_preset";
-
-        storage
-            .upsert_nvapi_executable_override(
-                game_id.as_str(),
-                "C:/Games/Test/Game.exe",
-                "Game.exe",
-            )
-            .unwrap();
-        storage
-            .capture_nvapi_baseline_if_missing(game_id.as_str(), key, 0, true, Some(0), "Game.exe")
-            .unwrap();
-
-        storage.delete_game(&game_id).expect("delete game");
-
-        assert!(
-            storage
-                .get_nvapi_executable_override(game_id.as_str())
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            storage
-                .get_nvapi_baseline(game_id.as_str(), key)
-                .unwrap()
-                .is_none()
-        );
-    }
+/// Input for publishing a verified executable move of an owned profile.
+#[derive(Debug, Clone, Copy)]
+pub struct NvapiProfileMoveCompletion<'a> {
+    /// Stable operation receipt id.
+    pub op_id: &'a str,
+    /// Owning game id.
+    pub game_id: &'a str,
+    /// Confirmed destination executable path.
+    pub binding_path: &'a str,
+    /// Executable basename used by the global override.
+    pub binding_basename: &'a str,
+    /// Whether the executable selector should return to automatic selection.
+    pub select_automatically: bool,
+    /// Verified DRS profile receipt.
+    pub profile: NvapiVerifiedProfileReceipt<'a>,
 }

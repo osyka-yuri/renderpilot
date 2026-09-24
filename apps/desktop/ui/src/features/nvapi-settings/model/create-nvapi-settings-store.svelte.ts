@@ -22,6 +22,8 @@ const SESSION_WARNINGS: NvapiWarning[] = [
   'nvapiUnavailable',
   'nvapiInitFailed',
   'drsFailed',
+  'executableAmbiguous',
+  'drsProfileLookupFailed',
 ];
 
 function isSessionWarning(warning: NvapiWarning): boolean {

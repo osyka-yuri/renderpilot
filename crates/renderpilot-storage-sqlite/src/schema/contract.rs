@@ -27,7 +27,12 @@ pub(super) const REQUIRED_TABLES: &[&str] = &[
     "catalog_scan_authority",
     "file_observations",
     "nvapi_executable_overrides",
-    "nvapi_setting_baselines",
+    "nvapi_owned_profiles",
+    "nvapi_drs_targets",
+    "nvapi_drs_target_app_witnesses",
+    "nvapi_target_setting_claims",
+    "nvapi_game_claim_refs",
+    "pending_drs_operations",
     "game_ui_state",
     "profile_addon_capabilities",
     "portable_path_tags",
@@ -63,6 +68,9 @@ pub(super) const REQUIRED_INDEXES: &[&str] = &[
     "idx_file_observations_game_path",
     "idx_file_observations_artifact_path",
     "idx_profile_addon_capabilities_kind",
+    "idx_nvapi_game_claim_refs_target",
+    "idx_nvapi_owned_profiles_binding_path",
+    "idx_pending_drs_operations_phase_target",
 ];
 
 /// Every named trigger created by the baseline.
@@ -93,6 +101,7 @@ pub(super) const REQUIRED_TRIGGERS: &[&str] = &[
     "trg_peer_aggregate_reservations_touch_updated_at",
     "trg_peer_aggregate_reservations_restrict_state_transition",
     "trg_games_restrict_peer_aggregate_delete",
+    "trg_games_restrict_nvapi_owned_delete",
 ];
 
 /// Exact physical-column contract for every catalog table.
@@ -122,7 +131,12 @@ pub(super) const CONSOLIDATION_POLICIES: &[(&str, &str)] = &[
     ("operations", "reassign_game"),
     ("operation_items", "reassign_game_and_component"),
     ("nvapi_executable_overrides", "destination_wins"),
-    ("nvapi_setting_baselines", "destination_wins_per_setting"),
+    ("nvapi_owned_profiles", "block_nvapi_state"),
+    ("nvapi_drs_targets", "block_nvapi_state"),
+    ("nvapi_drs_target_app_witnesses", "block_nvapi_state"),
+    ("nvapi_target_setting_claims", "block_nvapi_state"),
+    ("nvapi_game_claim_refs", "block_nvapi_state"),
+    ("pending_drs_operations", "block_nvapi_state"),
     ("game_ui_state", "merge_boolean_flags"),
     ("profile_addon_capabilities", "destination_wins_per_kind"),
     ("catalog_scan_authority", "cascade_game"),

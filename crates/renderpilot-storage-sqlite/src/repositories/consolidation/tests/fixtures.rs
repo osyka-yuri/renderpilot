@@ -337,10 +337,6 @@ pub(super) fn seed_all_scoped_state(storage: &SqliteStorage) {
                 INSERT INTO nvapi_executable_overrides (
                     game_id, selected_path, selected_basename, updated_at
                 ) VALUES ('manual:child', 'C:/Games/game.exe', 'game.exe', 1);
-                INSERT INTO nvapi_setting_baselines (
-                    game_id, setting_key, baseline_dword, baseline_was_predefined,
-                    captured_exe, captured_at
-                ) VALUES ('manual:child', 'setting', 1, 0, 'game.exe', 1);
                 INSERT INTO game_ui_state (game_id, is_favorite, is_hidden, updated_at)
                 VALUES ('manual:child', 1, 0, 1);
                 INSERT INTO profile_addon_capabilities (

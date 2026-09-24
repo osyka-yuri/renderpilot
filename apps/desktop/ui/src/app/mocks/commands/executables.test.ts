@@ -23,6 +23,7 @@ describe('preview executable commands', () => {
     expect(automatic).toEqual({
       file_name: candidates[0]?.file_name,
       absolute_path: candidates[0]?.absolute_path,
+      auto_absolute_path: candidates[0]?.absolute_path,
       source: 'auto',
     });
 
@@ -40,6 +41,7 @@ describe('preview executable commands', () => {
     ).resolves.toEqual({
       file_name: candidates[1]?.file_name,
       absolute_path: overridePath,
+      auto_absolute_path: candidates[0]?.absolute_path,
       source: 'override',
     });
 
@@ -49,6 +51,7 @@ describe('preview executable commands', () => {
     ).resolves.toEqual({
       file_name: candidates[0]?.file_name,
       absolute_path: candidates[0]?.absolute_path,
+      auto_absolute_path: candidates[0]?.absolute_path,
       source: 'auto',
     });
   });

@@ -111,7 +111,7 @@ pub fn set_game_executable_override(
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     set_executable_override(context, game_id.as_str(), absolute_path)?;
-    to_json(serde_json::json!({"ok": true}))
+    Ok(serde_json::json!({"ok": true}))
 }
 
 /// Clears any previously pinned executable overrides associated with the specified `game_id`.
@@ -121,7 +121,7 @@ pub fn clear_game_executable_override(
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     clear_executable_override(context, game_id.as_str())?;
-    to_json(serde_json::json!({"ok": true}))
+    Ok(serde_json::json!({"ok": true}))
 }
 
 /// Interrogates the driver to retrieve the live operational state of a specific setting for `game_id`.
@@ -162,7 +162,8 @@ pub fn set_nvapi_setting_value(
     json
 }
 
-/// Restores a designated NVAPI setting to either its driver-predefined default or its historical baseline state.
+/// Restores a designated NVAPI setting to its driver-predefined default or to
+/// the exact original state recorded before RenderPilot first changed it.
 pub fn revert_nvapi_setting(
     context: &renderpilot_orchestration::Context,
     game_id: String,
@@ -178,6 +179,53 @@ pub fn revert_nvapi_setting(
     json
 }
 
+/// Reads profile ownership and safety state for the game's shared executable.
+/// The operation never creates or changes a driver profile.
+pub fn get_nvapi_profile_status(
+    context: &renderpilot_orchestration::Context,
+    game_id: String,
+) -> JsonResult {
+    let game_id = parse_game_id(game_id)?;
+    let session = GameNvapiSession::open(context, game_id)?;
+    to_json(session.profile_status()?)
+}
+
+/// Creates exactly one empty RenderPilot-owned profile for the selected exe.
+pub fn create_nvapi_profile(
+    context: &renderpilot_orchestration::Context,
+    game_id: String,
+) -> JsonResult {
+    let game_id = parse_game_id(game_id)?;
+    let session = GameNvapiSession::open(context, game_id)?;
+    session.create_profile()?;
+    Ok(serde_json::json!({"ok": true}))
+}
+
+/// Deletes the exact RenderPilot-owned profile after composition verification.
+pub fn delete_nvapi_profile(
+    context: &renderpilot_orchestration::Context,
+    game_id: String,
+) -> JsonResult {
+    let game_id = parse_game_id(game_id)?;
+    let session = GameNvapiSession::open(context, game_id)?;
+    session.delete_profile()?;
+    Ok(serde_json::json!({"ok": true}))
+}
+
+/// Moves this game's single owned profile to a full-path executable after the
+/// frontend has shown both paths and the user has confirmed the operation.
+pub fn move_nvapi_profile(
+    context: &renderpilot_orchestration::Context,
+    game_id: String,
+    absolute_path: &str,
+    select_automatically: bool,
+) -> JsonResult {
+    let game_id = parse_game_id(game_id)?;
+    let session = GameNvapiSession::open(context, game_id)?;
+    session.move_profile(absolute_path, select_automatically)?;
+    Ok(serde_json::json!({"ok": true}))
+}
+
 // ---------------------------------------------------------------------------
 // Global (base profile) entry points
 // ---------------------------------------------------------------------------
@@ -191,7 +239,7 @@ pub fn revert_nvapi_setting(
 pub fn list_global_nvapi_setting_states(
     context: &renderpilot_orchestration::Context,
 ) -> JsonResult {
-    let session = GlobalNvapiSession::open(context);
+    let session = GlobalNvapiSession::open(context)?;
     let settings = supported_settings();
     let responses = session.read_all(&settings)?;
     to_json(responses)
@@ -204,7 +252,7 @@ pub fn set_global_nvapi_setting_value(
     value: &str,
 ) -> JsonResult {
     let setting = lookup_setting_or_err(setting_key)?;
-    let session = GlobalNvapiSession::open(context);
+    let session = GlobalNvapiSession::open(context)?;
     let dword = setting.parse_wire(value).ok_or_else(|| {
         ApiError::Service(ServiceError::command_failed(format!(
             "invalid value `{value}` for {}",
@@ -216,14 +264,15 @@ pub fn set_global_nvapi_setting_value(
 }
 
 /// Reverts an NVAPI setting on the global/base driver profile. Only the
-/// `"predefined"` target is valid globally (there is no per-game baseline).
+/// `"predefined"` target is exposed through this command; global original-state
+/// claims are still recorded so interrupted writes can be recovered.
 pub fn revert_global_nvapi_setting(
     context: &renderpilot_orchestration::Context,
     setting_key: &str,
     target: &str,
 ) -> JsonResult {
     let setting = lookup_setting_or_err(setting_key)?;
-    let session = GlobalNvapiSession::open(context);
+    let session = GlobalNvapiSession::open(context)?;
     let response = session.revert(setting.as_ref(), target)?;
     to_json(response)
 }

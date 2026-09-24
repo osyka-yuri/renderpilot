@@ -202,31 +202,28 @@ pub struct SettingContext {
     /// Executable file name (basename only) that NVAPI should be
     /// queried for. `None` if no executable could be resolved.
     pub effective_exe: Option<String>,
+    /// Canonical fully-qualified path used for every DRS application lookup.
+    pub effective_exe_path: Option<String>,
 }
 
-/// Snapshot persisted on the **first** ever write through RenderPilot
-/// for a given (game, setting). Represents what the setting looked
-/// like before RenderPilot intervened, so "Revert to baseline" can
-/// always undo our influence.
+/// Legacy first-write snapshot shape retained for type compatibility. Current
+/// setting claims record exact presence and value in storage instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BaselineSnapshot {
-    /// Raw DWORD value at capture time.
+    /// Raw DWORD value from the prior baseline model.
     pub dword: u32,
-    /// Whether the captured value matched the driver's predefined
-    /// value (`true`) or differed (`false`, meaning some other tool
-    /// — likely NVIDIA Profile Inspector — had already overridden it).
+    /// Prior model's interpretation of the captured value.
     pub was_predefined_when_captured: bool,
     /// Unix epoch seconds.
     pub captured_at_unix_secs: i64,
 }
 
-/// Full state of a setting for a game, combining a live NVAPI read
-/// with any baseline snapshot from the storage layer.
+/// Legacy setting state shape retained for type compatibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingState {
     /// Current value read from the live NVAPI profile.
     pub live: DwordSettingState,
-    /// Optional first-write baseline for revert-to-before-RenderPilot.
+    /// Optional prior-model baseline snapshot.
     pub baseline: Option<BaselineSnapshot>,
 }
 
@@ -272,7 +269,7 @@ pub trait NvapiSetting: Send + Sync {
 
     /// Best-effort human-readable label for a DWORD (used when the
     /// orchestration layer needs to render `current.label` /
-    /// `predefined.label` / `baseline.label` in a response).
+    /// `predefined.label` / `baseline.label` in an older response form).
     fn label_for_dword(&self, dword: u32) -> Option<String>;
 
     /// DWORD shown as the current value when the setting is **absent** from the

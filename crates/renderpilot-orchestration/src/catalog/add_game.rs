@@ -1,9 +1,6 @@
 //! Inspect-and-confirm use case for one explicit game installation root.
 
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{GameId, Launcher, PathRef, RootAuthority, normalized_path_key};
 

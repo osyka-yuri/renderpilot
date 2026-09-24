@@ -135,6 +135,30 @@ fn reduce_current_to_v14(connection: &Connection) {
     connection
         .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
         .expect("reduce physical schema to v14");
+    connection
+        .execute_batch(
+            "CREATE TABLE nvapi_setting_baselines (
+                game_id TEXT NOT NULL,
+                setting_key TEXT NOT NULL,
+                baseline_dword INTEGER NOT NULL,
+                baseline_was_predefined INTEGER NOT NULL,
+                predefined_dword INTEGER,
+                captured_exe TEXT NOT NULL,
+                captured_at INTEGER NOT NULL DEFAULT (
+                    CAST(unixepoch('subsec') * 1000 AS INTEGER)
+                ),
+                CHECK (length(trim(game_id)) > 0),
+                CHECK (length(trim(setting_key)) > 0),
+                CHECK (baseline_dword >= 0),
+                CHECK (baseline_was_predefined IN (0, 1)),
+                CHECK (predefined_dword IS NULL OR predefined_dword >= 0),
+                CHECK (length(trim(captured_exe)) > 0),
+                CHECK (captured_at >= 0),
+                PRIMARY KEY (game_id, setting_key),
+                FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+            ) STRICT;",
+        )
+        .expect("restore v14 NVAPI baselines table");
 }
 
 mod baseline;

@@ -442,28 +442,31 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.executable.otherGroup': 'Прочее (лаунчеры, установщики, утилиты)',
   'gameDetails.executable.customBadge': 'Вручную',
   'gameDetails.executable.reset': 'Сбросить на автоопределение',
+  'gameDetails.executable.changeFailed': 'Не удалось обновить выбор исполняемого файла.',
+  'gameDetails.executable.loadFailed': 'Не удалось загрузить выбор исполняемого файла.',
+  'gameDetails.executable.refreshFailed':
+    'Выбор исполняемого файла обновлён, но связанные сведения об игре не удалось обновить.',
   'gameDetails.executable.tooltipAuto':
     'Исполняемый файл игры: определён автоматически. Используется профилем NVIDIA и RenoDX.',
   'gameDetails.executable.tooltipCustom':
     'Исполняемый файл игры: выбран вручную. Используется профилем NVIDIA и RenoDX.',
   // ── Game details: NVIDIA profile card ──
   'gameDetails.profile.title': 'Профиль NVIDIA',
-  'gameDetails.profile.description': 'Настройте параметры драйвера NVIDIA для этой игры.',
   'gameDetails.profile.pinnedManual': 'Выбрано вручную.',
   'gameDetails.profile.autoDetected': 'Определено автоматически.',
   'gameDetails.profile.noExeDetected': 'Исполняемый файл не найден.',
   'gameDetails.profile.noExe': 'Нет файла',
-  'gameDetails.profile.noProfile': 'Профиль NVIDIA не найден.',
 
   // ── Game details: NVAPI setting row ──
   'gameDetails.nvapi.requiresDriver': 'требуется драйвер {version}+',
   'gameDetails.nvapi.unavailable': 'недоступно',
   'gameDetails.nvapi.resetDefault': 'Сбросить',
-  'gameDetails.nvapi.alreadyDefault': 'Установлено по умолчанию',
-  'gameDetails.nvapi.restoreBaselineLabel': 'Восстановить исходное значение',
-  'gameDetails.nvapi.restoreBaseline': 'Восстановить исходное значение',
-  'gameDetails.nvapi.alreadyBaseline': 'Уже установлено исходное значение',
-  'gameDetails.nvapi.noBaseline': 'Исходное значение не сохранено',
+  'gameDetails.nvapi.noExplicitOverride': 'Нет явного переопределения профиля для сброса',
+  'gameDetails.nvapi.resetStateUnknown': 'Не удалось проверить наличие переопределения в профиле',
+  'gameDetails.nvapi.restoreOriginalLabel': 'Восстановить исходное значение',
+  'gameDetails.nvapi.restoreOriginal': 'Восстановить исходное значение',
+  'gameDetails.nvapi.alreadyOriginal': 'Уже установлено исходное значение',
+  'gameDetails.nvapi.noOriginal': 'Исходное значение не сохранено',
   'gameDetails.nvapi.versionUnavailable': 'Версия DLSS недоступна',
 
   'gameDetails.nvapi.warning.noDll': 'DLL-файл DLSS не найден в папке с игрой.',
@@ -476,6 +479,10 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI недоступен.',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'Ошибка инициализации NVAPI.',
   'gameDetails.nvapi.warning.drsFailed': 'Не удалось создать сессию DRS.',
+  'gameDetails.nvapi.warning.executableAmbiguous':
+    'NVIDIA нашла несколько профилей для этого исполняемого файла.',
+  'gameDetails.nvapi.warning.drsProfileLookupFailed':
+    'Не удалось прочитать профиль NVIDIA для этого исполняемого файла.',
 
   // ── Operations page ──
   'operations.title': 'Журнал операций',
@@ -651,7 +658,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   // ── NVIDIA driver context (toasts) ──
   'nvidia.changeSettingFailed': 'Не удалось применить настройки',
   'nvidia.revertDefaultFailed': 'Не удалось сбросить настройки',
-  'nvidia.revertBaselineFailed': 'Не удалось восстановить исходные настройки',
+  'nvidia.revertOriginalFailed': 'Не удалось восстановить исходные настройки',
 
   // ── DLSS indicator context (toasts) ──
   'indicator.changeFailed': 'Не удалось переключить индикатор DLSS',
@@ -1219,4 +1226,46 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'user_message.luma_required_by_optiscaler':
     'Для работы OptiScaler в этой игре требуется Luma. Сначала удалите OptiScaler.',
   'gameDetails.optiscaler.attributionLink': 'Открыть проект',
+  'gameDetails.profile.state.noExecutable': 'Выберите exe игры, чтобы проверить профиль NVIDIA.',
+  'gameDetails.profile.state.nvapiUnavailable':
+    'Управление профилями NVIDIA недоступно в этой системе.',
+  'gameDetails.profile.state.ambiguous':
+    'Для этого exe найдено несколько профилей NVIDIA. Изменение профиля заблокировано.',
+  'gameDetails.profile.state.error': 'Не удалось проверить профиль NVIDIA.',
+  'gameDetails.profile.state.missing': 'Профиля NVIDIA нет.',
+  'gameDetails.profile.state.ownedByAnotherGame': 'Этот профиль управляется другой игрой.',
+  'gameDetails.profile.state.conflict':
+    'Не удалось проверить сохранённое состояние профиля NVIDIA. Изменения профиля заблокированы.',
+  'gameDetails.profile.state.pending': 'Операция с профилем NVIDIA требует восстановления.',
+  'gameDetails.profile.create': 'Создать профиль',
+  'gameDetails.profile.delete': 'Удалить профиль',
+  'gameDetails.profile.deleteBlocked': 'Сейчас этот профиль нельзя удалить.',
+  'gameDetails.profile.boundExecutable': 'Привязанный EXE',
+  'gameDetails.profile.deleteConfirmTitle': 'Удалить профиль «{profileName}»?',
+  'gameDetails.profile.deleteConfirmDescription':
+    'Профиль NVIDIA будет удалён из драйвера, и его настройки перестанут применяться.',
+  'gameDetails.profile.checking': 'Проверяем профиль NVIDIA…',
+  'gameDetails.profile.creating': 'Создаём профиль…',
+  'gameDetails.profile.deleting': 'Удаляем профиль…',
+  'gameDetails.profile.deleteConfirmAction': 'Удалить профиль',
+  'gameDetails.profile.moveConfirmTitle': 'Перенести профиль RenderPilot?',
+  'gameDetails.profile.moveConfirmDescription':
+    'Перенести привязку профиля с {from} на {to}? Привязка в драйвере и выбор exe игры обновятся вместе.',
+  'gameDetails.profile.moveConfirmAction': 'Перенести профиль',
+  'gameDetails.profile.createFailed': 'Не удалось создать профиль NVIDIA.',
+  'gameDetails.profile.deleteFailed': 'Не удалось удалить профиль NVIDIA.',
+  'gameDetails.profile.moveFailed': 'Не удалось перенести профиль NVIDIA.',
+  'gameDetails.profile.state.available': 'Профиль NVIDIA найден.',
+  'gameDetails.profile.retry': 'Повторить',
+  'gameDetails.profile.retryRecovery': 'Повторить восстановление',
+  'gameDetails.profile.refreshFailed':
+    'Изменение профиля NVIDIA выполнено, но сведения об игре не удалось обновить.',
+  'gameDetails.profile.pendingOtherGame':
+    'Восстановление заблокировано незавершённой операцией другой игры.',
+  'gameDetails.profile.pendingGlobal': 'Откройте настройки NVIDIA, чтобы повторить восстановление.',
+  'gameDetails.profile.openGame': 'Открыть страницу игры',
+  'gameDetails.profile.executableSelectionBlocked':
+    'Не удалось проверить профиль NVIDIA. Повторите проверку выше, прежде чем менять этот исполняемый файл.',
+  'gameDetails.profile.executableSelectionChecking':
+    'Проверяется профиль NVIDIA. Выбор исполняемого файла станет доступен после завершения проверки.',
 });

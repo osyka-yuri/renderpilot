@@ -136,6 +136,7 @@ mod tests {
         OptiScalerFileRole, OptiScalerInstallStateParts, OptiScalerPrerequisiteBinding, PathRef,
         Platform, ProxyImplementation, ProxyLink, ProxyRootPrestate, Sha256Hash, Swappability,
     };
+    use renderpilot_storage_sqlite::{NvapiProfileCreationCompletion, NvapiVerifiedProfileReceipt};
 
     use super::*;
 
@@ -161,6 +162,67 @@ mod tests {
                 .find_game(game.id())
                 .expect("read")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn owned_nvapi_profile_requires_explicit_deletion_before_catalog_removal() {
+        let temp = tempfile::tempdir().expect("temp");
+        let install = temp.path().join("Owned NVIDIA Game");
+        std::fs::create_dir_all(&install).expect("install");
+        let context = crate::Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
+        let game = game(&install, RootAuthority::UserConfirmed);
+        context.storage().upsert_game(&game).expect("seed");
+        let profile = "RenderPilot - Game [owner]";
+        let binding = format!("{}/Game.exe", install.to_string_lossy().replace('\\', "/"));
+        context
+            .storage()
+            .begin_nvapi_operation(
+                "create-owner-receipt",
+                Some(game.id().as_str()),
+                Some(profile),
+                "create_profile",
+                r#"{"profile_absent":true}"#,
+                r#"{"profile_present":true}"#,
+            )
+            .expect("journal");
+        context
+            .storage()
+            .complete_nvapi_profile_creation(NvapiProfileCreationCompletion {
+                op_id: "create-owner-receipt",
+                game_id: game.id().as_str(),
+                binding_path: &binding,
+                profile: NvapiVerifiedProfileReceipt {
+                    profile_name: profile,
+                    profile_identity_json:
+                        r#"{"name":"RenderPilot - Game [owner]","is_predefined":false}"#,
+                    application_witness_json: &format!(r#"{{"app_name":"{binding}"}}"#),
+                    composition_json: r#"{"applications":[],"settings":[]}"#,
+                },
+            })
+            .expect("owner receipt");
+
+        let error = remove_game_from_catalog(&context, game.id())
+            .expect_err("catalog removal must require explicit profile deletion");
+
+        assert!(
+            error
+                .to_string()
+                .contains("delete the owned NVIDIA profile")
+        );
+        assert!(
+            context
+                .storage()
+                .get_nvapi_owned_profile(game.id().as_str())
+                .expect("owner read")
+                .is_some()
+        );
+        assert!(
+            context
+                .storage()
+                .find_game(game.id())
+                .expect("game read")
+                .is_some()
         );
     }
 

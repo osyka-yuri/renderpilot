@@ -109,7 +109,7 @@ fn execute_game_action(
             ServiceError::invalid_input("OptiScaler must use its dedicated cleanup action"),
         ),
         ManagedInverseAction::RestoreNvapi => {
-            crate::nvapi::ops::restore_game_baselines(context, guard, game_id.as_str())
+            crate::nvapi::ops::restore_game_setting_claims(context, guard, game_id.as_str())
         }
     }
 }

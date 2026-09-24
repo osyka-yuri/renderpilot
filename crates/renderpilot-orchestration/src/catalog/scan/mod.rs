@@ -307,17 +307,10 @@ fn assess_root_change(
     game: &renderpilot_domain::GameInstallation,
     prospective_components: Option<&[LibraryComponent]>,
 ) -> Result<super::RootCorrectionAssessment, ServiceError> {
-    let executable_basenames = game
-        .executable_candidates()
-        .iter()
-        .filter_map(|candidate| std::path::Path::new(candidate.as_str()).file_name())
-        .map(|name| name.to_string_lossy().to_ascii_lowercase())
-        .collect();
     super::root_correction::assess(
         context,
         game.id(),
         game.install_path().as_str(),
-        &executable_basenames,
         prospective_components,
     )
 }

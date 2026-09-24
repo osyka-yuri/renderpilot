@@ -99,7 +99,6 @@ pub(in crate::repositories) fn apply(
                 ON CONFLICT(game_id) DO NOTHING
             ",
         )?;
-        move_nvapi_baselines(transaction, destination, source_id)?;
         merge_ui_state(transaction, destination, source_id)?;
         move_profile_capabilities(transaction, destination, source_id)?;
         move_optiscaler_aggregate(transaction, &plan.destination_game_id, source)?;
@@ -522,37 +521,6 @@ fn move_cover(
             ON CONFLICT(game_id) DO NOTHING
         ",
     )
-}
-
-fn move_nvapi_baselines(
-    transaction: &Transaction<'_>,
-    destination: &str,
-    source: &str,
-) -> AppResult<()> {
-    transaction
-        .execute(
-            r"
-                INSERT INTO nvapi_setting_baselines (
-                    game_id, setting_key, baseline_dword,
-                    baseline_was_predefined, predefined_dword,
-                    captured_exe, captured_at
-                )
-                SELECT :destination, setting_key, baseline_dword,
-                       baseline_was_predefined, predefined_dword,
-                       captured_exe, captured_at
-                  FROM nvapi_setting_baselines WHERE game_id = :source
-                ON CONFLICT(game_id, setting_key) DO NOTHING
-            ",
-            named_params! { ":destination": destination, ":source": source },
-        )
-        .map_err(storage_error)?;
-    transaction
-        .execute(
-            "DELETE FROM nvapi_setting_baselines WHERE game_id = :source",
-            named_params! { ":source": source },
-        )
-        .map_err(storage_error)?;
-    Ok(())
 }
 
 fn merge_ui_state(transaction: &Transaction<'_>, destination: &str, source: &str) -> AppResult<()> {

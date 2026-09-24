@@ -62,6 +62,7 @@ pub(crate) fn prune_auto_scan_orphans(
 
     for game in games {
         if game.root_authority() == RootAuthority::LauncherManifest
+            && !game_has_auto_prune_nvapi_state(context, game.id().as_str())?
             && is_auto_scan_orphan(
                 game.install_key(),
                 &library_root_keys,
@@ -85,22 +86,21 @@ pub(crate) fn prune_auto_scan_orphans(
     // State may have changed while locks were being acquired. Re-read and
     // repeat every eligibility check before entering the delete transaction.
     let candidates = stale_ids.into_iter().collect::<HashSet<GameId>>();
-    let mut stale_ids = context
-        .storage()
-        .list_games()?
-        .into_iter()
-        .filter(|game| candidates.contains(game.id()))
-        .filter(|game| game.root_authority() == RootAuthority::LauncherManifest)
-        .filter(|game| {
-            is_auto_scan_orphan(
+    let mut stale_ids = Vec::new();
+    for game in context.storage().list_games()? {
+        if candidates.contains(game.id())
+            && game.root_authority() == RootAuthority::LauncherManifest
+            && !game_has_auto_prune_nvapi_state(context, game.id().as_str())?
+            && is_auto_scan_orphan(
                 game.install_key(),
                 &library_root_keys,
                 &authoritative_root_keys,
                 &retained_install_keys,
             )
-        })
-        .map(|game| game.id().clone())
-        .collect::<Vec<_>>();
+        {
+            stale_ids.push(game.id().clone());
+        }
+    }
     stale_ids.sort();
 
     let deleted = context.storage().delete_games(&stale_ids)?;
@@ -114,6 +114,19 @@ pub(crate) fn prune_auto_scan_orphans(
     }
 
     Ok(stale_ids)
+}
+
+fn game_has_auto_prune_nvapi_state(
+    context: &crate::Context,
+    game_id: &str,
+) -> Result<bool, ServiceError> {
+    if context.storage().game_has_nvapi_durable_state(game_id)? {
+        return Ok(true);
+    }
+    Ok(context
+        .storage()
+        .get_nvapi_executable_override(game_id)?
+        .is_some())
 }
 
 fn is_auto_scan_orphan(
@@ -172,7 +185,7 @@ mod tests {
         Platform, RootAuthority,
     };
 
-    use super::{is_auto_scan_orphan, prune_auto_scan_orphans};
+    use super::{game_has_auto_prune_nvapi_state, is_auto_scan_orphan, prune_auto_scan_orphans};
 
     #[test]
     fn missing_children_are_pruned_only_after_authoritative_enumeration() {
@@ -266,6 +279,55 @@ mod tests {
             context.storage().find_game(launcher.id())?,
             Some(launcher),
             "provider-retained installs must keep their GameId and scoped state",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn automatic_orphan_pruning_preserves_games_with_nvapi_state() -> AppResult<()> {
+        let temp = tempfile::tempdir().expect("temp");
+        let library = temp.path().join("common");
+        let game_root = library.join("PendingNvidiaGame");
+        std::fs::create_dir_all(&game_root).expect("game root");
+        let context = crate::Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
+        let launcher = game(
+            "game:nvapi-protected",
+            &game_root,
+            RootAuthority::LauncherManifest,
+        );
+        context.storage().upsert_game(&launcher)?;
+        context.storage().upsert_nvapi_executable_override(
+            launcher.id().as_str(),
+            "C:/Games/PendingNvidiaGame/Game.exe",
+            "Game.exe",
+        )?;
+        assert!(
+            game_has_auto_prune_nvapi_state(&context, launcher.id().as_str())
+                .expect("query auto-prune NVAPI state")
+        );
+        assert!(
+            !context
+                .storage()
+                .game_has_nvapi_durable_state(launcher.id().as_str())?,
+            "an executable selection is auto-prune protection, not DRS mutation state",
+        );
+
+        let library_text = normalized(&library);
+        let removed = prune_auto_scan_orphans(
+            &context,
+            std::slice::from_ref(&library_text),
+            std::slice::from_ref(&library_text),
+            &[],
+        )
+        .expect("prune");
+
+        assert!(removed.is_empty());
+        assert!(context.storage().find_game(launcher.id())?.is_some());
+        assert!(
+            context
+                .storage()
+                .get_nvapi_executable_override(launcher.id().as_str())?
+                .is_some()
         );
         Ok(())
     }

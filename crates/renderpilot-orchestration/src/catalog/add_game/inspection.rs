@@ -2,14 +2,6 @@
 
 use super::*;
 
-fn executable_basenames(executables: &[ExecutableInspection]) -> HashSet<String> {
-    executables
-        .iter()
-        .filter_map(|candidate| Path::new(&candidate.path).file_name())
-        .map(|name| name.to_string_lossy().to_ascii_lowercase())
-        .collect()
-}
-
 fn discover_launcher_paths() -> (Vec<PathBuf>, Vec<PathBuf>) {
     #[cfg(windows)]
     {
@@ -95,17 +87,10 @@ pub(super) fn inspect_game_install_once(
     let selected_root_launcher_proven = boundary
         .evidence
         .contains(&InstallBoundaryEvidence::LauncherManifest);
-    let selected_executable_basenames = executable_basenames(&executables);
     let root_correction = if selected_root_launcher_proven || has_any_pe {
         root_correction_target(&selected_root, &relationship, &games)
             .map(|game| {
-                root_correction::assess(
-                    context,
-                    game.id(),
-                    selected_root.path().as_str(),
-                    &selected_executable_basenames,
-                    None,
-                )
+                root_correction::assess(context, game.id(), selected_root.path().as_str(), None)
             })
             .transpose()?
     } else {
@@ -329,7 +314,6 @@ pub(super) fn inspect_recommended_root_fingerprint(
                     context,
                     game.id(),
                     recommendation.root.path().as_str(),
-                    &executable_basenames(&executables),
                     None,
                 )
             })

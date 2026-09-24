@@ -2,9 +2,17 @@ use std::assert_matches;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use renderpilot_application::GameRepository;
 use renderpilot_detection::NVNGX_DLSS_FILE_NAME;
+use renderpilot_domain::{
+    GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+};
 use renderpilot_nvapi::{
     CatalogReadiness, DlssDllKind, DlssVersion, NvapiSetting, SettingContext, setting::DllInfo,
+};
+use renderpilot_storage_sqlite::{
+    NvapiGameSettingPreparation, NvapiSettingOperationCompletion, NvapiSettingOperationScope,
+    NvapiSettingState, SqliteStorage,
 };
 
 use super::assemble::{
@@ -12,7 +20,10 @@ use super::assemble::{
 };
 use super::live::LiveRead;
 use super::target::{SettingTarget, WriteOp};
-use super::write::{ensure_dll_setting_catalog_ready, resolve_revert_op, validate_value_supported};
+use super::write::{
+    ensure_dll_setting_catalog_ready, ensure_profile_owner_matches_game, resolve_revert_op,
+    validate_value_supported,
+};
 use crate::dlss::settings_catalog::{self, CatalogSetting};
 use crate::nvapi::dto::{CatalogReadinessDto, NvapiWarningDto};
 
@@ -20,6 +31,24 @@ use crate::nvapi::dto::{CatalogReadinessDto, NvapiWarningDto};
 fn sr_dll_file_name_matches_detection_constant() {
     // nvapi cannot depend on detection; keep the SR name in lockstep.
     assert_eq!(DlssDllKind::Sr.file_name(), NVNGX_DLSS_FILE_NAME);
+}
+
+#[test]
+fn setting_write_rejects_a_profile_owned_by_another_game() {
+    let owner = renderpilot_storage_sqlite::NvapiOwnedProfileRow {
+        game_id: "manual:game-b".to_owned(),
+        profile_name: "RenderPilot Shared Profile".to_owned(),
+        binding_path: "C:/Games/Shared/Game.exe".to_owned(),
+        application_witness_json: "{}".to_owned(),
+        composition_json: "{}".to_owned(),
+        state: "active".to_owned(),
+        updated_at: 0,
+    };
+
+    let error = ensure_profile_owner_matches_game("manual:game-a", Some(&owner))
+        .expect_err("a different game cannot write an owned NVIDIA profile");
+
+    assert!(error.to_string().contains("manual:game-b"));
 }
 
 fn ctx_with_sr_dll(version: DlssVersion) -> SettingContext {
@@ -36,7 +65,153 @@ fn ctx_with_sr_dll(version: DlssVersion) -> SettingContext {
         dlls,
         catalog_readiness: CatalogReadiness::Ready,
         effective_exe: Some("game.exe".to_owned()),
+        effective_exe_path: Some("/tmp/game.exe".to_owned()),
     }
+}
+
+fn seed_nvapi_setting_claim(
+    storage: &SqliteStorage,
+    game_id: &str,
+    setting: &dyn NvapiSetting,
+    original: (bool, Option<u32>),
+    expected: (bool, Option<u32>),
+) {
+    let game_id = GameId::new(game_id.to_owned()).expect("game id");
+    let identity = GameIdentity::new(game_id.clone(), "Claim fixture", Launcher::Manual)
+        .expect("game identity");
+    let game = GameInstallation::new(
+        identity,
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new("/tmp".to_owned()).expect("install path"),
+    );
+    storage.upsert_game(&game).expect("persist game");
+
+    let profile_name = "NVIDIA Claim Fixture";
+    let profile_identity_json = r#"{"name":"NVIDIA Claim Fixture"}"#;
+    let executable_path = "/tmp/game.exe";
+    let application_witness_json = r#"{"app_name":"/tmp/game.exe"}"#;
+    let op_id = format!("op-{}", game_id.as_str().replace(':', "-"));
+    storage
+        .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
+            op_id: &op_id,
+            game_id: game_id.as_str(),
+            profile_name,
+            target_kind: "external",
+            profile_is_predefined: false,
+            profile_identity_json,
+            executable_path,
+            application_witness_json,
+            setting_id: setting.nvapi_id(),
+            original: NvapiSettingState {
+                present: original.0,
+                value: original.1,
+            },
+            before: NvapiSettingState {
+                present: original.0,
+                value: original.1,
+            },
+            after: NvapiSettingState {
+                present: expected.0,
+                value: expected.1,
+            },
+        })
+        .expect("record claim intent");
+    storage
+        .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+            op_id: &op_id,
+            scope: NvapiSettingOperationScope::Game {
+                game_id: game_id.as_str(),
+            },
+            target_id: profile_name,
+            setting_id: setting.nvapi_id(),
+            expected: NvapiSettingState {
+                present: expected.0,
+                value: expected.1,
+            },
+            profile_identity_json,
+            composition_json: None,
+        })
+        .expect("confirm claim");
+}
+
+fn response_with_claim(
+    game_id: &str,
+    original: (bool, Option<u32>),
+    expected: (bool, Option<u32>),
+    current: u32,
+    current_is_explicit: bool,
+) -> crate::nvapi::dto::SettingStateResponse {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let storage = SqliteStorage::in_memory().expect("storage");
+    seed_nvapi_setting_claim(&storage, game_id, &setting, original, expected);
+    let ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    assemble_response(
+        &setting,
+        &ctx,
+        &storage,
+        &SettingTarget::Game { game_id },
+        &LiveRead {
+            current,
+            current_is_explicit: Some(current_is_explicit),
+            predefined: None,
+            is_current_predefined: current == setting.default_dword(),
+            has_profile_for_exe: true,
+            profile_name: Some("NVIDIA Claim Fixture".to_owned()),
+            warning: None,
+        },
+    )
+    .expect("assemble response")
+}
+
+#[test]
+fn response_exposes_claimed_explicit_original_for_exact_live_profile_and_path() {
+    let response = response_with_claim(
+        "manual:nvapi-original-explicit",
+        (true, Some(7)),
+        (true, Some(5)),
+        5,
+        true,
+    );
+
+    let original = response.original.expect("claimed original");
+    assert!(original.present);
+    assert_eq!(original.value.expect("explicit original").dword, 7);
+    assert_eq!(response.current_is_explicit, Some(true));
+}
+
+#[test]
+fn response_exposes_absent_original_as_presence_without_a_value() {
+    let response = response_with_claim(
+        "manual:nvapi-original-absent",
+        (false, None),
+        (true, Some(5)),
+        5,
+        true,
+    );
+
+    let original = response.original.expect("claimed original");
+    assert!(!original.present);
+    assert!(original.value.is_none());
+}
+
+#[test]
+fn response_preserves_presence_difference_when_dword_equals_default() {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let default = CatalogSetting::new(def).default_dword();
+    let response = response_with_claim(
+        "manual:nvapi-original-presence-differs",
+        (false, None),
+        (true, Some(default)),
+        default,
+        true,
+    );
+
+    let original = response.original.expect("claimed original");
+    assert!(!original.present);
+    assert_eq!(response.current.dword, default);
+    assert_eq!(response.current_is_explicit, Some(true));
 }
 
 #[test]
@@ -84,7 +259,7 @@ fn unready_catalog_response_never_projects_stale_dll_state() {
         &SettingTarget::Game {
             game_id: "steam:unready",
         },
-        LiveRead::unset(setting.default_dword()),
+        &LiveRead::unset(setting.default_dword()),
     )
     .expect("response");
 
@@ -108,7 +283,7 @@ fn unready_catalog_suppresses_a_secondary_live_warning() {
         &SettingTarget::Game {
             game_id: "steam:unready-live-warning",
         },
-        LiveRead::unavailable(setting.default_dword(), Some(NvapiWarningDto::NoExecutable)),
+        &LiveRead::unavailable(setting.default_dword(), Some(NvapiWarningDto::NoExecutable)),
     )
     .expect("response");
 
@@ -130,7 +305,7 @@ fn ready_catalog_without_a_detected_dll_reports_only_no_dll() {
         &SettingTarget::Game {
             game_id: "steam:ready-no-dll",
         },
-        LiveRead::unset(setting.default_dword()),
+        &LiveRead::unset(setting.default_dword()),
     )
     .expect("response");
 
@@ -154,7 +329,7 @@ fn ready_unknown_dll_version_is_present_and_warned_without_no_manifest() {
         &SettingTarget::Game {
             game_id: "steam:unknown-version",
         },
-        LiveRead::unset(setting.default_dword()),
+        &LiveRead::unset(setting.default_dword()),
     )
     .expect("response");
 
@@ -222,26 +397,16 @@ fn target_exe_requirement_distinguishes_scope() {
 
 #[test]
 fn global_revert_to_default_is_delete() {
-    let context = crate::Context::from_storage(
-        renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("sqlite should open"),
-    );
-    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
-    let setting = CatalogSetting::new(def);
-    let op = resolve_revert_op(&context, &SettingTarget::Global, &setting, "predefined")
+    let op = resolve_revert_op(&SettingTarget::Global, "predefined")
         .expect("predefined revert is always valid");
     assert_matches!(op, WriteOp::Delete);
 }
 
 #[test]
-fn global_revert_to_baseline_is_rejected() {
-    let context = crate::Context::from_storage(
-        renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("sqlite should open"),
-    );
-    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
-    let setting = CatalogSetting::new(def);
-    // There is no per-game baseline table for the global profile, so a
-    // baseline revert must be refused rather than silently no-op.
-    assert!(resolve_revert_op(&context, &SettingTarget::Global, &setting, "baseline").is_err());
+fn global_revert_to_original_is_rejected() {
+    // Original restore is scoped to a game's exact profile claim, so a
+    // global request must be refused rather than silently no-op.
+    assert!(resolve_revert_op(&SettingTarget::Global, "original").is_err());
 }
 
 #[test]

@@ -1,8 +1,15 @@
 <script lang="ts">
   import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+  import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import {
     Button,
     buttonVariants,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
     Popover,
     PopoverContent,
     PopoverTrigger,
@@ -14,8 +21,12 @@
     TooltipTrigger,
   } from '@shared/ui';
   import { t, type MessageKeyWithoutParams } from '@shared/i18n';
+  import { formatPresentedError } from '@shared/error-presentation';
   import type { GameExecutableContext } from '../model/create-game-executable-context.svelte';
-  import type { ExecutableLockReason } from '../model/game-executable-lock';
+  import type {
+    ExecutableLockReason,
+    ProfileSelectionBlockReason,
+  } from '../model/game-executable-lock';
   import GameExecutableTriggerContent from './GameExecutableTriggerContent.svelte';
 
   const LOCK_TOOLTIP_KEYS = {
@@ -27,15 +38,31 @@
     gameId: string;
     exe: GameExecutableContext;
     lockReason?: ExecutableLockReason | null;
+    ownedBindingPath?: string | null;
+    profileSelectionBlockReason?: ProfileSelectionBlockReason | null;
+    onMoveProfile?: (path: string, selectAutomatically: boolean) => boolean | Promise<boolean>;
   };
 
-  const { gameId, exe, lockReason = null }: Props = $props();
+  const {
+    gameId,
+    exe,
+    lockReason = null,
+    ownedBindingPath = null,
+    profileSelectionBlockReason = null,
+    onMoveProfile,
+  }: Props = $props();
   const componentId = $props.id();
   const dialogTitleId = `${componentId}-title`;
 
   let open = $state(false);
+  let pendingMovePath = $state<string | null>(null);
+  let pendingMoveGameId = $state<string | null>(null);
+  let pendingMoveSourcePath = $state<string | null>(null);
+  let moveToAutomatic = $state(false);
+  let movingProfile = $state(false);
+  let moveError = $state<string | null>(null);
 
-  const locked = $derived(lockReason !== null);
+  const locked = $derived(lockReason !== null || profileSelectionBlockReason !== null);
   const isOverride = $derived(exe.effectiveExeSource === 'override');
 
   const triggerLabel = $derived(exe.effectiveExe ?? t('gameDetails.profile.noExe'));
@@ -45,9 +72,13 @@
   const tooltipText = $derived(
     lockReason
       ? t(LOCK_TOOLTIP_KEYS[lockReason])
-      : isOverride
-        ? t('gameDetails.executable.tooltipCustom')
-        : t('gameDetails.executable.tooltipAuto'),
+      : profileSelectionBlockReason === 'checking'
+        ? t('gameDetails.profile.executableSelectionChecking')
+        : profileSelectionBlockReason === 'unverified'
+          ? t('gameDetails.profile.executableSelectionBlocked')
+          : isOverride
+            ? t('gameDetails.executable.tooltipCustom')
+            : t('gameDetails.executable.tooltipAuto'),
   );
   const sourceLabel = $derived(
     !exe.effectiveExe
@@ -71,20 +102,97 @@
     ].filter((group) => group.candidates.length > 0),
   );
 
-  function selectCandidate(absolutePath: string): void {
-    void exe.setOverride(gameId, absolutePath);
-    open = false;
+  async function selectCandidate(absolutePath: string): Promise<void> {
+    if (locked) {
+      return;
+    }
+    if (
+      ownedBindingPath &&
+      ownedBindingPath.toLocaleLowerCase() !== absolutePath.toLocaleLowerCase()
+    ) {
+      pendingMovePath = absolutePath;
+      pendingMoveGameId = gameId;
+      pendingMoveSourcePath = ownedBindingPath;
+      moveToAutomatic = false;
+      moveError = null;
+      open = false;
+      return;
+    }
+    open = !(await exe.setOverride(gameId, absolutePath));
   }
 
-  function resetToAuto(): void {
-    void exe.clearOverride(gameId);
-    open = false;
+  async function resetToAuto(): Promise<void> {
+    if (locked) {
+      return;
+    }
+    const automaticPath = exe.autoAbsolutePath;
+    if (
+      ownedBindingPath &&
+      automaticPath &&
+      ownedBindingPath.toLocaleLowerCase() !== automaticPath.toLocaleLowerCase()
+    ) {
+      pendingMovePath = automaticPath;
+      pendingMoveGameId = gameId;
+      pendingMoveSourcePath = ownedBindingPath;
+      moveToAutomatic = true;
+      moveError = null;
+      open = false;
+      return;
+    }
+    open = !(await exe.clearOverride(gameId));
+  }
+
+  async function confirmProfileMove(): Promise<void> {
+    const path = pendingMovePath;
+    if (
+      !path ||
+      locked ||
+      movingProfile ||
+      !onMoveProfile ||
+      pendingMoveGameId !== gameId ||
+      pendingMoveSourcePath !== ownedBindingPath
+    ) {
+      return;
+    }
+    movingProfile = true;
+    try {
+      const succeeded = await onMoveProfile(path, moveToAutomatic);
+      if (succeeded) {
+        clearPendingMove();
+      } else {
+        moveError = t('gameDetails.profile.moveFailed');
+      }
+    } catch (error) {
+      moveError = formatPresentedError(error);
+    } finally {
+      movingProfile = false;
+    }
+  }
+
+  function requestMoveDialogOpen(next: boolean): void {
+    if (!movingProfile && !next) {
+      clearPendingMove();
+    }
+  }
+
+  function clearPendingMove(): void {
+    pendingMovePath = null;
+    pendingMoveGameId = null;
+    pendingMoveSourcePath = null;
+    moveError = null;
   }
 
   // A newly applied lock closes the selector.
   $effect(() => {
     if (locked) {
       open = false;
+    }
+    if (
+      pendingMovePath &&
+      (pendingMoveGameId !== gameId ||
+        (!movingProfile && (locked || pendingMoveSourcePath !== ownedBindingPath)))
+    ) {
+      clearPendingMove();
     }
   });
 </script>
@@ -134,6 +242,22 @@
               </Button>
             {/if}
           </div>
+          {#if exe.changeError}
+            <p role="alert" class="text-xs text-destructive">
+              <span class="font-medium">{t('gameDetails.executable.changeFailed')}</span>
+              <span class="block">{exe.changeError}</span>
+            </p>
+          {:else if exe.refreshError}
+            <p role="status" class="text-xs text-warning">
+              <span class="font-medium">{t('gameDetails.executable.refreshFailed')}</span>
+              <span class="block">{exe.refreshError}</span>
+            </p>
+          {:else if exe.loadError}
+            <p role="alert" class="text-xs text-destructive">
+              <span class="font-medium">{t('gameDetails.executable.loadFailed')}</span>
+              <span class="block">{exe.loadError}</span>
+            </p>
+          {/if}
         </div>
 
         <Separator />
@@ -179,7 +303,7 @@
   {/if}
 
   <TooltipContent side="bottom" align="end" sideOffset={6} class="max-w-80 whitespace-normal">
-    {#if locked}
+    {#if lockReason}
       <span class="block font-medium">{t('gameDetails.d3d12.executableLockedTitle')}</span>
       <span class="mt-1 block">{tooltipText}</span>
     {:else}
@@ -187,3 +311,36 @@
     {/if}
   </TooltipContent>
 </Tooltip>
+
+<Dialog open={pendingMovePath !== null} onOpenChange={requestMoveDialogOpen}>
+  <DialogContent closeLabel={t('common.close')}>
+    <DialogHeader>
+      <DialogTitle>{t('gameDetails.profile.moveConfirmTitle')}</DialogTitle>
+      <DialogDescription>
+        {t('gameDetails.profile.moveConfirmDescription', {
+          from: pendingMoveSourcePath ?? '',
+          to: pendingMovePath ?? '',
+        })}
+      </DialogDescription>
+      {#if moveError}
+        <p role="alert" class="text-sm text-destructive">{moveError}</p>
+      {/if}
+    </DialogHeader>
+    <DialogFooter>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={movingProfile}
+        onclick={() => {
+          requestMoveDialogOpen(false);
+        }}
+      >
+        {t('common.cancel')}
+      </Button>
+      <Button size="sm" disabled={movingProfile} onclick={() => void confirmProfileMove()}>
+        {#if movingProfile}<Loader2Icon class="animate-spin" aria-hidden="true" />{/if}
+        {t('gameDetails.profile.moveConfirmAction')}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>

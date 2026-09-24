@@ -64,7 +64,7 @@
       <div class="grid min-w-0 gap-1">
         <CardTitle level={2}>{title}</CardTitle>
         <CardDescription>
-          {nvapiAvailable
+          {nvapiAvailable && settings.length > 0
             ? t('gameDetails.dlss.description')
             : t('gameDetails.dlss.descriptionSwapOnly')}
         </CardDescription>
@@ -112,8 +112,8 @@
           onRevertPredefined={(key: string) => {
             void nvidia.revert(gameId, key, 'predefined');
           }}
-          onRevertBaseline={(key: string) => {
-            void nvidia.revert(gameId, key, 'baseline');
+          onRevertOriginal={(key: string) => {
+            void nvidia.revert(gameId, key, 'original');
           }}
         />
       </div>

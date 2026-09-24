@@ -95,7 +95,6 @@ pub(super) fn assess(
     context: &crate::Context,
     game_id: &GameId,
     selected_root: &str,
-    selected_executable_basenames: &HashSet<String>,
     prospective_components: Option<&[LibraryComponent]>,
 ) -> Result<RootCorrectionAssessment, ServiceError> {
     let storage = context.storage();
@@ -137,13 +136,11 @@ pub(super) fn assess(
     {
         blockers.insert(RootCorrectionBlockerKind::InstalledAddon);
     }
-    if storage.has_nvapi_baselines_for_game(game_id.as_str())?
-        && !nvapi_belongs_to_root(
-            storage,
-            &storage.require_game(game_id)?,
-            selected_root,
-            selected_executable_basenames,
-        )?
+    if (storage.game_has_nvapi_durable_state(game_id.as_str())?
+        || storage
+            .get_nvapi_executable_override(game_id.as_str())?
+            .is_some())
+        && !nvapi_belongs_to_root(storage, &storage.require_game(game_id)?, selected_root)?
     {
         blockers.insert(RootCorrectionBlockerKind::Nvapi);
     }
@@ -210,57 +207,45 @@ fn nvapi_belongs_to_root(
     storage: &renderpilot_storage_sqlite::SqliteStorage,
     game: &GameInstallation,
     root: &str,
-    executable_basenames: &HashSet<String>,
 ) -> Result<bool, ServiceError> {
-    if let Some(executable) = storage.get_nvapi_executable_override(game.id().as_str())? {
-        return Ok(path_belongs_to_root(&executable.selected_path, root));
+    let owner = storage.get_nvapi_owned_profile(game.id().as_str())?;
+    let claims = storage.list_nvapi_setting_claims_for_game(game.id().as_str())?;
+    let targets = claims
+        .iter()
+        .map(|claim| claim.target_id.as_str())
+        .chain(owner.iter().map(|profile| profile.profile_name.as_str()))
+        .collect::<HashSet<_>>();
+    if storage
+        .list_pending_nvapi_operations()?
+        .iter()
+        .any(|operation| {
+            operation.game_id.as_deref() == Some(game.id().as_str())
+                || operation
+                    .target_id
+                    .as_deref()
+                    .is_some_and(|target| targets.contains(target))
+        })
+    {
+        return Ok(false);
+    }
+    if let Some(owner) = owner
+        && !path_belongs_to_root(&owner.binding_path, root)
+    {
+        return Ok(false);
+    }
+    if claims
+        .iter()
+        .any(|claim| !path_belongs_to_root(&claim.executable_path, root))
+    {
+        return Ok(false);
+    }
+    if let Some(executable) = storage.get_nvapi_executable_override(game.id().as_str())?
+        && !path_belongs_to_root(&executable.selected_path, root)
+    {
+        return Ok(false);
     }
 
-    let baselines = storage.list_nvapi_setting_baselines_for_game(game.id().as_str())?;
-    Ok(!baselines.is_empty()
-        && baselines.iter().all(|baseline| {
-            let captured = baseline.captured_exe.to_ascii_lowercase();
-            executable_basenames.contains(&captured)
-                && persisted_executable_scope_belongs_to_root(game, &captured, root)
-        }))
-}
-
-fn persisted_executable_scope_belongs_to_root(
-    game: &GameInstallation,
-    captured_basename: &str,
-    root: &str,
-) -> bool {
-    let matching_paths = game
-        .executable_candidates()
-        .iter()
-        .filter(|candidate| {
-            std::path::Path::new(candidate.as_str())
-                .file_name()
-                .is_some_and(|name| {
-                    name.to_string_lossy()
-                        .eq_ignore_ascii_case(captured_basename)
-                })
-        })
-        .map(|candidate| {
-            let candidate = candidate.as_str();
-            if std::path::Path::new(candidate).is_absolute()
-                || candidate.as_bytes().get(1) == Some(&b':')
-            {
-                candidate.to_owned()
-            } else {
-                format!(
-                    "{}/{}",
-                    game.install_path().as_str().trim_end_matches('/'),
-                    candidate.trim_start_matches('/')
-                )
-            }
-        })
-        .collect::<Vec<_>>();
-
-    !matching_paths.is_empty()
-        && matching_paths
-            .iter()
-            .all(|path| path_belongs_to_root(path, root))
+    Ok(true)
 }
 
 fn path_belongs_to_root(path: &str, root: &str) -> bool {
@@ -277,8 +262,6 @@ fn path_belongs_to_root(path: &str, root: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use renderpilot_application::{ComponentRepository, GameRepository, InstalledAddonRepository};
     use renderpilot_domain::{
         AddonKind, ComponentFile, ComponentId, ComponentKind, ComponentRollbackBaseline,
@@ -286,7 +269,10 @@ mod tests {
         GameRuntime, InstalledAddon, Launcher, LibraryComponent, LibraryTechnology, PathRef,
         Platform, RootAuthority, Sha256Hash, Swappability,
     };
-    use renderpilot_storage_sqlite::BeginFileMutationPreparation;
+    use renderpilot_storage_sqlite::{
+        BeginFileMutationPreparation, NvapiGameSettingPreparation, NvapiSettingOperationCompletion,
+        NvapiSettingOperationScope, NvapiSettingState,
+    };
 
     use super::{
         RootCorrectionBlockerKind, RootCorrectionCleanupAction, RootCorrectionStatus, assess,
@@ -453,20 +439,9 @@ mod tests {
     }
 
     #[test]
-    fn ambiguous_nvapi_executable_scope_is_blocked() {
+    fn nvapi_claim_bound_outside_prospective_root_is_blocked() {
         let fixture = fixture(&["Selected/Game.exe", "Sibling/Game.exe"]);
-        fixture
-            .context
-            .storage()
-            .capture_nvapi_baseline_if_missing(
-                fixture.game.id().as_str(),
-                "setting:test",
-                0,
-                false,
-                None,
-                "Game.exe",
-            )
-            .expect("NVAPI baseline");
+        seed_nvapi_setting_claim(&fixture, "C:/Games/Sibling/Game.exe");
 
         let result = assessment(&fixture, &[]);
         assert_eq!(result.status, RootCorrectionStatus::Blocked);
@@ -474,25 +449,63 @@ mod tests {
     }
 
     #[test]
-    fn nvapi_state_bound_only_to_the_selected_executable_is_preserved() {
+    fn nvapi_claim_bound_to_selected_executable_is_preserved() {
         let fixture = fixture(&["Selected/Game.exe"]);
-        fixture
-            .context
-            .storage()
-            .capture_nvapi_baseline_if_missing(
-                fixture.game.id().as_str(),
-                "setting:test",
-                0,
-                false,
-                None,
-                "Game.exe",
-            )
-            .expect("NVAPI baseline");
+        seed_nvapi_setting_claim(&fixture, "C:/Games/Selected/Game.exe");
 
         assert_eq!(
             assessment(&fixture, &[]).status,
             RootCorrectionStatus::Ready
         );
+    }
+
+    fn seed_nvapi_setting_claim(fixture: &Fixture, executable_path: &str) {
+        let storage = fixture.context.storage();
+        let profile_name = "NVIDIA Test Profile";
+        let setting_id = 0x10B3_292C;
+        let identity = r#"{"name":"NVIDIA Test Profile"}"#;
+        let witness = serde_json::json!({"app_name": executable_path}).to_string();
+        storage
+            .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
+                op_id: "root-correction-setting",
+                game_id: fixture.game.id().as_str(),
+                profile_name,
+                target_kind: "external",
+                profile_is_predefined: false,
+                profile_identity_json: identity,
+                executable_path,
+                application_witness_json: &witness,
+                setting_id,
+                original: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                before: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                after: NvapiSettingState {
+                    present: true,
+                    value: Some(1),
+                },
+            })
+            .expect("prepare setting claim");
+        storage
+            .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+                op_id: "root-correction-setting",
+                scope: NvapiSettingOperationScope::Game {
+                    game_id: fixture.game.id().as_str(),
+                },
+                target_id: profile_name,
+                setting_id,
+                expected: NvapiSettingState {
+                    present: true,
+                    value: Some(1),
+                },
+                profile_identity_json: identity,
+                composition_json: None,
+            })
+            .expect("finish setting claim");
     }
 
     #[test]
@@ -570,7 +583,6 @@ mod tests {
             &fixture.context,
             fixture.game.id(),
             "C:/Games/Selected",
-            &HashSet::from(["game.exe".to_owned()]),
             Some(prospective_components),
         )
         .expect("assessment")

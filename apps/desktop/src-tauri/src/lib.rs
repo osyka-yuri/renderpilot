@@ -317,6 +317,10 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::get_nvapi_setting_state,
         commands::set_nvapi_setting_value,
         commands::revert_nvapi_setting,
+        commands::get_nvapi_profile_status,
+        commands::create_nvapi_profile,
+        commands::delete_nvapi_profile,
+        commands::move_nvapi_profile,
         // Global (base profile) NVAPI settings
         commands::list_global_nvapi_setting_states,
         commands::set_global_nvapi_setting_value,

@@ -13,6 +13,7 @@
   import { TabsContent } from '@shared/ui';
   import type { NvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import type { createGameAddonsContext } from '../model/create-game-addons-context.svelte';
+  import type { NvapiProfileContext } from '../model/create-nvapi-profile-context.svelte';
   import {
     ADDONS_TAB_VALUE,
     DLSS_FAMILY_CARDS,
@@ -25,8 +26,8 @@
     RollbackHandler,
     SwapHandler,
   } from '../model/create-game-details-page-model';
-  import NvidiaProfileCard from './NvidiaProfileCard.svelte';
   import DlssComponentCard from './DlssComponentCard.svelte';
+  import NvidiaProfileControl from './NvidiaProfileControl.svelte';
   import StreamlineComponentCard from './StreamlineComponentCard.svelte';
   import VendorComponentCard from './VendorComponentCard.svelte';
 
@@ -35,6 +36,9 @@
   type Props = {
     details: GameDetails;
     gameId: string;
+    profile: NvapiProfileContext;
+    onOpenGameDetails: (gameId: string) => void | Promise<void>;
+    onRecoveryDeleteComplete: () => void;
     vendorTabs: readonly VendorTab[];
     hasAddonsTab: boolean;
     assessment: GameFileSafetyAssessment | null;
@@ -59,6 +63,9 @@
   const {
     details,
     gameId,
+    profile,
+    onOpenGameDetails,
+    onRecoveryDeleteComplete,
     vendorTabs,
     hasAddonsTab,
     assessment,
@@ -80,6 +87,16 @@
     onPreloadRenoDxSettings,
   }: Props = $props();
 
+  const hasNvidiaTab = $derived(vendorTabs.some((tab) => tab.key === 'nvidia'));
+  const canCreateProfile = $derived(
+    !nvidia.busy &&
+      nvidia.nvapiAvailable &&
+      details.components.some((component) => {
+        const card = dlssFamilyCard(component);
+        return card !== null && nvidia.settingsForFamily(card.family).length > 0;
+      }),
+  );
+
   function getCandidateGroup(componentId: string): GameCandidateGroup | null {
     return details.candidate_groups.find((group) => group.component_id === componentId) ?? null;
   }
@@ -95,19 +112,37 @@
   }
 </script>
 
-<div class="grid gap-4 p-1">
+<div class="grid min-w-0 gap-4 p-1">
+  {#if !hasNvidiaTab && details.game.platform === 'Windows'}
+    <NvidiaProfileControl
+      {gameId}
+      mode="recovery"
+      {profile}
+      {onOpenGameDetails}
+      {onRecoveryDeleteComplete}
+      canCreate={false}
+    />
+  {/if}
+
   <GameFileSafetyRow {assessment} />
 
   {#each vendorTabs as tab (tab.key)}
-    <TabsContent value={tab.key} class="mt-0">
-      <div class="grid gap-3">
+    <TabsContent value={tab.key} class="mt-0 w-full min-w-0">
+      <div class="grid min-w-0 gap-3">
         {#if tab.key === 'nvidia'}
-          {#if nvidia.nvapiAvailable}
-            <NvidiaProfileCard nvapi={nvidia} />
-          {/if}
-
           {@const nonStreamline = tab.components.filter((component) => !isStreamline(component))}
           {@const streamline = tab.components.filter(isStreamline)}
+
+          {#if details.game.platform === 'Windows'}
+            <NvidiaProfileControl
+              {gameId}
+              mode="settings"
+              {profile}
+              {onOpenGameDetails}
+              {onRecoveryDeleteComplete}
+              canCreate={canCreateProfile}
+            />
+          {/if}
 
           {#each nonStreamline as component (component.id)}
             {@const group = getCandidateGroup(component.id)}

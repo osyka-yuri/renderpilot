@@ -41,6 +41,7 @@ pub fn set_executable_override(
     let parsed =
         GameId::new(game_id).map_err(|_| ServiceError::GameNotFound(game_id.to_owned()))?;
     let _guard = crate::game_mutation_lock::blocking_lock(&parsed);
+    let _drs_guard = super::game_session::lock_drs_operations()?;
     let game = context
         .storage()
         .find_game(&parsed)?
@@ -60,12 +61,23 @@ pub fn set_executable_override(
             exe_path.display()
         ))
     })?;
+    if !crate::game_executable::is_existing_executable_file(&canonical_exe) {
+        return Err(ServiceError::command_failed(
+            "the selected executable must be an existing .exe file",
+        ));
+    }
     if !canonical_exe.starts_with(&canonical_install) {
         return Err(ServiceError::command_failed(format!(
             "executable must be located inside the install directory ({})",
             install_dir.display()
         )));
     }
+    let canonical_exe =
+        crate::paths::strip_windows_verbatim_prefix(&canonical_exe).map_err(|error| {
+            ServiceError::command_failed(format!(
+                "could not convert executable path to a supported Windows path: {error}"
+            ))
+        })?;
     let file_name = canonical_exe
         .file_name()
         .and_then(|name| name.to_str())
@@ -73,6 +85,15 @@ pub fn set_executable_override(
 
     let normalized = canonical_exe.to_string_lossy().replace('\\', "/");
     require_d3d12_executable_binding(context, game.id(), Some(&normalized))?;
+    if let Some(owned) = context.storage().get_nvapi_owned_profile(game_id)?
+        && renderpilot_domain::normalized_path_key(&normalized)
+            != renderpilot_domain::normalized_path_key(&owned.binding_path)
+    {
+        return Err(ServiceError::command_failed(format!(
+            "this game has a RenderPilot NVIDIA profile bound to {}; use the confirmed profile move action to change it",
+            owned.binding_path
+        )));
+    }
     context
         .storage()
         .upsert_nvapi_executable_override(game_id, &normalized, file_name)?;
@@ -87,18 +108,34 @@ pub fn clear_executable_override(
     let parsed =
         GameId::new(game_id).map_err(|_| ServiceError::GameNotFound(game_id.to_owned()))?;
     let _guard = crate::game_mutation_lock::blocking_lock(&parsed);
-    context
+    let _drs_guard = super::game_session::lock_drs_operations()?;
+    let game = context
         .storage()
         .find_game(&parsed)?
         .ok_or_else(|| ServiceError::GameNotFound(game_id.to_owned()))?;
-    require_d3d12_executable_binding(context, &parsed, None)?;
+    let install_dir = Path::new(game.install_path().as_str());
+    let automatic_path =
+        crate::game_executable::resolve_primary_executable(install_dir, None, false)
+            .map(|resolved| resolved.path.as_str().to_owned());
+    if let Some(owned) = context.storage().get_nvapi_owned_profile(game_id)?
+        && automatic_path.as_deref().is_none_or(|path| {
+            renderpilot_domain::normalized_path_key(path)
+                != renderpilot_domain::normalized_path_key(&owned.binding_path)
+        })
+    {
+        return Err(ServiceError::command_failed(format!(
+            "this game has a RenderPilot NVIDIA profile bound to {}; use the confirmed profile move action to change it",
+            owned.binding_path
+        )));
+    }
+    require_d3d12_executable_binding(context, &parsed, automatic_path.as_deref())?;
     context
         .storage()
         .delete_nvapi_executable_override(game_id)?;
     Ok(())
 }
 
-fn require_d3d12_executable_binding(
+pub(super) fn require_d3d12_executable_binding(
     context: &crate::Context,
     game_id: &GameId,
     requested_path: Option<&str>,
@@ -152,7 +189,11 @@ pub(crate) fn build_setting_context_with_context(
     // The shared game-level override; the resolver checks it still exists and falls
     // back to auto-detection when it does not.
     let override_path = stored_override_path(context, game_id)?;
-    let effective_exe = pick_effective_exe(install_dir, override_path.as_deref());
+    let resolved_exe = crate::game_executable::resolve_primary_executable(
+        install_dir,
+        override_path.as_deref(),
+        false,
+    );
 
     // Reuse the catalog component projection instead of walking the install dir again.
     // Games that have never completed an initial scan fail closed so empty component
@@ -173,11 +214,17 @@ pub(crate) fn build_setting_context_with_context(
         ),
     };
 
+    let (effective_exe, effective_exe_path) = match resolved_exe {
+        Some(resolved) => (Some(resolved.file_name), Some(resolved.path.into_inner())),
+        None => (None, None),
+    };
+
     Ok(SettingContext {
         game_install_dir: install_dir.to_path_buf(),
         dlls,
         catalog_readiness,
         effective_exe,
+        effective_exe_path,
     })
 }
 
@@ -192,6 +239,7 @@ pub(crate) fn global_setting_context() -> SettingContext {
         dlls: std::collections::HashMap::new(),
         catalog_readiness: NvapiCatalogReadiness::NotApplicable,
         effective_exe: None,
+        effective_exe_path: None,
     }
 }
 
@@ -207,48 +255,6 @@ pub fn collect_executable_candidates(_install_dir: &Path) -> Vec<()> {
     Vec::new()
 }
 
-/// Resolves the effective profile executable: the user override (if any), else the
-/// shared resolver's pick — but biased toward a candidate that already has an
-/// NVIDIA driver profile, so we read/write the profile the driver actually applies.
-#[cfg(windows)]
-fn pick_effective_exe(install_dir: &Path, override_path: Option<&Path>) -> Option<String> {
-    use crate::game_executable::{self, ExeSource};
-    use renderpilot_nvapi::Nvapi;
-
-    // The shared resolver: override wins; NVAPI does not prefer DirectX (a Vulkan
-    // game is still the profile target), so `prefer_directx` is false.
-    let resolved = game_executable::resolve_primary_executable(install_dir, override_path, false)?;
-    // An explicit override is authoritative — never second-guess it.
-    if resolved.source == ExeSource::Override {
-        return Some(resolved.file_name);
-    }
-    let default_pick = resolved.file_name;
-
-    let Some(nvapi) = Nvapi::get() else {
-        return Some(default_pick);
-    };
-    if nvapi.initialize().is_err() {
-        return Some(default_pick);
-    }
-    let Ok(session) = nvapi.create_session() else {
-        return Some(default_pick);
-    };
-    for candidate in detect_executable_candidates(install_dir)
-        .into_iter()
-        .filter(|c| c.rejection.is_none())
-    {
-        if session.find_profile_by_exe(&candidate.file_name).is_ok() {
-            return Some(candidate.file_name);
-        }
-    }
-    Some(default_pick)
-}
-
-#[cfg(not(windows))]
-fn pick_effective_exe(_install_dir: &Path, _override_path: Option<&Path>) -> Option<String> {
-    None
-}
-
 /// The game's effective primary executable for the shared game-level UI: the
 /// resolver's pick (a pinned override or the auto-detected renderer), independent
 /// of NVAPI hardware so it works for any GPU.
@@ -258,6 +264,9 @@ pub struct EffectiveExecutable {
     pub file_name: String,
     /// Absolute path on disk (forward slashes).
     pub absolute_path: String,
+    /// Automatic resolver target even while a different path is pinned.
+    /// Used only to make an explicit profile move-to-automatic action possible.
+    pub auto_absolute_path: Option<String>,
     /// `"override"` when pinned by the user, `"auto"` when auto-detected.
     pub source: &'static str,
 }
@@ -271,14 +280,23 @@ pub fn resolve_effective_executable(
     game_id: &str,
 ) -> Result<Option<EffectiveExecutable>, ServiceError> {
     let override_path = stored_override_path(context, game_id)?;
-    Ok(crate::game_executable::resolve_primary_executable(
+    let resolved = crate::game_executable::resolve_primary_executable(
         install_dir,
         override_path.as_deref(),
         false,
-    )
-    .map(|resolved| EffectiveExecutable {
+    );
+    let automatic_path = match resolved.as_ref() {
+        Some(resolved) if resolved.source == crate::game_executable::ExeSource::Auto => {
+            Some(resolved.path.as_str().to_owned())
+        }
+        Some(_) => crate::game_executable::resolve_primary_executable(install_dir, None, false)
+            .map(|automatic| automatic.path.as_str().to_owned()),
+        None => None,
+    };
+    Ok(resolved.map(|resolved| EffectiveExecutable {
         file_name: resolved.file_name,
         absolute_path: resolved.path.as_str().to_owned(),
+        auto_absolute_path: automatic_path,
         source: match resolved.source {
             crate::game_executable::ExeSource::Override => "override",
             crate::game_executable::ExeSource::Auto => "auto",

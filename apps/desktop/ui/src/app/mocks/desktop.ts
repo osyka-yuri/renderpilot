@@ -24,6 +24,12 @@ import {
   mockResolveGameExecutable,
   mockSetGameExecutableOverride,
 } from './commands/executables';
+import {
+  mockCreateNvapiProfile,
+  mockDeleteNvapiProfile,
+  mockGetNvapiProfileStatus,
+  mockMoveNvapiProfile,
+} from './commands/nvapi-profile';
 import { mockState, createMockState } from './desktop-state';
 import {
   mockAddonWriteUnsupported,
@@ -126,6 +132,22 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
 
     case 'clear_game_executable_override':
       return mockClearGameExecutableOverride(readStringField(command, payload, 'gameId'));
+
+    case 'get_nvapi_profile_status':
+      return mockGetNvapiProfileStatus(readStringField(command, payload, 'gameId'));
+
+    case 'create_nvapi_profile':
+      return mockCreateNvapiProfile(readStringField(command, payload, 'gameId'));
+
+    case 'delete_nvapi_profile':
+      return mockDeleteNvapiProfile(readStringField(command, payload, 'gameId'));
+
+    case 'move_nvapi_profile':
+      return mockMoveNvapiProfile(
+        readStringField(command, payload, 'gameId'),
+        readStringField(command, payload, 'absolutePath'),
+        readBooleanField(command, payload, 'selectAutomatically'),
+      );
 
     case 'fetch_game_cover':
       return mockFetchGameCover(readStringField(command, payload, 'gameId'));

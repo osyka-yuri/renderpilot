@@ -15,7 +15,7 @@ fn apply_resets_unknown_schema_version() {
 }
 
 #[test]
-fn apply_rebuilds_table_absent_v19_catalog_to_the_v20_contract() {
+fn apply_rebuilds_table_absent_v19_catalog_to_the_current_contract() {
     let mut connection = open_test_connection();
     connection
         .execute_batch("PRAGMA user_version = 19;")
@@ -23,8 +23,8 @@ fn apply_rebuilds_table_absent_v19_catalog_to_the_v20_contract() {
 
     apply(&mut connection).expect("v19 catalog should be rebuilt to v20");
 
-    assert_eq!(CURRENT_SCHEMA_VERSION, 20);
-    assert_eq!(user_version(&connection), 20);
+    assert_eq!(CURRENT_SCHEMA_VERSION, 21);
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
     super::super::validation::validate_catalog_schema(&connection)
         .expect("rebuilt catalog should satisfy the canonical contract");
     assert!(table_has_column(
@@ -163,6 +163,51 @@ fn contract_rejects_pending_mutations_without_preparing() {
 }
 
 #[test]
+fn v21_nvapi_setting_claims_reject_null_present_values_and_u32_overflow() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("apply v21 schema");
+    connection
+        .execute(
+            "INSERT INTO nvapi_drs_targets
+                (target_id, profile_name, profile_is_predefined, kind, identity_json)
+             VALUES ('profile', 'Profile', 0, 'external', '{}')",
+            [],
+        )
+        .expect("seed NVIDIA target");
+
+    let invalid = [
+        ("original present with NULL value", "1, NULL, 0, NULL"),
+        ("expected present with NULL value", "0, NULL, 1, NULL"),
+        ("original value exceeds DWORD", "1, 4294967296, 0, NULL"),
+        ("expected value exceeds DWORD", "0, NULL, 1, 4294967296"),
+    ];
+    for (setting_id, (case, values)) in invalid.into_iter().enumerate() {
+        let sql = format!(
+            "INSERT INTO nvapi_target_setting_claims
+                (target_id, setting_id, original_present, original_value,
+                 expected_present, expected_value)
+             VALUES ('profile', {setting_id}, {values})"
+        );
+        assert!(
+            connection.execute(&sql, []).is_err(),
+            "schema must reject {case}"
+        );
+    }
+
+    let overflow_id = connection.execute(
+        "INSERT INTO nvapi_target_setting_claims
+            (target_id, setting_id, original_present, original_value,
+             expected_present, expected_value)
+         VALUES ('profile', 4294967296, 0, NULL, 0, NULL)",
+        [],
+    );
+    assert!(
+        overflow_id.is_err(),
+        "schema must reject a setting id over u32"
+    );
+}
+
+#[test]
 fn compose_baseline_is_non_empty_and_includes_shared_fragments() {
     let baseline = ddl::compose_baseline();
     assert!(baseline.contains("CREATE TABLE IF NOT EXISTS games"));
@@ -211,7 +256,7 @@ fn apply_backs_up_malformed_stamped_v10_before_post_upgrade_rebuild() {
 
     let backups: Vec<PathBuf> = fs::read_dir(&dir)
         .expect("list temp")
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| {
             path.file_name()
@@ -264,7 +309,7 @@ fn apply_backs_up_file_database_before_v15_and_v16_migrations() {
 
     let backups: Vec<PathBuf> = fs::read_dir(&dir)
         .expect("list temp")
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| {
             path.file_name()
@@ -291,4 +336,114 @@ fn apply_backs_up_file_database_before_v15_and_v16_migrations() {
     assert_eq!(preserved, 1);
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn v20_to_v21_backup_preserves_discarded_baselines_and_other_data() {
+    let directory = tempfile::tempdir().expect("temporary catalog directory");
+    let db_path = directory.path().join("catalog.db");
+
+    {
+        let mut connection = Connection::open(&db_path).expect("open file database");
+        apply(&mut connection).expect("create current fixture schema");
+        connection
+            .execute(
+                "INSERT INTO settings (key, value) VALUES ('migration-marker', 'preserved')",
+                [],
+            )
+            .expect("write preservation marker");
+        connection
+            .execute_batch(
+                "
+                DROP TRIGGER IF EXISTS trg_games_restrict_nvapi_owned_delete;
+                DROP TABLE pending_drs_operations;
+                DROP TABLE nvapi_game_claim_refs;
+                DROP TABLE nvapi_target_setting_claims;
+                DROP TABLE nvapi_drs_target_app_witnesses;
+                DROP TABLE nvapi_drs_targets;
+                DROP TABLE nvapi_owned_profiles;
+                INSERT INTO games (
+                    id, title, launcher, platform, runtime, install_path, install_key,
+                    root_authority, executable_candidates_json
+                ) VALUES (
+                    'manual:legacy-v20', 'Legacy game', 'manual', 'windows',
+                    'native_windows', 'C:/Games/Legacy', 'manual:/games/legacy',
+                    'user_confirmed', '[]'
+                );
+                CREATE TABLE nvapi_setting_baselines (
+                    game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+                    setting_key TEXT NOT NULL,
+                    baseline_dword INTEGER NOT NULL,
+                    baseline_was_predefined INTEGER NOT NULL,
+                    predefined_dword INTEGER,
+                    captured_exe TEXT NOT NULL,
+                    captured_at INTEGER NOT NULL,
+                    PRIMARY KEY (game_id, setting_key)
+                ) STRICT;
+                INSERT INTO nvapi_setting_baselines VALUES (
+                    'manual:legacy-v20', 'dlss_sr_render_preset', 3, 0, 0, 'game.exe', 7
+                );
+                PRAGMA user_version = 20;
+                ",
+            )
+            .expect("restore v20 shape and seed old state");
+
+        apply(&mut connection).expect("run v20 to v21 migration");
+        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+        let old_table_exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'nvapi_setting_baselines')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check obsolete baseline table");
+        assert!(!old_table_exists);
+        let marker: String = connection
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'migration-marker'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("preserved setting");
+        assert_eq!(marker, "preserved");
+        let games: i64 = connection
+            .query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0))
+            .expect("preserved games");
+        assert_eq!(games, 1);
+    }
+
+    let backups: Vec<PathBuf> = fs::read_dir(directory.path())
+        .expect("list backup directory")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.contains(".pre-migration-v21.") && name.ends_with(".bak"))
+        })
+        .collect();
+    assert_eq!(
+        backups.len(),
+        1,
+        "migration must create one pre-change backup"
+    );
+
+    let backup = Connection::open(&backups[0]).expect("open pre-migration backup");
+    assert_eq!(user_version(&backup), 20);
+    let baseline_rows: i64 = backup
+        .query_row(
+            "SELECT COUNT(*) FROM nvapi_setting_baselines WHERE game_id = 'manual:legacy-v20'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("old baseline is retained in backup");
+    assert_eq!(baseline_rows, 1);
+    let marker: String = backup
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'migration-marker'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("other data is retained in backup");
+    assert_eq!(marker, "preserved");
 }

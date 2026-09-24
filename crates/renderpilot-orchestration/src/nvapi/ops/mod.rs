@@ -25,7 +25,7 @@ mod tests;
 
 pub(crate) use read::{read_all_setting_states, read_setting_state};
 pub(crate) use target::{SettingTarget, WriteOp};
-pub(crate) use write::restore_game_baselines;
+pub(crate) use write::restore_game_setting_claims;
 pub(crate) use write::{
     ensure_dll_setting_catalog_ready, resolve_revert_op, validate_value_supported,
     write_setting_value,

@@ -1,11 +1,15 @@
 // API
 export {
   clearGameExecutableOverride,
+  createNvapiProfile,
+  deleteNvapiProfile,
   getDlssIndicatorState,
   getNvapiSettingState,
+  getNvapiProfileStatus,
   listGameExecutableCandidates,
   listGlobalNvapiSettingStates,
   listNvapiSettingStates,
+  moveNvapiProfile,
   listNvapiSupportedSettings,
   resolveGameExecutable,
   revertGlobalNvapiSetting,
@@ -18,13 +22,14 @@ export {
 
 // Types
 export type {
-  BaselineDto,
+  OriginalStateDto,
   CatalogReadiness,
   DllInfoDto,
   DlssIndicatorState,
   EffectiveExecutable,
   ExecutableCandidate,
   NvapiWarning,
+  NvapiProfileStatus,
   SettingDescriptor,
   SettingFamily,
   SettingStateResponse,

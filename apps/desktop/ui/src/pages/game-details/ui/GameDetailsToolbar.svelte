@@ -14,7 +14,10 @@
   } from '@shared/ui';
   import { ADDONS_TAB_VALUE, type VendorTab } from '../model/game-details-tabs';
   import type { GameExecutableContext } from '../model/create-game-executable-context.svelte';
-  import type { ExecutableLockReason } from '../model/game-executable-lock';
+  import type {
+    ExecutableLockReason,
+    ProfileSelectionBlockReason,
+  } from '../model/game-executable-lock';
   import GameExecutablePopover from './GameExecutablePopover.svelte';
 
   type Props = {
@@ -24,6 +27,9 @@
     gameId: string;
     exe: GameExecutableContext;
     lockReason: ExecutableLockReason | null;
+    ownedBindingPath: string | null;
+    profileSelectionBlockReason?: ProfileSelectionBlockReason | null;
+    onMoveProfile: (path: string, selectAutomatically: boolean) => boolean | Promise<boolean>;
     showProgress: boolean;
     downloadCount: number;
     downloadValue: number;
@@ -46,6 +52,9 @@
     gameId,
     exe,
     lockReason,
+    ownedBindingPath,
+    profileSelectionBlockReason = null,
+    onMoveProfile,
     showProgress,
     downloadCount,
     downloadValue,
@@ -130,6 +139,13 @@
       </Button>
     {/if}
 
-    <GameExecutablePopover {gameId} {exe} {lockReason} />
+    <GameExecutablePopover
+      {gameId}
+      {exe}
+      {lockReason}
+      {ownedBindingPath}
+      {profileSelectionBlockReason}
+      {onMoveProfile}
+    />
   </div>
 </div>

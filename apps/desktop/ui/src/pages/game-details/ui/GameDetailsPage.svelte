@@ -33,6 +33,7 @@
   import { onDestroy, untrack } from 'svelte';
   import GameDetailsToolbar from './GameDetailsToolbar.svelte';
   import GameDetailsTabsContent from './GameDetailsTabsContent.svelte';
+  import { createNvapiProfileContext } from '../model/create-nvapi-profile-context.svelte';
 
   type Props = {
     details?: GameDetails | null;
@@ -42,6 +43,7 @@
     onBulkSwap?: BulkSwapHandler;
     onBulkRollback?: BulkRollbackHandler;
     onOpenOperations?: () => void;
+    onOpenGameDetails?: (gameId: string) => void | Promise<void>;
     onPreloadOperations?: () => void;
     onOpenRenoDxSettings?: () => void;
     onPreloadRenoDxSettings?: () => void;
@@ -56,6 +58,7 @@
     onBulkSwap = () => undefined,
     onBulkRollback = () => undefined,
     onOpenOperations,
+    onOpenGameDetails = () => undefined,
     onPreloadOperations = () => undefined,
     onOpenRenoDxSettings = () => undefined,
     onPreloadRenoDxSettings = () => undefined,
@@ -145,6 +148,7 @@
     updateAllWorkflow.destroy();
     gameAddons.destroy();
     fileSafety.destroy();
+    nvidiaProfile.clear();
   });
   // One game-scoped gate for add-on mutations and Update All.
   const installConfirmationOpen = $derived(fileSafety.installConfirmation !== null);
@@ -257,6 +261,7 @@
   }
 
   const hasNvidiaTab = $derived(vendorTabs.some((tab) => tab.key === 'nvidia'));
+  const isWindowsGame = $derived(details?.game.platform === 'Windows');
 
   // The active tab is user-controlled state, not derived: a post-swap
   // details reload re-derives `tabs`, and a hardcoded `value={tabs[0].key}`
@@ -300,21 +305,57 @@
     onChange: async (id) => {
       await Promise.all([
         hasNvidiaTab ? nvidia.reload(id) : Promise.resolve(),
+        isWindowsGame ? nvidiaProfile.reload(id) : Promise.resolve(),
         onGameDetailsInvalidate(id),
       ]);
     },
   });
+  const nvidiaProfile = createNvapiProfileContext(async (id) => {
+    await Promise.all([
+      gameExe.reload(id),
+      hasNvidiaTab ? nvidia.reload(id) : Promise.resolve(),
+      onGameDetailsInvalidate(id),
+    ]);
+  });
+  const profileSelectionBlockReason = $derived.by(() => {
+    if (!isWindowsGame) {
+      return null;
+    }
+    if (nvidiaProfile.loading) {
+      return 'checking' as const;
+    }
+    if (nvidiaProfile.loadError !== null || nvidiaProfile.status?.state === 'error') {
+      return 'unverified' as const;
+    }
+    if (nvidiaProfile.status === null) {
+      return 'checking' as const;
+    }
+    return null;
+  });
+  let pageHeading = $state<HTMLHeadingElement | null>(null);
+
+  function focusPageHeading(): void {
+    pageHeading?.focus({ preventScroll: true });
+  }
 
   $effect(() => {
     const id = gameId;
+    const windowsGame = isWindowsGame;
 
     untrack(() => {
       if (!id) {
         gameExe.clear();
+        nvidiaProfile.clear();
         return;
       }
 
-      void gameExe.reload(id);
+      if (!windowsGame) {
+        nvidiaProfile.clear();
+        void gameExe.reload(id);
+        return;
+      }
+
+      void Promise.all([gameExe.reload(id), nvidiaProfile.reload(id)]);
     });
   });
 
@@ -338,7 +379,7 @@
 </script>
 
 <section class="flex h-full min-h-0 flex-col overflow-hidden" aria-labelledby="game-details-title">
-  <h1 id="game-details-title" class="sr-only">
+  <h1 id="game-details-title" bind:this={pageHeading} class="sr-only" tabindex="-1">
     {details?.game.identity.title ?? t('nav.gameFallback')}
   </h1>
   {#if !details}
@@ -360,6 +401,10 @@
         {gameId}
         exe={gameExe}
         lockReason={executableLockReason}
+        ownedBindingPath={nvidiaProfile.ownedBindingPath}
+        {profileSelectionBlockReason}
+        onMoveProfile={(path: string, selectAutomatically: boolean) =>
+          nvidiaProfile.moveTo(gameId, path, selectAutomatically)}
         {showProgress}
         {downloadCount}
         {downloadValue}
@@ -379,6 +424,9 @@
         <GameDetailsTabsContent
           {details}
           {gameId}
+          profile={nvidiaProfile}
+          {onOpenGameDetails}
+          onRecoveryDeleteComplete={focusPageHeading}
           {vendorTabs}
           hasAddonsTab={tabs.addonsTab !== null}
           assessment={fileSafety.assessment}

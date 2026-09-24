@@ -53,6 +53,74 @@ pub(crate) fn canonicalize_existing(path: &Path) -> std::io::Result<PathBuf> {
     }
 }
 
+/// Removes a Windows verbatim prefix from a canonical path for APIs that
+/// accept ordinary DOS or UNC path syntax only. Drive paths (`\\?\D:\...`)
+/// become `D:\...`; verbatim UNC paths (`\\?\UNC\server\share\...`) become
+/// `\\server\share\...`. Other device-namespace forms fail closed.
+pub(crate) fn strip_windows_verbatim_prefix(path: &Path) -> std::io::Result<PathBuf> {
+    let normalized = strip_windows_verbatim_prefix_lexically(path)?;
+    if normalized == path {
+        return Ok(normalized);
+    }
+
+    #[cfg(windows)]
+    {
+        // Verbatim paths can address names (for example, components ending in
+        // dots or spaces) that ordinary DOS/UNC paths normalize differently.
+        // Accept the shortened spelling only when Windows resolves both forms
+        // to the same canonical native path.
+        let original_canonical = std::fs::canonicalize(path)?;
+        let normalized_canonical = std::fs::canonicalize(&normalized)?;
+        if normalized_key(&original_canonical) != normalized_key(&normalized_canonical) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "ordinary DOS/UNC spelling resolves to a different Windows path",
+            ));
+        }
+    }
+
+    Ok(normalized)
+}
+
+fn strip_windows_verbatim_prefix_lexically(path: &Path) -> std::io::Result<PathBuf> {
+    let value = path.to_string_lossy();
+    let rest = if let Some(rest) = value.strip_prefix(r"\\?\") {
+        rest
+    } else if let Some(rest) = value.strip_prefix("//?/") {
+        rest
+    } else {
+        return Ok(path.to_path_buf());
+    };
+
+    if rest.get(..4).is_some_and(|prefix| {
+        prefix.eq_ignore_ascii_case("UNC\\") || prefix.eq_ignore_ascii_case("UNC/")
+    }) {
+        let unc_tail = &rest[4..];
+        let mut parts = unc_tail.split(['\\', '/']).filter(|part| !part.is_empty());
+        if parts.next().is_some() && parts.next().is_some() {
+            return Ok(PathBuf::from(format!(r"\\{}", unc_tail.replace('/', "\\"))));
+        }
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "verbatim UNC path is missing a server or share",
+        ));
+    }
+
+    let bytes = rest.as_bytes();
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
+    {
+        return Ok(PathBuf::from(rest.replace('/', "\\")));
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        "unsupported Windows verbatim device namespace",
+    ))
+}
+
 /// Best-effort canonicalization: resolves symlinks and `.`/`..` when the path
 /// exists on disk, falls back to the input path otherwise. Returns a usable
 /// [`PathBuf`], not a comparison key -- for equality use [`same_path`].

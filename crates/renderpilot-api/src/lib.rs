@@ -77,9 +77,10 @@ pub use self::luma::{
 };
 pub use self::manifests::{RemoteManifestRefreshOutput, refresh_remote_manifests_forced_output};
 pub use self::nvapi::{
-    clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,
+    clear_game_executable_override, create_nvapi_profile, delete_nvapi_profile,
+    get_nvapi_profile_status, get_nvapi_setting_state, list_game_executable_candidates,
     list_global_nvapi_setting_states, list_nvapi_setting_states, list_nvapi_supported_settings,
-    resolve_game_executable, revert_global_nvapi_setting, revert_nvapi_setting,
+    move_nvapi_profile, resolve_game_executable, revert_global_nvapi_setting, revert_nvapi_setting,
     set_game_executable_override, set_global_nvapi_setting_value, set_nvapi_setting_value,
 };
 pub use self::operations::{apply_swap, plan_rollback, plan_swap, rollback_component};

@@ -14,11 +14,11 @@
     onChange: (key: string, wire: string) => void;
     onRevertPredefined: (key: string) => void;
     /**
-     * Restore the pre-RenderPilot baseline. Optional: the global/base profile
-     * has no baseline, so its row's restore button is always disabled and this
+     * Restore the exact pre-RenderPilot state. Optional: the global/base profile
+     * has no per-game original, so its row's restore button is disabled and this
      * never fires.
      */
-    onRevertBaseline?: (key: string) => void;
+    onRevertOriginal?: (key: string) => void;
   };
 
   const {
@@ -27,7 +27,7 @@
     rowDisabled,
     onChange,
     onRevertPredefined,
-    onRevertBaseline = () => undefined,
+    onRevertOriginal = () => undefined,
   }: Props = $props();
 </script>
 
@@ -38,7 +38,7 @@
   </Alert>
 {/each}
 
-<ItemGroup class="rounded-md border bg-muted/30">
+<ItemGroup class="@container rounded-md border bg-muted/30">
   {#each settings as state, index (state.setting_key)}
     {#if index > 0}
       <ItemSeparator />
@@ -52,8 +52,8 @@
       onRevertPredefined={() => {
         onRevertPredefined(state.setting_key);
       }}
-      onRevertBaseline={() => {
-        onRevertBaseline(state.setting_key);
+      onRevertOriginal={() => {
+        onRevertOriginal(state.setting_key);
       }}
     />
   {/each}

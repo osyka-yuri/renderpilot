@@ -6,6 +6,10 @@ pub mod dto;
 pub mod game_session;
 /// Read/write operations for NVAPI driver profile settings.
 pub mod ops;
+/// Explicit create, delete, and move lifecycle operations.
+pub mod profiles;
+/// Restart recovery for durable NVIDIA DRS mutation intents.
+mod recovery;
 /// NVAPI setting registry backed by the DLSS settings catalog.
 pub mod registry;
 /// Game/exe resolution helpers for building a [`renderpilot_nvapi::setting::SettingContext`].

@@ -10,6 +10,7 @@
 //! SQL snapshot of CURRENT.
 
 pub(super) mod common;
+pub(super) mod nvapi_profile_management;
 pub(super) mod observations;
 pub(super) mod optiscaler_state;
 pub(super) mod peer_aggregate_reservations;
@@ -50,6 +51,7 @@ pub(super) fn compose_baseline() -> String {
     let portable_path_tags = portable_path_tags::baseline_sql();
     let observations = observations::SQL;
     let optiscaler_state = optiscaler_state::baseline_sql();
+    let nvapi_profile_management = nvapi_profile_management::baseline_sql();
 
     let mut sql = String::with_capacity(
         BASELINE_HEADER.len()
@@ -63,6 +65,7 @@ pub(super) fn compose_baseline() -> String {
             + portable_path_tags.len()
             + observations.len()
             + optiscaler_state.len()
+            + nvapi_profile_management.len()
             + 8,
     );
     sql.push_str(BASELINE_HEADER.trim_start());
@@ -86,6 +89,8 @@ pub(super) fn compose_baseline() -> String {
     sql.push_str(observations);
     sql.push('\n');
     sql.push_str(optiscaler_state);
+    sql.push('\n');
+    sql.push_str(nvapi_profile_management);
     sql.push('\n');
     sql
 }

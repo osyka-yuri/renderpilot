@@ -316,26 +316,28 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.executable.otherGroup': '其他（启动器、安装程序、工具）',
   'gameDetails.executable.customBadge': '手动',
   'gameDetails.executable.reset': '重置为自动检测',
+  'gameDetails.executable.changeFailed': '无法更新可执行文件选择。',
+  'gameDetails.executable.loadFailed': '无法加载可执行文件选择。',
+  'gameDetails.executable.refreshFailed': '可执行文件选择已更新，但无法刷新相关游戏信息。',
   'gameDetails.executable.tooltipAuto':
     '游戏可执行文件：自动检测。由 NVIDIA 配置文件和 RenoDX 使用。',
   'gameDetails.executable.tooltipCustom':
     '游戏可执行文件：手动选择。由 NVIDIA 配置文件和 RenoDX 使用。',
   'gameDetails.profile.title': 'NVIDIA 配置文件',
-  'gameDetails.profile.description': '配置此游戏的 NVIDIA 驱动程序设置。',
   'gameDetails.profile.pinnedManual': '手动选择。',
   'gameDetails.profile.autoDetected': '自动检测。',
   'gameDetails.profile.noExeDetected': '未找到该游戏的可执行文件。',
   'gameDetails.profile.noExe': '没有可执行文件',
-  'gameDetails.profile.noProfile': '未找到 NVIDIA 配置文件。',
 
   'gameDetails.nvapi.requiresDriver': '需要驱动程序 {version}+',
   'gameDetails.nvapi.unavailable': '不可用',
   'gameDetails.nvapi.resetDefault': '重置为默认',
-  'gameDetails.nvapi.alreadyDefault': '已是默认值',
-  'gameDetails.nvapi.restoreBaselineLabel': '恢复初始值',
-  'gameDetails.nvapi.restoreBaseline': '恢复初始值',
-  'gameDetails.nvapi.alreadyBaseline': '已处于初始值',
-  'gameDetails.nvapi.noBaseline': '未保存初始值',
+  'gameDetails.nvapi.noExplicitOverride': '没有可重置的显式配置文件覆盖项',
+  'gameDetails.nvapi.resetStateUnknown': '无法确认此设置是否存在配置文件覆盖项',
+  'gameDetails.nvapi.restoreOriginalLabel': '恢复原始值',
+  'gameDetails.nvapi.restoreOriginal': '恢复原始值',
+  'gameDetails.nvapi.alreadyOriginal': '已处于原始值',
+  'gameDetails.nvapi.noOriginal': '未保存原始值',
   'gameDetails.nvapi.versionUnavailable': 'DLSS 版本不可用',
 
   'gameDetails.nvapi.warning.noDll': '在安装目录中未检测到 DLSS DLL。',
@@ -347,6 +349,8 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI 不可用。',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI 初始化失败。',
   'gameDetails.nvapi.warning.drsFailed': '无法创建 DRS 会话。',
+  'gameDetails.nvapi.warning.executableAmbiguous': 'NVIDIA 为此可执行文件找到了多个配置文件。',
+  'gameDetails.nvapi.warning.drsProfileLookupFailed': '无法读取此可执行文件的 NVIDIA 配置文件。',
 
   'operations.title': '操作历史',
   'operations.subtitleGame': '{title} 的活动',
@@ -480,7 +484,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
 
   'nvidia.changeSettingFailed': '无法应用设置',
   'nvidia.revertDefaultFailed': '无法恢复默认设置',
-  'nvidia.revertBaselineFailed': '无法恢复初始设置',
+  'nvidia.revertOriginalFailed': '无法恢复原始设置',
 
   'indicator.changeFailed': '无法切换 DLSS 指示器',
 
@@ -1042,4 +1046,42 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.optiscaler.attributionLink': '查看项目',
   'user_message.luma_required_by_optiscaler':
     '此游戏的 OptiScaler 需要 Luma。请先卸载 OptiScaler。',
+  'gameDetails.profile.state.noExecutable': '选择游戏可执行文件以检查 NVIDIA 配置文件。',
+  'gameDetails.profile.state.nvapiUnavailable': '此系统无法使用 NVIDIA 配置文件管理功能。',
+  'gameDetails.profile.state.ambiguous': '此可执行文件匹配多个 NVIDIA 配置文件，已阻止更改。',
+  'gameDetails.profile.state.error': '无法检查 NVIDIA 配置文件。',
+  'gameDetails.profile.state.missing': '没有 NVIDIA 配置文件',
+  'gameDetails.profile.state.ownedByAnotherGame': '此配置文件由另一款游戏管理。',
+  'gameDetails.profile.state.conflict':
+    '无法验证已保存的 NVIDIA 配置文件状态。已阻止配置文件更改。',
+  'gameDetails.profile.state.pending': '有一项 NVIDIA 配置文件操作需要恢复。',
+  'gameDetails.profile.create': '创建配置文件',
+  'gameDetails.profile.delete': '删除配置文件',
+  'gameDetails.profile.deleteBlocked': '目前无法删除此配置文件。',
+  'gameDetails.profile.boundExecutable': '已绑定的可执行文件',
+  'gameDetails.profile.deleteConfirmTitle': '删除 {profileName}？',
+  'gameDetails.profile.deleteConfirmDescription':
+    '将从 NVIDIA 驱动程序中删除此配置文件，其设置将不再生效。',
+  'gameDetails.profile.checking': '正在检查 NVIDIA 配置文件…',
+  'gameDetails.profile.creating': '正在创建配置文件…',
+  'gameDetails.profile.deleting': '正在删除配置文件…',
+  'gameDetails.profile.deleteConfirmAction': '删除配置文件',
+  'gameDetails.profile.moveConfirmTitle': '移动 RenderPilot 配置文件？',
+  'gameDetails.profile.moveConfirmDescription':
+    '将配置文件关联从 {from} 移至 {to}？驱动程序关联和游戏可执行文件选择将同时更新。',
+  'gameDetails.profile.moveConfirmAction': '移动配置文件',
+  'gameDetails.profile.createFailed': '无法创建 NVIDIA 配置文件。',
+  'gameDetails.profile.deleteFailed': '无法删除 NVIDIA 配置文件。',
+  'gameDetails.profile.moveFailed': '无法移动 NVIDIA 配置文件。',
+  'gameDetails.profile.state.available': '已找到 NVIDIA 配置文件。',
+  'gameDetails.profile.retry': '重试',
+  'gameDetails.profile.retryRecovery': '重试恢复',
+  'gameDetails.profile.refreshFailed': 'NVIDIA 配置文件更改已完成，但无法刷新游戏详情。',
+  'gameDetails.profile.pendingOtherGame': '另一款游戏中有待处理的操作，恢复已被阻止。',
+  'gameDetails.profile.pendingGlobal': '打开 NVIDIA 设置以重试恢复。',
+  'gameDetails.profile.openGame': '查看游戏详情',
+  'gameDetails.profile.executableSelectionBlocked':
+    '无法验证 NVIDIA 配置文件。更改此可执行文件前，请使用上方按钮重试检查。',
+  'gameDetails.profile.executableSelectionChecking':
+    '正在检查 NVIDIA 配置文件。检查完成后即可选择此可执行文件。',
 });

@@ -10,7 +10,9 @@ description = "NVAPI FFI bindings for RenderPilot."
 workspace = true
 
 [dependencies]
+hex = { workspace = true }
 libloading = { workspace = true }
+serde = { workspace = true }
 
 [lib]
 path = "src/lib.rs"

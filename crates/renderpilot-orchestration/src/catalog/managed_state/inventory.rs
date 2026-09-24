@@ -7,7 +7,7 @@ use renderpilot_application::{
 };
 use renderpilot_domain::{
     ComponentId, ComponentRollbackBaseline, GameId, InstalledAddon, LibraryComponent,
-    OptiScalerInstallState,
+    OptiScalerInstallState, normalized_path_key,
 };
 
 use crate::ServiceError;
@@ -30,8 +30,12 @@ pub(in crate::catalog) struct ManagedGameStateInventory {
     /// aggregate. It is retained only so planning can reject the malformed
     /// inventory before any inverse action runs.
     pub malformed_optiscaler_addon: Option<InstalledAddon>,
-    /// Number of driver-setting baselines owned by the game.
-    pub nvapi_baseline_count: usize,
+    /// Number of target-setting claims this game participates in.
+    pub nvapi_claim_count: usize,
+    /// Whether the game owns a RenderPilot-created driver profile.
+    pub nvapi_owned_profile: bool,
+    /// Unresolved driver operations that must be reconciled before cleanup.
+    pub nvapi_pending_count: usize,
 }
 
 impl ManagedGameStateInventory {
@@ -42,7 +46,9 @@ impl ManagedGameStateInventory {
             && self.addon.is_none()
             && self.optiscaler_state.is_none()
             && self.malformed_optiscaler_addon.is_none()
-            && self.nvapi_baseline_count == 0
+            && self.nvapi_claim_count == 0
+            && !self.nvapi_owned_profile
+            && self.nvapi_pending_count == 0
     }
 }
 
@@ -74,6 +80,39 @@ pub(in crate::catalog) fn inventory(
         }
         other => (other, None),
     };
+    let nvapi_claims = storage.list_nvapi_setting_claims_for_game(game_id.as_str())?;
+    let nvapi_owned_profile = storage.get_nvapi_owned_profile(game_id.as_str())?;
+    let target_ids = nvapi_claims
+        .iter()
+        .map(|claim| claim.target_id.as_str())
+        .chain(
+            nvapi_owned_profile
+                .iter()
+                .map(|profile| profile.profile_name.as_str()),
+        )
+        .collect::<HashSet<_>>();
+    let target_paths = nvapi_claims
+        .iter()
+        .map(|claim| normalized_path_key(&claim.executable_path))
+        .chain(
+            nvapi_owned_profile
+                .iter()
+                .map(|profile| normalized_path_key(&profile.binding_path)),
+        )
+        .collect::<HashSet<_>>();
+    let pending_nvapi_count = storage
+        .list_pending_nvapi_operations()?
+        .iter()
+        .filter(|operation| {
+            operation.game_id.as_deref() == Some(game_id.as_str())
+                || operation
+                    .target_id
+                    .as_deref()
+                    .is_some_and(|target| target_ids.contains(target))
+                || operation_references_paths(&operation.before_json, &target_paths)
+                || operation_references_paths(&operation.after_json, &target_paths)
+        })
+        .count();
     Ok(ManagedGameStateInventory {
         pending_recovery_count: storage.pending_file_mutations_for_game(game_id)?.len(),
         component_ids,
@@ -82,8 +121,21 @@ pub(in crate::catalog) fn inventory(
         addon,
         optiscaler_state: storage.get_optiscaler_install_state(game_id)?,
         malformed_optiscaler_addon,
-        nvapi_baseline_count: storage
-            .list_nvapi_setting_baselines_for_game(game_id.as_str())?
-            .len(),
+        nvapi_claim_count: nvapi_claims.len(),
+        nvapi_owned_profile: nvapi_owned_profile.is_some(),
+        nvapi_pending_count: pending_nvapi_count,
     })
+}
+
+fn operation_references_paths(snapshot: &str, target_paths: &HashSet<String>) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(snapshot) else {
+        return false;
+    };
+    ["binding_path", "executable_path", "old_path", "new_path"]
+        .into_iter()
+        .filter_map(|key| value.get(key).and_then(serde_json::Value::as_str))
+        .any(|path| {
+            let path_key = normalized_path_key(path);
+            target_paths.contains(&path_key)
+        })
 }

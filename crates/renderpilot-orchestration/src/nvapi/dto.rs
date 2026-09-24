@@ -60,21 +60,13 @@ pub struct ValueDescriptorDto {
     pub dword: u32,
 }
 
-/// Serializable baseline snapshot captured before RenderPilot first modified a setting.
+/// Exact explicit state observed before RenderPilot first modified a setting.
 #[derive(Debug, Serialize)]
-pub struct BaselineDto {
-    /// Wire string of the baseline value, if known.
-    pub wire: Option<String>,
-    /// Human-readable label of the baseline value, if known.
-    pub label: Option<String>,
-    /// Raw DWORD of the baseline value.
-    pub dword: u32,
-    /// `true` if the setting was at the driver predefined default when first captured.
-    pub was_predefined: bool,
-    /// Unix timestamp (seconds) when the baseline was captured.
-    pub captured_at: i64,
-    /// Executable that was in use when the baseline was captured.
-    pub captured_exe: String,
+pub struct OriginalStateDto {
+    /// Whether the setting had an explicit value in the exact DRS profile.
+    pub present: bool,
+    /// Original explicit DWORD, absent when the driver inherited its default.
+    pub value: Option<ValueDescriptorDto>,
 }
 
 /// Serializable info about a DLSS DLL found in the game installation directory.
@@ -124,14 +116,14 @@ pub struct SettingStateResponse {
     pub min_driver: Option<String>,
     /// Current live value.
     pub current: ValueDescriptorDto,
+    /// Explicit-profile presence for the live value; `null` when the read failed.
+    pub current_is_explicit: Option<bool>,
     /// Driver predefined default, if available.
     pub predefined: Option<ValueDescriptorDto>,
-    /// Baseline snapshot, if one was captured.
-    pub baseline: Option<BaselineDto>,
+    /// Verified original state for the exact DRS profile and setting, if claimed.
+    pub original: Option<OriginalStateDto>,
     /// `true` if the current value equals the driver predefined default.
     pub is_current_predefined: bool,
-    /// `true` if the setting was modified by a tool other than RenderPilot.
-    pub is_modified_outside_renderpilot: bool,
     /// Effective executable used for NVIDIA profile lookup.
     pub effective_exe: Option<String>,
     /// Source of the effective exe: `"override"` or `"auto"`.
@@ -172,6 +164,10 @@ pub enum NvapiWarningDto {
     NvapiInitFailed,
     /// DRS session could not be created.
     DrsFailed,
+    /// The selected executable resolved to multiple DRS application entries.
+    ExecutableAmbiguous,
+    /// DRS opened, but profile lookup failed for a reason other than absence.
+    DrsProfileLookupFailed,
 }
 
 /// Builds a [`SettingDescriptorDto`] from a dynamic [`NvapiSetting`] reference.

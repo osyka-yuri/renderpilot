@@ -21,11 +21,7 @@ pub type NvDRSSessionHandle = *mut c_void;
 /// Opaque DRS profile handle.
 pub type NvDRSProfileHandle = *mut c_void;
 
-/// Length of `NvAPI_UnicodeString` (wide-char).
-///
-/// This value (2048) is empirically required by the DRS API for string
-/// fields in `NVDRS_APPLICATION` and `NVDRS_SETTING`. It is not exposed
-/// in the public NVAPI headers but matches the actual driver allocation.
+/// Length of `NvAPI_UnicodeString` (wide-char), as defined by `nvapi.h`.
 pub const NVAPI_UNICODE_STRING_MAX: usize = 2048;
 /// Maximum binary data length.
 pub const NVAPI_BINARY_DATA_MAX: usize = 4096;
@@ -52,20 +48,67 @@ pub const NVDRS_SETTING_VER: u32 = nvapi_version(std::mem::size_of::<NVDRS_SETTI
 /// `NVDRS_APPLICATION_VER`
 pub const NVDRS_APPLICATION_VER: u32 = nvapi_version(std::mem::size_of::<NVDRS_APPLICATION>(), 4);
 
+// `NVDRS_SETTING_V1` is declared under NVIDIA's pack(4) ABI. Keep these
+// absolute checks close to the declarations so a host-side alignment change
+// cannot silently change what crosses the driver boundary.
+const _: () = {
+    assert!(std::mem::size_of::<NVDRS_BINARY_SETTING>() == 4100);
+    assert!(std::mem::align_of::<NVDRS_BINARY_SETTING>() == 4);
+    assert!(std::mem::offset_of!(NVDRS_BINARY_SETTING, valueLength) == 0);
+    assert!(std::mem::offset_of!(NVDRS_BINARY_SETTING, valueData) == 4);
+
+    assert!(std::mem::size_of::<NVDRS_PROFILE>() == 4116);
+    assert!(std::mem::align_of::<NVDRS_PROFILE>() == 4);
+    assert!(std::mem::offset_of!(NVDRS_PROFILE, version) == 0);
+    assert!(std::mem::offset_of!(NVDRS_PROFILE, profileName) == 4);
+    assert!(std::mem::offset_of!(NVDRS_PROFILE, gpuSupport) == 4100);
+    assert!(std::mem::offset_of!(NVDRS_PROFILE, isPredefined) == 4104);
+    assert!(std::mem::offset_of!(NVDRS_PROFILE, numOfApps) == 4108);
+    assert!(std::mem::offset_of!(NVDRS_PROFILE, numOfSettings) == 4112);
+    assert!(NVDRS_PROFILE_VER == 0x0001_1014);
+
+    assert!(std::mem::size_of::<NVDRS_APPLICATION>() == 20492);
+    assert!(std::mem::align_of::<NVDRS_APPLICATION>() == 4);
+    assert!(std::mem::offset_of!(NVDRS_APPLICATION, version) == 0);
+    assert!(std::mem::offset_of!(NVDRS_APPLICATION, isPredefined) == 4);
+    assert!(std::mem::offset_of!(NVDRS_APPLICATION, appName) == 8);
+    assert!(std::mem::offset_of!(NVDRS_APPLICATION, userFriendlyName) == 4104);
+    assert!(std::mem::offset_of!(NVDRS_APPLICATION, launcher) == 8200);
+    assert!(std::mem::offset_of!(NVDRS_APPLICATION, fileInFolder) == 12296);
+    assert!(std::mem::offset_of!(NVDRS_APPLICATION, flags) == 16392);
+    assert!(std::mem::offset_of!(NVDRS_APPLICATION, commandLine) == 16396);
+    assert!(NVDRS_APPLICATION_VER == 0x0004_500C);
+
+    assert!(std::mem::size_of::<NVDRS_SETTING_PREDEFINED>() == 4100);
+    assert!(std::mem::align_of::<NVDRS_SETTING_PREDEFINED>() == 4);
+    assert!(std::mem::size_of::<NVDRS_SETTING_CURRENT>() == 4100);
+    assert!(std::mem::align_of::<NVDRS_SETTING_CURRENT>() == 4);
+    assert!(std::mem::size_of::<NVDRS_SETTING>() == 12320);
+    assert!(std::mem::align_of::<NVDRS_SETTING>() == 4);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, version) == 0);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, settingName) == 4);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, settingId) == 4100);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, settingType) == 4104);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, settingLocation) == 4108);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, isCurrentPredefined) == 4112);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, isPredefinedValid) == 4116);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, predefinedValue) == 4120);
+    assert!(std::mem::offset_of!(NVDRS_SETTING, currentValue) == 8220);
+    assert!(NVDRS_SETTING_VER == 0x0001_3020);
+};
+
 /// Setting type: integer (DWORD).
 pub const NVDRS_DWORD_TYPE: u32 = 0;
+/// Setting type: unsigned 64-bit integer (QWORD).
+pub const NVDRS_QWORD_TYPE: u32 = 4;
 
-/// DRS profile descriptor (V1).
-///
-/// `gpuSupport` is a bit-field packed into a `u32`: bit 0 = GeForce,
-/// bit 1 = Quadro, bit 2 = NVS. Pass `1` (GeForce) when creating a user
-/// profile for gaming applications.
+/// DRS profile descriptor (V1). `gpuSupport` is read-only output metadata.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct NVDRS_PROFILE {
     pub version: u32,
     pub profileName: [u16; NVAPI_UNICODE_STRING_MAX],
-    /// Bit 0 = GeForce, bit 1 = Quadro, bit 2 = NVS.
+    /// Read-only NVIDIA hardware-support metadata.
     pub gpuSupport: u32,
     pub isPredefined: u32,
     pub numOfApps: u32,
@@ -74,6 +117,9 @@ pub struct NVDRS_PROFILE {
 
 /// `NVDRS_PROFILE_VER`
 pub const NVDRS_PROFILE_VER: u32 = nvapi_version(std::mem::size_of::<NVDRS_PROFILE>(), 1);
+
+/// Identifies a setting explicitly stored on the current profile.
+pub const NVDRS_CURRENT_PROFILE_LOCATION: u32 = 0;
 
 /// DRS application descriptor (V4). All string fields are wide-char (UTF-16LE).
 #[repr(C)]
@@ -103,6 +149,8 @@ pub struct NVDRS_BINARY_SETTING {
 #[derive(Clone, Copy)]
 pub union NVDRS_SETTING_PREDEFINED {
     pub u32PredefinedValue: u32,
+    /// Stored as bytes to preserve NVIDIA's pack(4) union alignment.
+    pub u64PredefinedValue: [u8; 8],
     pub binaryPredefinedValue: NVDRS_BINARY_SETTING,
     pub wszPredefinedValue: [u16; NVAPI_UNICODE_STRING_MAX],
 }
@@ -112,6 +160,8 @@ pub union NVDRS_SETTING_PREDEFINED {
 #[derive(Clone, Copy)]
 pub union NVDRS_SETTING_CURRENT {
     pub u32CurrentValue: u32,
+    /// Stored as bytes to preserve NVIDIA's pack(4) union alignment.
+    pub u64CurrentValue: [u8; 8],
     pub binaryCurrentValue: NVDRS_BINARY_SETTING,
     pub wszCurrentValue: [u16; NVAPI_UNICODE_STRING_MAX],
 }
@@ -188,6 +238,45 @@ pub type NvAPI_DRS_FindApplicationByName_fn = unsafe extern "C" fn(
     pApplication: *mut NVDRS_APPLICATION,
 ) -> NvAPI_Status;
 
+pub type NvAPI_DRS_CreateProfile_fn = unsafe extern "C" fn(
+    hSession: NvDRSSessionHandle,
+    pProfileInfo: *mut NVDRS_PROFILE,
+    phProfile: *mut NvDRSProfileHandle,
+) -> NvAPI_Status;
+
+pub type NvAPI_DRS_DeleteProfile_fn = unsafe extern "C" fn(
+    hSession: NvDRSSessionHandle,
+    hProfile: NvDRSProfileHandle,
+) -> NvAPI_Status;
+
+pub type NvAPI_DRS_CreateApplication_fn = unsafe extern "C" fn(
+    hSession: NvDRSSessionHandle,
+    hProfile: NvDRSProfileHandle,
+    pApplication: *mut NVDRS_APPLICATION,
+) -> NvAPI_Status;
+
+pub type NvAPI_DRS_DeleteApplicationEx_fn = unsafe extern "C" fn(
+    hSession: NvDRSSessionHandle,
+    hProfile: NvDRSProfileHandle,
+    pApplication: *mut NVDRS_APPLICATION,
+) -> NvAPI_Status;
+
+pub type NvAPI_DRS_EnumApplications_fn = unsafe extern "C" fn(
+    hSession: NvDRSSessionHandle,
+    hProfile: NvDRSProfileHandle,
+    startIndex: u32,
+    appCount: *mut u32,
+    pApplication: *mut NVDRS_APPLICATION,
+) -> NvAPI_Status;
+
+pub type NvAPI_DRS_EnumSettings_fn = unsafe extern "C" fn(
+    hSession: NvDRSSessionHandle,
+    hProfile: NvDRSProfileHandle,
+    startIndex: u32,
+    settingsCount: *mut u32,
+    pSetting: *mut NVDRS_SETTING,
+) -> NvAPI_Status;
+
 /// `NvAPI_DRS_GetSetting` (legacy, interface ID `0x73BF8338`).
 pub type NvAPI_DRS_GetSetting_fn = unsafe extern "C" fn(
     hSession: NvDRSSessionHandle,
@@ -252,6 +341,12 @@ pub mod interface_ids {
     pub const DRS_LOAD_SETTINGS: u32 = 0x375DBD6B;
     pub const DRS_SAVE_SETTINGS: u32 = 0xFCBC7E14;
     pub const DRS_FIND_APPLICATION_BY_NAME: u32 = 0xEEE566B2;
+    pub const DRS_CREATE_PROFILE: u32 = 0xCC176068;
+    pub const DRS_DELETE_PROFILE: u32 = 0x17093206;
+    pub const DRS_CREATE_APPLICATION: u32 = 0x4347A9DE;
+    pub const DRS_DELETE_APPLICATION_EX: u32 = 0xC5EA85A1;
+    pub const DRS_ENUM_APPLICATIONS: u32 = 0x7FA2173A;
+    pub const DRS_ENUM_SETTINGS: u32 = 0xAE3039DA;
     pub const DRS_FIND_PROFILE_BY_NAME: u32 = 0x7E4A9A0B;
     pub const DRS_GET_PROFILE_INFO: u32 = 0x61CD6FD6;
     /// `NvAPI_DRS_GetBaseProfile` — resolves the global/base driver profile.
@@ -287,6 +382,7 @@ mod tests {
             NVDRS_SETTING_VER & 0xFFFF,
             std::mem::size_of::<NVDRS_SETTING>() as u32
         );
+
         assert_eq!(NVDRS_SETTING_VER >> 16, 1);
 
         assert_eq!(

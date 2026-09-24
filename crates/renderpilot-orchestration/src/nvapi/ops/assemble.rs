@@ -8,7 +8,7 @@ use renderpilot_nvapi::setting::{
 };
 
 use super::super::dto::{
-    BaselineDto, CatalogReadinessDto, DllInfoDto, NvapiWarningDto, SettingStateResponse,
+    CatalogReadinessDto, DllInfoDto, NvapiWarningDto, OriginalStateDto, SettingStateResponse,
     ValueDescriptorDto, ValueOptionDto, category_for_family, value_type_str,
 };
 use super::live::LiveRead;
@@ -25,17 +25,57 @@ pub(super) fn assemble_response(
     ctx: &SettingContext,
     storage: &renderpilot_storage_sqlite::SqliteStorage,
     target: &SettingTarget<'_>,
-    live: LiveRead,
+    live: &LiveRead,
 ) -> Result<SettingStateResponse, ServiceError> {
-    // Baseline tracking and executable resolution only apply to a real game;
-    // the global base profile has neither.
-    let (baseline_row, effective_exe, effective_exe_source) = match target.game_id() {
+    // A game original is visible only when a setting claim matches the exact
+    // live DRS profile, executable path, and last verified value. This keeps a
+    // stale claim from advertising a restore action for a different target.
+    let (original, effective_exe, effective_exe_source) = match target.game_id() {
         Some(game_id) => {
-            let baseline_row = storage.get_nvapi_baseline(game_id, setting.key())?;
+            let original = match (
+                live.profile_name.as_deref(),
+                live.current_is_explicit,
+                ctx.effective_exe_path.as_deref(),
+            ) {
+                (Some(profile_name), Some(current_present), Some(executable_path))
+                    if live.has_profile_for_exe =>
+                {
+                    let current_state = if current_present {
+                        (true, Some(live.current))
+                    } else {
+                        (false, None)
+                    };
+                    let claim = storage.get_nvapi_target_setting_claim(
+                        game_id,
+                        profile_name,
+                        setting.nvapi_id(),
+                    )?;
+                    claim
+                        .filter(|claim| {
+                            renderpilot_domain::normalized_path_key(&claim.executable_path)
+                                == renderpilot_domain::normalized_path_key(executable_path)
+                                && (claim.expected_present, claim.expected_value) == current_state
+                        })
+                        .and_then(|claim| {
+                            if claim.original_present {
+                                claim.original_value.map(|dword| OriginalStateDto {
+                                    present: true,
+                                    value: Some(value_descriptor(setting, dword)),
+                                })
+                            } else {
+                                Some(OriginalStateDto {
+                                    present: false,
+                                    value: None,
+                                })
+                            }
+                        })
+                }
+                _ => None,
+            };
             let effective_exe = ctx.effective_exe.clone();
             let effective_exe_source =
-                resolve_effective_exe_source(storage, game_id, effective_exe.as_deref())?;
-            (baseline_row, effective_exe, effective_exe_source)
+                resolve_effective_exe_source(storage, game_id, ctx.effective_exe_path.as_deref())?;
+            (original, effective_exe, effective_exe_source)
         }
         None => (None, None, None),
     };
@@ -70,16 +110,6 @@ pub(super) fn assemble_response(
         warnings.push(warning);
     }
 
-    // "Modified outside RenderPilot": our baseline -- captured the first time we
-    // touched this setting -- already differed from the driver's predefined
-    // default, i.e. another tool had overridden it before us.
-    let is_modified_outside = match (baseline_row.as_ref(), live.predefined) {
-        (Some(row), Some(predefined)) => {
-            row.baseline_was_predefined && row.baseline_dword != predefined
-        }
-        _ => false,
-    };
-
     Ok(SettingStateResponse {
         setting_key: setting.key().to_owned(),
         setting_label: setting.label().to_owned(),
@@ -92,20 +122,12 @@ pub(super) fn assemble_response(
         description: setting.description().map(str::to_owned),
         min_driver: setting.min_driver().map(str::to_owned),
         current: value_descriptor(setting, live.current),
+        current_is_explicit: live.current_is_explicit,
         predefined: live
             .predefined
             .map(|dword| value_descriptor(setting, dword)),
-        baseline: baseline_row.as_ref().map(|row| {
-            build_baseline_dto(
-                setting,
-                row.baseline_dword,
-                row.baseline_was_predefined,
-                row.captured_at,
-                row.captured_exe.clone(),
-            )
-        }),
+        original,
         is_current_predefined: live.is_current_predefined,
-        is_modified_outside_renderpilot: is_modified_outside,
         effective_exe,
         effective_exe_source,
         has_profile_for_exe: live.has_profile_for_exe,
@@ -214,23 +236,6 @@ pub(super) fn build_available_values(
             }
         })
         .collect()
-}
-
-fn build_baseline_dto(
-    setting: &dyn NvapiSetting,
-    baseline_dword: u32,
-    baseline_was_predefined: bool,
-    captured_at: i64,
-    captured_exe: String,
-) -> BaselineDto {
-    BaselineDto {
-        wire: setting.format_wire(baseline_dword),
-        label: setting.label_for_dword(baseline_dword),
-        dword: baseline_dword,
-        was_predefined: baseline_was_predefined,
-        captured_at: captured_at / 1000,
-        captured_exe,
-    }
 }
 
 fn resolve_effective_exe_source(

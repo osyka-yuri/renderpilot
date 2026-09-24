@@ -115,7 +115,6 @@ fn aggregate_consolidation_rekeys_every_scoped_state_category() {
         "installed_addons",
         "game_covers",
         "nvapi_executable_overrides",
-        "nvapi_setting_baselines",
         "game_ui_state",
         "profile_addon_capabilities",
     ] {
@@ -281,7 +280,7 @@ fn pending_shared_vulkan_mutation_is_reported_by_its_own_policy() {
 }
 
 #[test]
-fn ambiguous_managed_baselines_history_addons_and_nvapi_are_blocking() {
+fn ambiguous_managed_history_addons_and_pending_nvapi_are_blocking() {
     let storage = SqliteStorage::in_memory().expect("storage");
     let destination = game("game:destination", "C:/Games/Example");
     let source = game("manual:child", "C:/Games/Example/D3D12");
@@ -321,12 +320,11 @@ fn ambiguous_managed_baselines_history_addons_and_nvapi_are_blocking() {
                     ('manual:child', 'RenoDx', 'source.addon64',
                      '[]', '[]', '[]', '[]', 1, 1);
 
-                INSERT INTO nvapi_setting_baselines (
-                    game_id, setting_key, baseline_dword, baseline_was_predefined,
-                    captured_exe, captured_at
+                INSERT INTO pending_drs_operations (
+                    op_id, game_id, kind, before_json, after_json, created_at, updated_at
                 ) VALUES
-                    ('game:destination', 'setting', 1, 0, 'game.exe', 1),
-                    ('manual:child', 'setting', 2, 0, 'game.exe', 1);
+                    ('pending:destination', 'game:destination', 'setting', '{}', '{}', 1, 1),
+                    ('pending:source', 'manual:child', 'setting', '{}', '{}', 1, 1);
 
                 INSERT INTO operations (
                     id, game_id, kind, status, created_at, updated_at
@@ -360,7 +358,7 @@ fn ambiguous_managed_baselines_history_addons_and_nvapi_are_blocking() {
     for table in [
         "component_backups",
         "installed_addons",
-        "nvapi_setting_baselines",
+        "pending_drs_operations",
         "operations",
     ] {
         assert!(

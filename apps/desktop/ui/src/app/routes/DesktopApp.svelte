@@ -529,6 +529,7 @@
             onBulkSwap={gameDetailsModel.handleBulkSwap}
             onBulkRollback={gameDetailsModel.handleBulkRollback}
             onGameDetailsInvalidate={reloadDetailsAndCatalog}
+            onOpenGameDetails={openGameDetails}
             onOpenRenoDxSettings={openRenoDxSettings}
             onPreloadRenoDxSettings={() => {
               preloadPage('settings');

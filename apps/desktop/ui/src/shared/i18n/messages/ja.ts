@@ -350,26 +350,29 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.executable.otherGroup': 'その他（ランチャー・インストーラー・ツール）',
   'gameDetails.executable.customBadge': '手動',
   'gameDetails.executable.reset': '自動検出に戻す',
+  'gameDetails.executable.changeFailed': '実行ファイルの選択を更新できませんでした。',
+  'gameDetails.executable.loadFailed': '実行ファイルの選択を読み込めませんでした。',
+  'gameDetails.executable.refreshFailed':
+    '実行ファイルの選択は更新されましたが、関連するゲーム情報を再読み込みできませんでした。',
   'gameDetails.executable.tooltipAuto':
     'ゲームの実行ファイル：自動検出。NVIDIA プロファイルと RenoDX で使用されます。',
   'gameDetails.executable.tooltipCustom':
     'ゲームの実行ファイル：手動で選択。NVIDIA プロファイルと RenoDX で使用されます。',
   'gameDetails.profile.title': 'NVIDIA プロファイル',
-  'gameDetails.profile.description': 'このゲームの NVIDIA ドライバ設定を構成します。',
   'gameDetails.profile.pinnedManual': '手動で選択済み。',
   'gameDetails.profile.autoDetected': '自動検出済み。',
   'gameDetails.profile.noExeDetected': 'このゲームの実行可能ファイルが見つかりません。',
   'gameDetails.profile.noExe': '実行ファイルなし',
-  'gameDetails.profile.noProfile': 'NVIDIA プロファイルが見つかりません。',
 
   'gameDetails.nvapi.requiresDriver': 'ドライバー {version}+ が必要です',
   'gameDetails.nvapi.unavailable': '利用不可',
   'gameDetails.nvapi.resetDefault': 'デフォルトにリセット',
-  'gameDetails.nvapi.alreadyDefault': '既にデフォルトです',
-  'gameDetails.nvapi.restoreBaselineLabel': '初期値に戻す',
-  'gameDetails.nvapi.restoreBaseline': '初期値に戻す',
-  'gameDetails.nvapi.alreadyBaseline': '既に初期値です',
-  'gameDetails.nvapi.noBaseline': '初期値が保存されていません',
+  'gameDetails.nvapi.noExplicitOverride': 'リセットする明示的なプロファイル設定はありません',
+  'gameDetails.nvapi.resetStateUnknown': 'プロファイル設定の有無を確認できませんでした',
+  'gameDetails.nvapi.restoreOriginalLabel': '元の値に戻す',
+  'gameDetails.nvapi.restoreOriginal': '元の値に戻す',
+  'gameDetails.nvapi.alreadyOriginal': '既に元の値です',
+  'gameDetails.nvapi.noOriginal': '元の値は保存されていません',
   'gameDetails.nvapi.versionUnavailable': 'DLSS バージョンを取得できません',
 
   'gameDetails.nvapi.warning.noDll': 'インストールディレクトリに DLSS DLL が見つかりません。',
@@ -382,6 +385,10 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI が利用できません。',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI の初期化に失敗しました。',
   'gameDetails.nvapi.warning.drsFailed': 'DRS セッションを作成できませんでした。',
+  'gameDetails.nvapi.warning.executableAmbiguous':
+    'NVIDIA がこの実行ファイルに一致する複数のプロファイルを検出しました。',
+  'gameDetails.nvapi.warning.drsProfileLookupFailed':
+    'この実行ファイルの NVIDIA プロファイルを読み取れませんでした。',
 
   'operations.title': '操作履歴',
   'operations.subtitleGame': '{title} のアクティビティ',
@@ -530,7 +537,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
 
   'nvidia.changeSettingFailed': '設定の適用に失敗しました',
   'nvidia.revertDefaultFailed': 'デフォルト設定への復元に失敗しました',
-  'nvidia.revertBaselineFailed': '初期設定への復元に失敗しました',
+  'nvidia.revertOriginalFailed': '元の設定を復元できませんでした',
 
   'indicator.changeFailed': 'DLSS インジケーターの切り替えに失敗しました',
 
@@ -1142,4 +1149,48 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.optiscaler.attributionLink': 'プロジェクトを見る',
   'user_message.luma_required_by_optiscaler':
     'このゲームの OptiScaler には Luma が必要です。先に OptiScaler をアンインストールしてください。',
+  'gameDetails.profile.state.noExecutable':
+    'ゲームの実行ファイルを選択して NVIDIA プロファイルを確認してください。',
+  'gameDetails.profile.state.nvapiUnavailable':
+    'このシステムでは NVIDIA プロファイルを管理できません。',
+  'gameDetails.profile.state.ambiguous':
+    'この実行ファイルに複数の NVIDIA プロファイルが一致しました。変更はブロックされています。',
+  'gameDetails.profile.state.error': 'NVIDIA プロファイルを確認できませんでした。',
+  'gameDetails.profile.state.missing': 'NVIDIA プロファイルなし',
+  'gameDetails.profile.state.ownedByAnotherGame':
+    'このプロファイルは別のゲームで管理されています。',
+  'gameDetails.profile.state.conflict':
+    '保存された NVIDIA プロファイルの状態を確認できませんでした。変更はブロックされています。',
+  'gameDetails.profile.state.pending': 'NVIDIA プロファイル操作の復旧が必要です。',
+  'gameDetails.profile.create': 'プロファイルを作成',
+  'gameDetails.profile.delete': 'プロファイルを削除',
+  'gameDetails.profile.deleteBlocked': '現在このプロファイルは削除できません。',
+  'gameDetails.profile.boundExecutable': '関連付けられた実行ファイル',
+  'gameDetails.profile.deleteConfirmTitle': '{profileName} を削除しますか？',
+  'gameDetails.profile.deleteConfirmDescription':
+    'NVIDIA ドライバーのプロファイルを削除します。プロファイル設定は適用されなくなります。',
+  'gameDetails.profile.checking': 'NVIDIA プロファイルを確認中…',
+  'gameDetails.profile.creating': 'プロファイルを作成中…',
+  'gameDetails.profile.deleting': 'プロファイルを削除中…',
+  'gameDetails.profile.deleteConfirmAction': 'プロファイルを削除',
+  'gameDetails.profile.moveConfirmTitle': 'RenderPilot プロファイルを移動しますか？',
+  'gameDetails.profile.moveConfirmDescription':
+    'プロファイルの関連付けを {from} から {to} に移動しますか？ドライバーの関連付けと実行ファイルの選択を同時に更新します。',
+  'gameDetails.profile.moveConfirmAction': 'プロファイルを移動',
+  'gameDetails.profile.createFailed': 'NVIDIA プロファイルを作成できませんでした。',
+  'gameDetails.profile.deleteFailed': 'NVIDIA プロファイルを削除できませんでした。',
+  'gameDetails.profile.moveFailed': 'NVIDIA プロファイルを移動できませんでした。',
+  'gameDetails.profile.state.available': 'NVIDIA プロファイルが見つかりました。',
+  'gameDetails.profile.retry': '再試行',
+  'gameDetails.profile.retryRecovery': '復旧を再試行',
+  'gameDetails.profile.refreshFailed':
+    'NVIDIA プロファイルは変更されましたが、ゲームの詳細を更新できませんでした。',
+  'gameDetails.profile.pendingOtherGame':
+    '別のゲームの保留中の操作により、復旧がブロックされています。',
+  'gameDetails.profile.pendingGlobal': '復旧を再試行するには、NVIDIA 設定を開いてください。',
+  'gameDetails.profile.openGame': 'ゲームの詳細を表示',
+  'gameDetails.profile.executableSelectionBlocked':
+    'NVIDIA プロファイルを確認できませんでした。この実行ファイルを変更する前に、上でプロファイルの確認を再試行してください。',
+  'gameDetails.profile.executableSelectionChecking':
+    'NVIDIA プロファイルを確認しています。確認が完了すると、この実行ファイルを選択できます。',
 });

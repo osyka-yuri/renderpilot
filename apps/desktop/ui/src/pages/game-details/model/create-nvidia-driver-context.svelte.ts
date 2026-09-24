@@ -78,13 +78,13 @@ export function createNvidiaDriverContext() {
   async function revert(
     gameId: string,
     key: string,
-    target: 'predefined' | 'baseline',
+    target: 'predefined' | 'original',
   ): Promise<void> {
     if (!gameId) {
       return;
     }
     const label =
-      target === 'predefined' ? t('nvidia.revertDefaultFailed') : t('nvidia.revertBaselineFailed');
+      target === 'predefined' ? t('nvidia.revertDefaultFailed') : t('nvidia.revertOriginalFailed');
     await store.runWrite(key, label, () => revertNvapiSetting(gameId, key, target));
   }
 

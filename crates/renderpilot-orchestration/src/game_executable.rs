@@ -51,6 +51,14 @@ pub struct ResolvedExecutable {
     pub source: ExeSource,
 }
 
+pub(crate) fn is_existing_executable_file(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+}
+
 // -----------------------------------------------------------------------------
 // Scoring (pure, platform-agnostic)
 // -----------------------------------------------------------------------------
@@ -127,12 +135,17 @@ pub fn resolve_primary_executable(
     use renderpilot_detection::analyze_executable;
     use renderpilot_platform_windows::{detect_executable_candidates, is_bound_shipping_target};
 
-    if let Some(over) = override_path.filter(|path| path.exists())
-        && let Ok(path) = PathRef::new(to_forward_slashes(over))
-    {
+    if let Some(over) = override_path.filter(|path| is_existing_executable_file(path)) {
+        // Older catalog rows may retain a verbatim path written before the
+        // selector began storing normal DOS/UNC spellings. DRS CreateApplication
+        // rejects the `\\?\` drive form, so normalize the shared selection here
+        // as well as when new overrides are written. Unsupported device
+        // namespaces fail closed instead of silently choosing an auto candidate.
+        let over = crate::paths::strip_windows_verbatim_prefix(over).ok()?;
+        let path = PathRef::new(to_forward_slashes(&over)).ok()?;
         return Some(ResolvedExecutable {
-            file_name: file_name_of(over),
-            graphics: analyze_executable(over),
+            file_name: file_name_of(&over),
+            graphics: analyze_executable(&over),
             path,
             source: ExeSource::Override,
         });
@@ -160,8 +173,10 @@ pub fn resolve_primary_executable(
     candidates
         .into_iter()
         .filter_map(|candidate| {
-            let path = PathRef::new(to_forward_slashes(&candidate.absolute_path)).ok()?;
-            let graphics = analyze_executable(&candidate.absolute_path);
+            let absolute_path =
+                crate::paths::strip_windows_verbatim_prefix(&candidate.absolute_path).ok()?;
+            let path = PathRef::new(to_forward_slashes(&absolute_path)).ok()?;
+            let graphics = analyze_executable(&absolute_path);
             let authoritative = launch_exe
                 .as_deref()
                 .is_some_and(|name| name.eq_ignore_ascii_case(&candidate.file_name));
@@ -405,6 +420,51 @@ mod tests {
         assert!(resolved.is_some());
         let resolved = resolved.unwrap();
         assert_eq!(resolved.file_name, "custom_game.exe");
+    }
+
+    #[test]
+    fn resolve_primary_executable_ignores_existing_non_executable_overrides() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let directory_override = temp.path().join("folder.exe");
+        std::fs::create_dir(&directory_override).expect("create directory override");
+        assert!(resolve_primary_executable(temp.path(), Some(&directory_override), true).is_none());
+
+        let file_override = temp.path().join("game.txt");
+        std::fs::write(&file_override, b"not an executable").expect("write non-exe file");
+        assert!(resolve_primary_executable(temp.path(), Some(&file_override), true).is_none());
+    }
+
+    #[test]
+    fn executable_file_check_accepts_case_insensitive_exe_extension() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("Game.EXE");
+        std::fs::write(&path, b"test executable").expect("write exe fixture");
+        assert!(super::is_existing_executable_file(&path));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_primary_executable_normalizes_existing_verbatim_override() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let fake_exe = temp.path().join("custom_game.exe");
+        std::fs::write(&fake_exe, b"MZ").expect("write fake exe");
+        let canonical = std::fs::canonicalize(&fake_exe).expect("canonicalize override");
+        let resolved = resolve_primary_executable(temp.path(), Some(&canonical), true)
+            .expect("existing override resolves");
+
+        assert_eq!(resolved.source, ExeSource::Override);
+        assert!(!resolved.path.as_str().starts_with("//?/"));
+        assert_eq!(
+            renderpilot_domain::normalized_path_key(resolved.path.as_str()),
+            renderpilot_domain::normalized_path_key(&canonical.to_string_lossy())
+        );
+
+        let persisted_wire = canonical.to_string_lossy().replace('\\', "/");
+        let persisted =
+            resolve_primary_executable(temp.path(), Some(Path::new(&persisted_wire)), true)
+                .expect("persisted forward-slash override resolves");
+        assert_eq!(persisted.source, ExeSource::Override);
+        assert_eq!(persisted.path, resolved.path);
     }
 
     #[test]

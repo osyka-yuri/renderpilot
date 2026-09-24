@@ -260,6 +260,17 @@ pub(in crate::repositories) fn inspect_conflicts(
 
     for source in &plan.sources {
         let source_id = source.source_game_id.as_str();
+        for table in [
+            "nvapi_owned_profiles",
+            "nvapi_game_claim_refs",
+            "pending_drs_operations",
+        ] {
+            if row_exists(connection, table, destination)?
+                || row_exists(connection, table, source_id)?
+            {
+                blocking.insert(table.to_owned());
+            }
+        }
         // A pending Engine.ini publication must be recovered/finalized by its
         // owning add-on before game identity consolidation.  Copying that raw
         // token to a rebased row would make the stage/path ownership ambiguous;
@@ -335,21 +346,6 @@ pub(in crate::repositories) fn inspect_conflicts(
             &mut blocking,
         )?;
 
-        if keyed_rows_differ(
-            connection,
-            "nvapi_setting_baselines",
-            "setting_key",
-            &[
-                "baseline_dword",
-                "baseline_was_predefined",
-                "predefined_dword",
-                "captured_exe",
-            ],
-            destination,
-            source_id,
-        )? {
-            blocking.insert("nvapi_setting_baselines".to_owned());
-        }
         if keyed_rows_differ(
             connection,
             "profile_addon_capabilities",
@@ -512,21 +508,6 @@ fn inspect_source_to_source_conflicts(
                 }
             }
 
-            if keyed_rows_differ(
-                connection,
-                "nvapi_setting_baselines",
-                "setting_key",
-                &[
-                    "baseline_dword",
-                    "baseline_was_predefined",
-                    "predefined_dword",
-                    "captured_exe",
-                ],
-                left_id,
-                right_id,
-            )? {
-                blocking.insert("nvapi_setting_baselines".to_owned());
-            }
             if keyed_rows_differ(
                 connection,
                 "profile_addon_capabilities",

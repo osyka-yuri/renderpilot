@@ -8,7 +8,10 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import type { ExecutableCandidate } from '@features/nvapi-settings';
 
 import type { GameExecutableContext } from '../model/create-game-executable-context.svelte';
-import type { ExecutableLockReason } from '../model/game-executable-lock';
+import type {
+  ExecutableLockReason,
+  ProfileSelectionBlockReason,
+} from '../model/game-executable-lock';
 import GameExecutablePopoverTestHost from './GameExecutablePopover.test-host.svelte';
 
 describe('GameExecutablePopover', () => {
@@ -54,6 +57,11 @@ describe('GameExecutablePopover', () => {
 
   it('presents a focusable managed lock with rollback guidance', async () => {
     const trigger = render({ lockReason: 'd3d12_managed' });
+    const host = component as {
+      setProfileSelectionBlockReason: (reason: ProfileSelectionBlockReason | null) => void;
+    };
+    host.setProfileSelectionBlockReason('checking');
+    flushSync();
 
     expect(trigger.disabled).toBe(false);
     expect(trigger.getAttribute('aria-disabled')).toBe('true');
@@ -67,6 +75,7 @@ describe('GameExecutablePopover', () => {
     await vi.waitFor(() => {
       const tooltip = document.body.querySelector<HTMLElement>('[role="tooltip"]');
       expect(tooltip?.textContent).toContain('Executable selection is locked');
+      expect(tooltip?.textContent).not.toContain('Checking the NVIDIA profile.');
       expect(tooltip?.textContent).toContain(
         'To choose a different EXE, fully roll back the D3D12 component.',
       );
@@ -90,6 +99,39 @@ describe('GameExecutablePopover', () => {
     });
   });
 
+  it('uses profile-check copy without a D3D12 heading and preserves D3D12 precedence', async () => {
+    render();
+    const host = component as {
+      setProfileSelectionBlockReason: (reason: ProfileSelectionBlockReason | null) => void;
+    };
+    host.setProfileSelectionBlockReason('checking');
+    flushSync();
+    const trigger = target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Game executable: game.exe"]',
+    );
+    if (!trigger) {
+      throw new Error('Executable selector was not rendered while profile verification is pending');
+    }
+
+    trigger.focus();
+    flushSync();
+    await vi.waitFor(() => {
+      const tooltip =
+        document.body.querySelector<HTMLElement>('[role="tooltip"]')?.textContent ?? '';
+      expect(tooltip).toContain('Checking the NVIDIA profile.');
+      expect(tooltip).not.toContain('D3D12');
+    });
+
+    host.setProfileSelectionBlockReason('unverified');
+    flushSync();
+    await vi.waitFor(() => {
+      const tooltip =
+        document.body.querySelector<HTMLElement>('[role="tooltip"]')?.textContent ?? '';
+      expect(tooltip).toContain('Could not verify the NVIDIA profile.');
+      expect(tooltip).not.toContain('D3D12');
+    });
+  });
+
   it('keeps the unlocked selector interactive without a native title', async () => {
     const trigger = render();
 
@@ -110,8 +152,72 @@ describe('GameExecutablePopover', () => {
     expect(popoverContent().textContent).toContain('Game executable');
   });
 
+  it('blocks executable changes while profile ownership is unverified and re-enables after resolution', async () => {
+    const setOverride = vi.fn(() => Promise.resolve(true));
+    const clearOverride = vi.fn(() => Promise.resolve(true));
+    const trigger = render({
+      exe: executableContext({
+        effectiveExeSource: 'override',
+        autoAbsolutePath: 'C:/Games/Test/auto.exe',
+        supportedCandidates: [executableCandidate('alternate.exe', 'bin/alternate.exe', null)],
+        setOverride,
+        clearOverride,
+      }),
+    });
+    const host = component as {
+      setProfileSelectionBlockReason: (reason: ProfileSelectionBlockReason | null) => void;
+    };
+
+    await openPopover(trigger);
+    const popover = popoverContent();
+    const alternate = findOption(popover, 'alternate.exe');
+    const reset = findButton(popover, 'Reset to auto-detect');
+
+    host.setProfileSelectionBlockReason('unverified');
+    flushSync();
+    const blockedTrigger = target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Game executable: game.exe"]',
+    );
+    if (!blockedTrigger) {
+      throw new Error('Executable selector was not rendered while profile verification is blocked');
+    }
+    expect(blockedTrigger.getAttribute('aria-disabled')).toBe('true');
+    expect(blockedTrigger.getAttribute('aria-label')).toBe('Game executable: game.exe');
+    expect(blockedTrigger.getAttribute('title')).toBeNull();
+    blockedTrigger.focus();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain(
+        'Could not verify the NVIDIA profile.',
+      );
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).not.toContain('D3D12');
+    });
+    expect(document.body.querySelector(openPopoverSelector)).toBeNull();
+    alternate.click();
+    reset.click();
+    blockedTrigger.click();
+    flushSync();
+    expect(setOverride).not.toHaveBeenCalled();
+    expect(clearOverride).not.toHaveBeenCalled();
+    expect(document.body.querySelector(openPopoverSelector)).toBeNull();
+
+    host.setProfileSelectionBlockReason(null);
+    flushSync();
+    const resolvedTrigger = target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Game executable: game.exe"]',
+    );
+    if (!resolvedTrigger) {
+      throw new Error('Executable selector was not rendered after profile verification');
+    }
+    expect(resolvedTrigger.getAttribute('aria-disabled')).toBeNull();
+    await openPopover(resolvedTrigger);
+    findOption(popoverContent(), 'alternate.exe').click();
+    flushSync();
+    expect(setOverride).toHaveBeenCalledWith('steam:123', 'C:/Games/Test/bin/alternate.exe');
+  });
+
   it('renders candidate groups in order and applies the selected executable', async () => {
-    const setOverride = vi.fn(() => Promise.resolve());
+    const setOverride = vi.fn(() => Promise.resolve(true));
     const exe = executableContext({
       supportedCandidates: [
         executableCandidate('game.exe', 'game.exe', null),
@@ -141,11 +247,56 @@ describe('GameExecutablePopover', () => {
 
     expect(setOverride).toHaveBeenCalledOnce();
     expect(setOverride).toHaveBeenCalledWith('steam:123', 'C:/Games/Test/bin/alternate.exe');
-    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    await vi.waitFor(() => {
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    });
+  });
+
+  it('keeps the selector open and presents an accessible error when the selection fails', async () => {
+    const exe = executableContext({
+      supportedCandidates: [executableCandidate('alternate.exe', 'bin/alternate.exe', null)],
+      changeError: 'The executable selection could not be saved.',
+      setOverride: vi.fn(() => Promise.resolve(false)),
+    });
+    const trigger = render({ exe });
+
+    await openPopover(trigger);
+    findOption(popoverContent(), 'alternate.exe').click();
+    flushSync();
+
+    await vi.waitFor(() => {
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(popoverContent().querySelector('[role="alert"]')?.textContent).toContain(
+        'Could not update the executable selection.',
+      );
+      expect(popoverContent().querySelector('[role="alert"]')?.textContent).toContain(
+        'The executable selection could not be saved.',
+      );
+    });
+  });
+
+  it('presents committed selection refresh failures separately from mutation failures', async () => {
+    const trigger = render({
+      exe: executableContext({
+        refreshError: 'The NVIDIA profile details could not be refreshed.',
+      }),
+    });
+
+    await openPopover(trigger);
+    const content = popoverContent();
+    const refreshStatus = content.querySelector('[role="status"]');
+
+    expect(refreshStatus?.textContent).toContain(
+      'Executable selection was updated, but related game details could not be refreshed.',
+    );
+    expect(refreshStatus?.textContent).toContain(
+      'The NVIDIA profile details could not be refreshed.',
+    );
+    expect(content.querySelector('[role="alert"]')).toBeNull();
   });
 
   it('resets a manual executable directly', async () => {
-    const clearOverride = vi.fn(() => Promise.resolve());
+    const clearOverride = vi.fn(() => Promise.resolve(true));
     const exe = executableContext({
       effectiveExe: 'custom.exe',
       effectiveExeSource: 'override',
@@ -162,15 +313,111 @@ describe('GameExecutablePopover', () => {
 
     expect(clearOverride).toHaveBeenCalledOnce();
     expect(clearOverride).toHaveBeenCalledWith('steam:123');
-    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    await vi.waitFor(() => {
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    });
+  });
+
+  it('keeps the confirmed move dialog and destination after a failed move', async () => {
+    const moveProfile = vi.fn(() => Promise.resolve(false));
+    const trigger = render({
+      exe: executableContext({
+        supportedCandidates: [executableCandidate('alternate.exe', 'bin/alternate.exe', null)],
+      }),
+      ownedBindingPath: 'C:/Games/Test/game.exe',
+      onMoveProfile: moveProfile,
+    });
+
+    await openPopover(trigger);
+    findOption(popoverContent(), 'alternate.exe').click();
+    flushSync();
+
+    const confirmDialog = await waitForMoveDialog();
+    expect(confirmDialog.textContent).toContain('C:/Games/Test/bin/alternate.exe');
+    findButton(confirmDialog, 'Move profile').click();
+
+    await vi.waitFor(() => {
+      expect(moveProfile).toHaveBeenCalledWith('C:/Games/Test/bin/alternate.exe', false);
+      expect(confirmDialog.querySelector('[role="alert"]')?.textContent).toContain(
+        'Could not move the NVIDIA profile.',
+      );
+    });
+    expect(document.body.querySelector(openPopoverSelector)).toBe(confirmDialog);
+    expect(confirmDialog.textContent).toContain('C:/Games/Test/bin/alternate.exe');
+  });
+
+  it('keeps a running move confirmation visible while the profile status refreshes', async () => {
+    const moveResult = Promise.withResolvers<boolean>();
+    const moveProfile = vi.fn(() => moveResult.promise);
+    const trigger = render({
+      exe: executableContext({
+        supportedCandidates: [executableCandidate('alternate.exe', 'bin/alternate.exe', null)],
+      }),
+      ownedBindingPath: 'C:/Games/Test/game.exe',
+      onMoveProfile: moveProfile,
+    });
+
+    await openPopover(trigger);
+    findOption(popoverContent(), 'alternate.exe').click();
+    flushSync();
+
+    const confirmDialog = await waitForMoveDialog();
+    findButton(confirmDialog, 'Move profile').click();
+    flushSync();
+    expect(moveProfile).toHaveBeenCalledOnce();
+
+    const host = component as {
+      setProfileSelectionBlockReason: (reason: ProfileSelectionBlockReason | null) => void;
+    };
+    host.setProfileSelectionBlockReason('checking');
+    flushSync();
+
+    expect(document.body.querySelector(openPopoverSelector)).toBe(confirmDialog);
+    expect(confirmDialog.textContent).toContain('C:/Games/Test/game.exe');
+    expect(findButton(confirmDialog, 'Move profile').disabled).toBe(true);
+
+    host.setProfileSelectionBlockReason(null);
+    moveResult.resolve(false);
+    await vi.waitFor(() => {
+      expect(confirmDialog.querySelector('[role="alert"]')?.textContent).toContain(
+        'Could not move the NVIDIA profile.',
+      );
+    });
+    expect(document.body.querySelector(openPopoverSelector)).toBe(confirmDialog);
+  });
+
+  it('closes the move dialog only after the profile move succeeds', async () => {
+    const moveProfile = vi.fn(() => Promise.resolve(true));
+    const trigger = render({
+      exe: executableContext({
+        supportedCandidates: [executableCandidate('alternate.exe', 'bin/alternate.exe', null)],
+      }),
+      ownedBindingPath: 'C:/Games/Test/game.exe',
+      onMoveProfile: moveProfile,
+    });
+
+    await openPopover(trigger);
+    findOption(popoverContent(), 'alternate.exe').click();
+    flushSync();
+
+    const confirmDialog = await waitForMoveDialog();
+    findButton(confirmDialog, 'Move profile').click();
+    await vi.waitFor(() => {
+      expect(moveProfile).toHaveBeenCalledOnce();
+      expect(document.body.querySelector(openPopoverSelector)).toBeNull();
+    });
   });
 
   function render({
     exe = executableContext(),
     lockReason = null,
+    ownedBindingPath = null,
+    onMoveProfile,
   }: {
     exe?: GameExecutableContext;
     lockReason?: ExecutableLockReason | null;
+    ownedBindingPath?: string | null;
+    onMoveProfile?: (path: string, selectAutomatically: boolean) => boolean | Promise<boolean>;
   } = {}): HTMLButtonElement {
     component = mount(GameExecutablePopoverTestHost, {
       target,
@@ -178,6 +425,8 @@ describe('GameExecutablePopover', () => {
         gameId: 'steam:123',
         exe,
         lockReason,
+        ownedBindingPath,
+        onMoveProfile,
       },
     });
     flushSync();
@@ -191,6 +440,19 @@ describe('GameExecutablePopover', () => {
     return trigger;
   }
 });
+
+async function waitForMoveDialog(): Promise<HTMLElement> {
+  return await vi.waitFor(() => {
+    const dialog =
+      [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find((candidate) =>
+        candidate.textContent.includes('Move the RenderPilot profile?'),
+      ) ?? null;
+    if (!dialog) {
+      throw new Error('Profile move confirmation dialog did not open');
+    }
+    return dialog;
+  });
+}
 
 async function openPopover(trigger: HTMLButtonElement): Promise<void> {
   trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
@@ -248,15 +510,18 @@ function executableContext(overrides: Partial<GameExecutableContext> = {}): Game
   return {
     busy: false,
     loadError: null,
+    changeError: null,
+    refreshError: null,
     effectiveExe: 'game.exe',
     effectiveAbsolutePath: 'C:/Games/Test/game.exe',
+    autoAbsolutePath: 'C:/Games/Test/game.exe',
     effectiveExeSource: 'auto',
     supportedCandidates: [],
     filteredOutCandidates: [],
-    reload: vi.fn(() => Promise.resolve()),
+    reload: vi.fn(() => Promise.resolve(true)),
     clear: vi.fn(),
-    setOverride: vi.fn(() => Promise.resolve()),
-    clearOverride: vi.fn(() => Promise.resolve()),
+    setOverride: vi.fn(() => Promise.resolve(true)),
+    clearOverride: vi.fn(() => Promise.resolve(true)),
     ...overrides,
   };
 }

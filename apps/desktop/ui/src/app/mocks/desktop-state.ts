@@ -30,6 +30,7 @@ export type MockState = {
   games: GameSummary[];
   detailsByGameId: Map<string, GameDetails>;
   executableOverrideByGameId: Map<string, string>;
+  nvapiProfileByGameId: Map<string, { profileName: string; bindingPath: string }>;
   componentBaselinesByGameId: Map<string, Map<string, ComponentFile[]>>;
   autoGameIds: Set<string>;
   manualGameIdByInstallPath: Map<string, string>;
@@ -72,6 +73,7 @@ export function createMockState(): MockState {
       seedGames.map(({ details }) => [details.game.identity.id, details] as const),
     ),
     executableOverrideByGameId: new Map(),
+    nvapiProfileByGameId: new Map(),
     componentBaselinesByGameId: new Map(),
     autoGameIds: new Set(seedGames.map(({ details }) => details.game.identity.id)),
     manualGameIdByInstallPath: new Map(),

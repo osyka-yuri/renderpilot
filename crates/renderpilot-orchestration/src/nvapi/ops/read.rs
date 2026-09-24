@@ -4,7 +4,7 @@ use renderpilot_nvapi::setting::{NvapiSetting, SettingContext};
 
 use super::super::dto::{NvapiWarningDto, SettingStateResponse};
 use super::assemble::assemble_response;
-use super::live::{LiveRead, read_dword_or_default, read_live_or_default};
+use super::live::{LiveRead, profile_read_identity, read_dword_or_default, read_live_or_default};
 use super::session::open_drs_session;
 use super::target::SettingTarget;
 use crate::ServiceError;
@@ -17,7 +17,7 @@ pub fn read_setting_state(
     ctx: &SettingContext,
 ) -> Result<SettingStateResponse, ServiceError> {
     let live = read_live_or_default(target, setting, ctx);
-    assemble_response(setting, ctx, context.storage(), target, live)
+    assemble_response(setting, ctx, context.storage(), target, &live)
 }
 
 /// Reads the live state of **every** supplied setting through a single DRS
@@ -32,7 +32,7 @@ pub fn read_all_setting_states(
     ctx: &SettingContext,
 ) -> Result<Vec<SettingStateResponse>, ServiceError> {
     let storage = context.storage();
-    let exe = ctx.effective_exe.as_deref();
+    let exe = ctx.effective_exe_path.as_deref();
 
     let session_result = if target.requires_exe() && exe.is_none() {
         Err(NvapiWarningDto::NoExecutable)
@@ -46,16 +46,18 @@ pub fn read_all_setting_states(
         Some(session) => target.resolve_profile_for_read(session, exe),
         None => (None, None),
     };
+    let profile_identity = profile.as_ref().map(profile_read_identity);
     let unavailable_warning = session_warning.or(profile_warning);
 
     let mut responses = Vec::with_capacity(settings.len());
     for setting in settings {
         let setting = setting.as_ref();
-        let live = match &profile {
-            Some(profile) => read_dword_or_default(profile, setting),
-            None => LiveRead::unavailable(setting.default_dword(), unavailable_warning),
+        let live = match (&profile, &profile_identity) {
+            (Some(profile), Some(identity)) => read_dword_or_default(profile, setting, identity),
+            (None, None) => LiveRead::unavailable(setting.default_dword(), unavailable_warning),
+            _ => unreachable!("profile and identity are resolved together"),
         };
-        responses.push(assemble_response(setting, ctx, storage, target, live)?);
+        responses.push(assemble_response(setting, ctx, storage, target, &live)?);
     }
     Ok(responses)
 }

@@ -21,6 +21,7 @@ export function mockResolveGameExecutable(gameId: string): Promise<EffectiveExec
     return clone({
       file_name: effective.file_name,
       absolute_path: effective.absolute_path,
+      auto_absolute_path: candidates[0]?.absolute_path ?? null,
       source: override ? 'override' : 'auto',
     });
   });

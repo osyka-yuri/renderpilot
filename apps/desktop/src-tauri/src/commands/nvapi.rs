@@ -162,6 +162,59 @@ pub async fn revert_nvapi_setting(
         .await
 }
 
+#[tauri::command]
+pub async fn get_nvapi_profile_status(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let boundary = CommandBoundary::new(CommandOperation::GetNvapiProfileStatus);
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    boundary
+        .run(move || desktop::get_nvapi_profile_status(&context, game_id))
+        .await
+}
+
+#[tauri::command]
+pub async fn create_nvapi_profile(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let boundary = CommandBoundary::new(CommandOperation::CreateNvapiProfile);
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    boundary
+        .run(move || desktop::create_nvapi_profile(&context, game_id))
+        .await
+}
+
+#[tauri::command]
+pub async fn delete_nvapi_profile(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let boundary = CommandBoundary::new(CommandOperation::DeleteNvapiProfile);
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    boundary
+        .run(move || desktop::delete_nvapi_profile(&context, game_id))
+        .await
+}
+
+#[tauri::command]
+pub async fn move_nvapi_profile(
+    game_id: String,
+    absolute_path: String,
+    select_automatically: bool,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let boundary = CommandBoundary::new(CommandOperation::MoveNvapiProfile);
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    let absolute_path = require_non_empty_string(&boundary, "absolute_path", absolute_path)?;
+    boundary
+        .run(move || {
+            desktop::move_nvapi_profile(&context, game_id, &absolute_path, select_automatically)
+        })
+        .await
+}
+
 // ---------------------------------------------------------------------------
 // Global (base profile) NVAPI settings
 // ---------------------------------------------------------------------------

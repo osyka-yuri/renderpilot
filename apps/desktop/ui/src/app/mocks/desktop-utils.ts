@@ -8,7 +8,11 @@ import type {
   GameSummary,
   RemoveGameFromCatalogResult,
 } from '@entities/game';
-import type { EffectiveExecutable, ExecutableCandidate } from '@features/nvapi-settings';
+import type {
+  EffectiveExecutable,
+  ExecutableCandidate,
+  NvapiProfileStatus,
+} from '@features/nvapi-settings';
 import type { CatalogSettingPayload } from '@entities/settings';
 import type {
   ApplySwapResult,
@@ -54,6 +58,10 @@ export type DesktopCommandPayloadMap = {
   resolve_game_executable: { gameId: string };
   set_game_executable_override: { gameId: string; absolutePath: string };
   clear_game_executable_override: { gameId: string };
+  get_nvapi_profile_status: { gameId: string };
+  create_nvapi_profile: { gameId: string };
+  delete_nvapi_profile: { gameId: string };
+  move_nvapi_profile: { gameId: string; absolutePath: string; selectAutomatically: boolean };
   fetch_game_cover: { gameId: string };
   clear_game_cover: { gameId: string };
   set_game_cover: { gameId: string; sourcePath: string };
@@ -160,6 +168,10 @@ export type DesktopCommandResultMap = {
   resolve_game_executable: EffectiveExecutable | null;
   set_game_executable_override: undefined;
   clear_game_executable_override: undefined;
+  get_nvapi_profile_status: NvapiProfileStatus;
+  create_nvapi_profile: undefined;
+  delete_nvapi_profile: undefined;
+  move_nvapi_profile: undefined;
   fetch_game_cover: CoverArtworkResult;
   clear_game_cover: { cleared: boolean };
   set_game_cover: CoverArtworkResult;
@@ -232,6 +244,10 @@ const ALL_DESKTOP_COMMANDS = [
   'resolve_game_executable',
   'set_game_executable_override',
   'clear_game_executable_override',
+  'get_nvapi_profile_status',
+  'create_nvapi_profile',
+  'delete_nvapi_profile',
+  'move_nvapi_profile',
   'fetch_game_cover',
   'clear_game_cover',
   'set_game_cover',
@@ -483,7 +499,7 @@ function getRiskSortValue(riskLevel: GameSummary['risk_level']): number {
   return RISK_SORT_ORDER[riskLevel];
 }
 
-export function resolveMock<T>(factory: () => T): Promise<T> {
+export function resolveMock<T>(factory: () => T): Promise<Awaited<T>> {
   try {
     return Promise.resolve(factory());
   } catch (error) {

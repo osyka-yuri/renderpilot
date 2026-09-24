@@ -364,27 +364,31 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.executable.otherGroup': 'Sonstige (Launcher, Installer, Tools)',
   'gameDetails.executable.customBadge': 'Manuell',
   'gameDetails.executable.reset': 'Auf automatische Erkennung zurücksetzen',
+  'gameDetails.executable.changeFailed':
+    'Die Auswahl der ausführbaren Datei konnte nicht aktualisiert werden.',
+  'gameDetails.executable.loadFailed':
+    'Die Auswahl der ausführbaren Datei konnte nicht geladen werden.',
+  'gameDetails.executable.refreshFailed':
+    'Die Auswahl der ausführbaren Datei wurde übernommen, aber die zugehörigen Spieldetails konnten nicht aktualisiert werden.',
   'gameDetails.executable.tooltipAuto':
     'Spiel-Programmdatei: automatisch erkannt. Wird vom NVIDIA-Profil und RenoDX verwendet.',
   'gameDetails.executable.tooltipCustom':
     'Spiel-Programmdatei: manuell ausgewählt. Wird vom NVIDIA-Profil und RenoDX verwendet.',
-  'gameDetails.profile.title': 'NVIDIA Profil',
-  'gameDetails.profile.description':
-    'Konfigurieren Sie die NVIDIA-Treibereinstellungen für dieses Spiel.',
+  'gameDetails.profile.title': 'NVIDIA-Profil',
   'gameDetails.profile.pinnedManual': 'Manuell ausgewählt.',
   'gameDetails.profile.autoDetected': 'Automatisch erkannt.',
   'gameDetails.profile.noExeDetected': 'Keine ausführbare Datei für dieses Spiel gefunden.',
   'gameDetails.profile.noExe': 'Keine ausführbare Datei',
-  'gameDetails.profile.noProfile': 'NVIDIA-Profil nicht gefunden.',
 
   'gameDetails.nvapi.requiresDriver': 'erfordert Treiber {version}+',
   'gameDetails.nvapi.unavailable': 'nicht verfügbar',
   'gameDetails.nvapi.resetDefault': 'Auf Standard zurücksetzen',
-  'gameDetails.nvapi.alreadyDefault': 'Bereits Standard',
-  'gameDetails.nvapi.restoreBaselineLabel': 'Anfangswert wiederherstellen',
-  'gameDetails.nvapi.restoreBaseline': 'Anfangswert wiederherstellen',
-  'gameDetails.nvapi.alreadyBaseline': 'Bereits auf Anfangswert',
-  'gameDetails.nvapi.noBaseline': 'Kein Anfangswert gespeichert',
+  'gameDetails.nvapi.noExplicitOverride': 'Keine explizite Profilüberschreibung zum Zurücksetzen',
+  'gameDetails.nvapi.resetStateUnknown': 'Profilüberschreibung konnte nicht überprüft werden',
+  'gameDetails.nvapi.restoreOriginalLabel': 'Originalwert wiederherstellen',
+  'gameDetails.nvapi.restoreOriginal': 'Originalwert wiederherstellen',
+  'gameDetails.nvapi.alreadyOriginal': 'Originalwert bereits aktiv',
+  'gameDetails.nvapi.noOriginal': 'Kein Originalwert gespeichert',
   'gameDetails.nvapi.versionUnavailable': 'DLSS-Version nicht verfügbar',
 
   'gameDetails.nvapi.warning.noDll': 'Keine DLSS-DLL im Installationsverzeichnis gefunden.',
@@ -398,6 +402,10 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI nicht verfügbar.',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI-Initialisierung fehlgeschlagen.',
   'gameDetails.nvapi.warning.drsFailed': 'DRS-Sitzung konnte nicht erstellt werden.',
+  'gameDetails.nvapi.warning.executableAmbiguous':
+    'NVIDIA hat mehrere Profiltreffer für diese ausführbare Datei gefunden.',
+  'gameDetails.nvapi.warning.drsProfileLookupFailed':
+    'NVIDIA-Profil für diese ausführbare Datei konnte nicht gelesen werden.',
 
   // ── Operations page ──
   'operations.title': 'Vorgangsjournal',
@@ -557,7 +565,7 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
 
   'nvidia.changeSettingFailed': 'Einstellungen konnten nicht angewendet werden',
   'nvidia.revertDefaultFailed': 'Standardeinstellungen konnten nicht wiederhergestellt werden',
-  'nvidia.revertBaselineFailed': 'Anfangseinstellungen konnten nicht wiederhergestellt werden',
+  'nvidia.revertOriginalFailed': 'Originaleinstellungen konnten nicht wiederhergestellt werden',
 
   'indicator.changeFailed': 'DLSS-Indikator konnte nicht umgeschaltet werden',
 
@@ -1189,4 +1197,50 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'user_message.luma_required_by_optiscaler':
     'OptiScaler benötigt Luma für dieses Spiel. Deinstalliere zuerst OptiScaler.',
   'gameDetails.optiscaler.attributionLink': 'Projekt ansehen',
+  'gameDetails.profile.state.noExecutable':
+    'Wähle eine Spieldatei aus, um ihr NVIDIA-Profil zu prüfen.',
+  'gameDetails.profile.state.nvapiUnavailable':
+    'Die NVIDIA-Profilverwaltung ist auf diesem System nicht verfügbar.',
+  'gameDetails.profile.state.ambiguous':
+    'Mehrere NVIDIA-Profile passen zu dieser ausführbaren Datei. Profiländerungen sind gesperrt.',
+  'gameDetails.profile.state.error': 'Das NVIDIA-Profil konnte nicht geprüft werden.',
+  'gameDetails.profile.state.missing': 'Kein NVIDIA-Profil.',
+  'gameDetails.profile.state.ownedByAnotherGame':
+    'Dieses Profil wird von einem anderen Spiel verwaltet.',
+  'gameDetails.profile.state.conflict':
+    'Der gespeicherte NVIDIA-Profilstatus konnte nicht geprüft werden. Profiländerungen sind gesperrt.',
+  'gameDetails.profile.state.pending':
+    'Für einen NVIDIA-Profilvorgang ist eine Wiederherstellung erforderlich.',
+  'gameDetails.profile.create': 'Profil erstellen',
+  'gameDetails.profile.delete': 'Profil löschen',
+  'gameDetails.profile.deleteBlocked': 'Dieses Profil kann momentan nicht entfernt werden.',
+  'gameDetails.profile.boundExecutable': 'Gebundene ausführbare Datei',
+  'gameDetails.profile.deleteConfirmTitle': '„{profileName}“ löschen?',
+  'gameDetails.profile.deleteConfirmDescription':
+    'Das NVIDIA-Treiberprofil wird entfernt, sodass seine Einstellungen nicht mehr gelten.',
+  'gameDetails.profile.checking': 'NVIDIA-Profil wird geprüft…',
+  'gameDetails.profile.creating': 'Profil wird erstellt…',
+  'gameDetails.profile.deleting': 'Profil wird gelöscht…',
+  'gameDetails.profile.deleteConfirmAction': 'Profil löschen',
+  'gameDetails.profile.moveConfirmTitle': 'RenderPilot-Profil verschieben?',
+  'gameDetails.profile.moveConfirmDescription':
+    'Profilbindung von {from} nach {to} verschieben? Treiberbindung und Executable-Auswahl werden gemeinsam aktualisiert.',
+  'gameDetails.profile.moveConfirmAction': 'Profil verschieben',
+  'gameDetails.profile.createFailed': 'NVIDIA-Profil konnte nicht erstellt werden.',
+  'gameDetails.profile.deleteFailed': 'NVIDIA-Profil konnte nicht gelöscht werden.',
+  'gameDetails.profile.moveFailed': 'NVIDIA-Profil konnte nicht verschoben werden.',
+  'gameDetails.profile.state.available': 'NVIDIA-Profil gefunden.',
+  'gameDetails.profile.retry': 'Erneut versuchen',
+  'gameDetails.profile.retryRecovery': 'Wiederherstellung erneut versuchen',
+  'gameDetails.profile.refreshFailed':
+    'Die NVIDIA-Profiländerung wurde übernommen, aber die Spieldetails konnten nicht aktualisiert werden.',
+  'gameDetails.profile.pendingOtherGame':
+    'Die Wiederherstellung ist durch einen ausstehenden Vorgang für ein anderes Spiel blockiert.',
+  'gameDetails.profile.pendingGlobal':
+    'Öffne die NVIDIA-Einstellungen, um die Wiederherstellung erneut zu versuchen.',
+  'gameDetails.profile.openGame': 'Spieldetails öffnen',
+  'gameDetails.profile.executableSelectionBlocked':
+    'Das NVIDIA-Profil konnte nicht überprüft werden. Wiederhole die Profilprüfung oben, bevor du diese ausführbare Datei änderst.',
+  'gameDetails.profile.executableSelectionChecking':
+    'Das NVIDIA-Profil wird geprüft. Die Auswahl dieser ausführbaren Datei ist verfügbar, sobald die Prüfung abgeschlossen ist.',
 });

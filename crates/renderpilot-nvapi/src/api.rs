@@ -9,11 +9,17 @@ use std::{iter, mem::MaybeUninit, os::raw::c_void, ptr, sync::OnceLock};
 use libloading::Library;
 
 use crate::{
-    error::{NVAPI_INVALID_USER_PRIVILEGE, NVAPI_SETTING_NOT_FOUND, NvapiError},
+    error::{
+        NVAPI_EXECUTABLE_AMBIGUOUS, NVAPI_EXECUTABLE_NOT_FOUND, NVAPI_INVALID_USER_PRIVILEGE,
+        NVAPI_PROFILE_NAME_IN_USE, NVAPI_PROFILE_NOT_FOUND, NVAPI_SETTING_NOT_FOUND, NvapiError,
+    },
     ffi::{
-        NVAPI_UNICODE_STRING_MAX, NVDRS_APPLICATION, NVDRS_APPLICATION_VER, NVDRS_DWORD_TYPE,
-        NVDRS_PROFILE, NVDRS_PROFILE_VER, NVDRS_SETTING, NVDRS_SETTING_VER,
-        NvAPI_DRS_CreateSession_fn, NvAPI_DRS_DeleteProfileSetting_fn, NvAPI_DRS_DestroySession_fn,
+        NVAPI_BINARY_DATA_MAX, NVDRS_APPLICATION, NVDRS_APPLICATION_VER, NVDRS_BINARY_SETTING,
+        NVDRS_CURRENT_PROFILE_LOCATION, NVDRS_DWORD_TYPE, NVDRS_PROFILE, NVDRS_PROFILE_VER,
+        NVDRS_QWORD_TYPE, NVDRS_SETTING, NVDRS_SETTING_VER, NvAPI_DRS_CreateApplication_fn,
+        NvAPI_DRS_CreateProfile_fn, NvAPI_DRS_CreateSession_fn, NvAPI_DRS_DeleteApplicationEx_fn,
+        NvAPI_DRS_DeleteProfile_fn, NvAPI_DRS_DeleteProfileSetting_fn, NvAPI_DRS_DestroySession_fn,
+        NvAPI_DRS_EnumApplications_fn, NvAPI_DRS_EnumSettings_fn,
         NvAPI_DRS_FindApplicationByName_fn, NvAPI_DRS_FindProfileByName_fn,
         NvAPI_DRS_GetBaseProfile_fn, NvAPI_DRS_GetProfileInfo_fn, NvAPI_DRS_GetSetting_fn,
         NvAPI_DRS_GetSetting_v2_fn, NvAPI_DRS_LoadSettings_fn, NvAPI_DRS_SaveSettings_fn,
@@ -27,6 +33,90 @@ use crate::{
 /// Converts a Rust `&str` into a null-terminated UTF-16LE vector.
 fn to_wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(iter::once(0)).collect()
+}
+
+fn write_wide<const N: usize>(target: &mut [u16; N], value: &str) -> Result<(), NvapiError> {
+    let encoded = value.encode_utf16().collect::<Vec<_>>();
+    if encoded.len() >= N {
+        return Err(NvapiError::StringConversion);
+    }
+    target[..encoded.len()].copy_from_slice(&encoded);
+    target[encoded.len()] = 0;
+    Ok(())
+}
+
+fn read_wide(value: &[u16]) -> String {
+    let length = value
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(value.len());
+    String::from_utf16_lossy(&value[..length])
+}
+
+/// Stable, serializable application identity returned by DRS for a checked
+/// fully-qualified executable path. Mutation APIs consume this exact witness.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ApplicationIdentity {
+    /// Full executable path passed to and returned by DRS.
+    pub app_name: String,
+    /// NVIDIA's user-facing application label.
+    pub user_friendly_name: String,
+    /// Launcher identity recorded by DRS.
+    pub launcher: String,
+    /// Additional file condition; this is not an executable directory.
+    pub file_in_folder: String,
+    /// Raw NVAPI application flags.
+    pub flags: u32,
+    /// Optional command-line condition recorded by DRS.
+    pub command_line: String,
+    /// Whether NVIDIA marks this application record predefined.
+    pub is_predefined: bool,
+}
+
+impl From<&NVDRS_APPLICATION> for ApplicationIdentity {
+    fn from(application: &NVDRS_APPLICATION) -> Self {
+        Self {
+            app_name: read_wide(&application.appName),
+            user_friendly_name: read_wide(&application.userFriendlyName),
+            launcher: read_wide(&application.launcher),
+            file_in_folder: read_wide(&application.fileInFolder),
+            flags: application.flags,
+            command_line: read_wide(&application.commandLine),
+            is_predefined: application.isPredefined != 0,
+        }
+    }
+}
+
+/// Stable identity and counts for one NVIDIA DRS profile.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ProfileIdentity {
+    /// Exact display name stored by DRS.
+    pub name: String,
+    /// Whether NVIDIA marks this profile predefined.
+    pub is_predefined: bool,
+    /// Number of application records attached to the profile.
+    pub application_count: u32,
+    /// Number of setting records attached to the profile.
+    pub setting_count: u32,
+}
+
+/// Stable identity and effective metadata for one DRS setting.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SettingIdentity {
+    /// NVIDIA setting identifier.
+    pub id: u32,
+    /// Raw NVAPI data type.
+    pub setting_type: u32,
+    /// DRS layer that currently supplies the value.
+    pub location: u32,
+    /// NVIDIA's `isCurrentPredefined` source flag; this is not numeric equality.
+    pub is_current_predefined: bool,
+    /// Whether NVIDIA returned a valid predefined value.
+    pub is_predefined_valid: bool,
+    /// Current value rendered to a stable string representation.
+    pub current_value: String,
+    /// Predefined value when NVIDIA reports one.
+    pub predefined_value: Option<String>,
 }
 
 /// Marks an NVAPI struct that [`zeroed_versioned`] can initialize from zeroed memory.
@@ -68,21 +158,43 @@ fn zeroed_versioned<T: VersionedNvapiStruct>() -> T {
     }
 }
 
+/// Initializes the fixed binary output buffers required by DRS read calls.
+/// `EnumSettings` and `GetSetting` treat each binary `valueLength` as the
+/// caller-provided capacity, so zero is not a usable output buffer length.
+fn zeroed_setting_for_read() -> NVDRS_SETTING {
+    let mut setting: NVDRS_SETTING = zeroed_versioned();
+    setting.predefinedValue = crate::ffi::NVDRS_SETTING_PREDEFINED {
+        binaryPredefinedValue: NVDRS_BINARY_SETTING {
+            valueLength: NVAPI_BINARY_DATA_MAX as u32,
+            valueData: [0; NVAPI_BINARY_DATA_MAX],
+        },
+    };
+    setting.currentValue = crate::ffi::NVDRS_SETTING_CURRENT {
+        binaryCurrentValue: NVDRS_BINARY_SETTING {
+            valueLength: NVAPI_BINARY_DATA_MAX as u32,
+            valueData: [0; NVAPI_BINARY_DATA_MAX],
+        },
+    };
+    setting
+}
+
 /// Full state of a DWORD DRS setting on a profile.
 ///
-/// A DRS profile stores two values per setting: the **current** value (the
-/// effective override) and the **predefined** value (the driver's factory default
-/// for known applications). Reading both lets RenderPilot tell a user override
-/// apart from the default, revert to the default via [`Profile::delete_setting`],
-/// and capture a baseline before its first write.
+/// A DRS profile stores a **current** value and may report a **predefined**
+/// value (the driver's default for known applications). Explicit profile
+/// location determines whether the setting is stored on this profile;
+/// `isCurrentPredefined` is preserved as NVIDIA's reported source flag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DwordSettingState {
     /// The effective value the driver currently uses.
     pub current: u32,
     /// The driver's factory default; present only when `isPredefinedValid` is set.
     pub predefined: Option<u32>,
-    /// `true` when the current value equals the predefined default (no override).
+    /// NVIDIA's `isCurrentPredefined` source flag. It is not derived by comparing
+    /// numeric values and does not determine whether this profile has an override.
     pub is_current_predefined: bool,
+    /// Whether this setting is explicitly stored on the resolved profile.
+    pub is_explicit_in_profile: bool,
 }
 
 // ── NVAPI function table ──────────────────────────────────────────────────────
@@ -96,6 +208,12 @@ pub struct Nvapi {
     load_settings: NvAPI_DRS_LoadSettings_fn,
     save_settings: NvAPI_DRS_SaveSettings_fn,
     find_application: NvAPI_DRS_FindApplicationByName_fn,
+    create_profile: Option<NvAPI_DRS_CreateProfile_fn>,
+    delete_profile: Option<NvAPI_DRS_DeleteProfile_fn>,
+    create_application: Option<NvAPI_DRS_CreateApplication_fn>,
+    delete_application_ex: Option<NvAPI_DRS_DeleteApplicationEx_fn>,
+    enum_applications: Option<NvAPI_DRS_EnumApplications_fn>,
+    enum_settings: Option<NvAPI_DRS_EnumSettings_fn>,
     // Core setting accessors — always loaded; the v2 variants (used by
     // NVIDIA Inspector as primary) are preferred and fall back to v1 on old
     // drivers. Using the wrong generation of IDs causes reads/writes to land
@@ -187,6 +305,36 @@ impl Nvapi {
             interface_ids::DRS_FIND_APPLICATION_BY_NAME,
             NvAPI_DRS_FindApplicationByName_fn
         );
+        resolve_fn_opt!(
+            create_profile,
+            interface_ids::DRS_CREATE_PROFILE,
+            NvAPI_DRS_CreateProfile_fn
+        );
+        resolve_fn_opt!(
+            delete_profile,
+            interface_ids::DRS_DELETE_PROFILE,
+            NvAPI_DRS_DeleteProfile_fn
+        );
+        resolve_fn_opt!(
+            create_application,
+            interface_ids::DRS_CREATE_APPLICATION,
+            NvAPI_DRS_CreateApplication_fn
+        );
+        resolve_fn_opt!(
+            delete_application_ex,
+            interface_ids::DRS_DELETE_APPLICATION_EX,
+            NvAPI_DRS_DeleteApplicationEx_fn
+        );
+        resolve_fn_opt!(
+            enum_applications,
+            interface_ids::DRS_ENUM_APPLICATIONS,
+            NvAPI_DRS_EnumApplications_fn
+        );
+        resolve_fn_opt!(
+            enum_settings,
+            interface_ids::DRS_ENUM_SETTINGS,
+            NvAPI_DRS_EnumSettings_fn
+        );
         resolve_fn!(
             get_setting,
             interface_ids::DRS_GET_SETTING,
@@ -242,6 +390,12 @@ impl Nvapi {
             load_settings,
             save_settings,
             find_application,
+            create_profile,
+            delete_profile,
+            create_application,
+            delete_application_ex,
+            enum_applications,
+            enum_settings,
             get_setting,
             get_setting_v2,
             set_setting,
@@ -287,9 +441,9 @@ impl Nvapi {
     fn find_profile_by_exe(
         &self,
         session: NvDRSSessionHandle,
-        exe_name: &str,
-    ) -> Result<NvDRSProfileHandle, NvapiError> {
-        let wide_name = to_wide(exe_name);
+        executable_path: &str,
+    ) -> Result<(NvDRSProfileHandle, NVDRS_APPLICATION), NvapiError> {
+        let wide_name = to_wide(executable_path);
 
         let mut profile: NvDRSProfileHandle = ptr::null_mut();
         let mut app: NVDRS_APPLICATION = zeroed_versioned();
@@ -298,29 +452,36 @@ impl Nvapi {
             (self.find_application)(session, wide_name.as_ptr(), &raw mut profile, &raw mut app)
         };
 
-        if status != 0 {
-            return Err(NvapiError::ApplicationNotFound);
+        match status {
+            0 if !profile.is_null() => Ok((profile, app)),
+            NVAPI_EXECUTABLE_NOT_FOUND => Err(NvapiError::ExecutableNotFound),
+            NVAPI_EXECUTABLE_AMBIGUOUS => Err(NvapiError::ExecutableAmbiguous),
+            other => Err(NvapiError::DrsOperationFailed {
+                operation: "find application by full path",
+                status: other,
+            }),
         }
+    }
 
-        // NVIDIA Inspector locates profiles exclusively by **display name** via
-        // `FindProfileByName` (e.g. "The Last of Us Part I"), not by exe.
-        // Writing to a handle obtained from `FindApplicationByName` and writing
-        // to one obtained from `FindProfileByName` can land in *different* DRS
-        // storage buckets — in particular when a user-level profile with the
-        // same name shadows the predefined one.  The fix: once we know which
-        // profile owns the exe, re-resolve it through `GetProfileInfo` →
-        // `FindProfileByName`.  That is identical to Inspector's lookup path,
-        // so both tools always operate on the same handle.
-        if let Some(info) = self.get_profile_info_raw(session, profile)
-            && let Some(by_name) = self.find_profile_by_name_raw(session, &info.profileName)
-        {
-            return Ok(by_name);
+    fn find_profile_by_name(
+        &self,
+        session: NvDRSSessionHandle,
+        profile_name: &str,
+    ) -> Result<NvDRSProfileHandle, NvapiError> {
+        let func = self
+            .find_profile_by_name
+            .ok_or(NvapiError::DrsApiUnavailable("FindProfileByName"))?;
+        let wide_name = to_wide(profile_name);
+        let mut profile = ptr::null_mut();
+        let status = unsafe { (func)(session, wide_name.as_ptr(), &raw mut profile) };
+        match status {
+            0 if !profile.is_null() => Ok(profile),
+            NVAPI_PROFILE_NOT_FOUND => Err(NvapiError::ProfileNotFound),
+            other => Err(NvapiError::DrsOperationFailed {
+                operation: "find profile by name",
+                status: other,
+            }),
         }
-
-        // Fallback: the profile-name re-lookup failed (very old driver, or
-        // optional functions unavailable).  Return the exe-based handle so the
-        // operation still proceeds with the best available information.
-        Ok(profile)
     }
 
     /// Resolves the handle of the global/base driver profile.
@@ -345,7 +506,7 @@ impl Nvapi {
         profile: NvDRSProfileHandle,
         setting_id: u32,
     ) -> Result<DwordSettingState, NvapiError> {
-        let mut setting: NVDRS_SETTING = zeroed_versioned();
+        let mut setting = zeroed_setting_for_read();
 
         // Prefer the v2 function ID (0xEA99498D) — the same one NVIDIA
         // Inspector uses. Both IDs expose the same NVAPI function but may
@@ -386,6 +547,7 @@ impl Nvapi {
             current,
             predefined,
             is_current_predefined: setting.isCurrentPredefined != 0,
+            is_explicit_in_profile: setting.settingLocation == NVDRS_CURRENT_PROFILE_LOCATION,
         })
     }
 
@@ -417,32 +579,6 @@ impl Nvapi {
     }
 
     // ── Optional profile-lookup helpers ─────────────────────────────────────
-
-    /// Reads profile metadata. Returns `None` if the function is unavailable
-    /// or the call fails.
-    fn get_profile_info_raw(
-        &self,
-        session: NvDRSSessionHandle,
-        profile: NvDRSProfileHandle,
-    ) -> Option<NVDRS_PROFILE> {
-        let func = self.get_profile_info?;
-        let mut info: NVDRS_PROFILE = zeroed_versioned();
-        let status = unsafe { (func)(session, profile, &raw mut info) };
-        if status == 0 { Some(info) } else { None }
-    }
-
-    /// Finds a profile by name. Returns `None` if the function is unavailable
-    /// or no profile with that name exists.
-    fn find_profile_by_name_raw(
-        &self,
-        session: NvDRSSessionHandle,
-        profile_name: &[u16; NVAPI_UNICODE_STRING_MAX],
-    ) -> Option<NvDRSProfileHandle> {
-        let func = self.find_profile_by_name?;
-        let mut handle: NvDRSProfileHandle = ptr::null_mut();
-        let status = unsafe { (func)(session, profile_name.as_ptr(), &raw mut handle) };
-        if status == 0 { Some(handle) } else { None }
-    }
 
     fn set_dword_setting(
         &self,
@@ -490,12 +626,57 @@ impl<'a> DrsSession<'a> {
         self.handle
     }
 
-    /// Looks up the profile that owns `exe_name`.
-    pub fn find_profile_by_exe(&self, exe_name: &str) -> Result<Profile<'_>, NvapiError> {
-        let handle = self.nvapi.find_profile_by_exe(self.handle, exe_name)?;
+    /// Looks up the profile that owns the exact fully-qualified executable path.
+    /// The returned handle is the one from `FindApplicationByName`; it is never
+    /// re-resolved by display name, which can silently select a different DRS layer.
+    pub fn find_profile_by_exe(&self, executable_path: &str) -> Result<Profile<'_>, NvapiError> {
+        let (handle, application) = self
+            .nvapi
+            .find_profile_by_exe(self.handle, executable_path)?;
         Ok(Profile {
             session: self,
             handle,
+            matched_application: Some(application),
+        })
+    }
+
+    /// Finds a profile by its exact DRS profile name.
+    pub fn find_profile_by_name(&self, profile_name: &str) -> Result<Profile<'_>, NvapiError> {
+        let handle = self.nvapi.find_profile_by_name(self.handle, profile_name)?;
+        Ok(Profile {
+            session: self,
+            handle,
+            matched_application: None,
+        })
+    }
+
+    /// Creates an empty user profile in this session. It is not durable until
+    /// [`save`](Self::save) succeeds.
+    pub fn create_profile(&self, profile_name: &str) -> Result<Profile<'_>, NvapiError> {
+        let func = self
+            .nvapi
+            .create_profile
+            .ok_or(NvapiError::DrsApiUnavailable("CreateProfile"))?;
+        let mut info: NVDRS_PROFILE = zeroed_versioned();
+        write_wide(&mut info.profileName, profile_name)?;
+        let mut handle = ptr::null_mut();
+        let status = unsafe { (func)(self.handle, &raw mut info, &raw mut handle) };
+        if status != 0 {
+            if status == NVAPI_PROFILE_NAME_IN_USE {
+                return Err(NvapiError::ProfileNameInUse);
+            }
+            return Err(NvapiError::DrsOperationFailed {
+                operation: "create profile",
+                status,
+            });
+        }
+        if handle.is_null() {
+            return Err(NvapiError::UnexpectedStatus(-1));
+        }
+        Ok(Profile {
+            session: self,
+            handle,
+            matched_application: None,
         })
     }
 
@@ -506,6 +687,7 @@ impl<'a> DrsSession<'a> {
         Ok(Profile {
             session: self,
             handle,
+            matched_application: None,
         })
     }
 
@@ -514,6 +696,15 @@ impl<'a> DrsSession<'a> {
         let status = unsafe { (self.nvapi.save_settings)(self.handle) };
         if status != 0 {
             return Err(NvapiError::SaveSettingsFailed(status));
+        }
+        Ok(())
+    }
+
+    /// Discards cached DRS state by reloading the driver's durable settings.
+    pub fn reload(&self) -> Result<(), NvapiError> {
+        let status = unsafe { (self.nvapi.load_settings)(self.handle) };
+        if status != 0 {
+            return Err(NvapiError::LoadSettingsFailed(status));
         }
         Ok(())
     }
@@ -531,14 +722,189 @@ impl Drop for DrsSession<'_> {
 pub struct Profile<'a> {
     session: &'a DrsSession<'a>,
     handle: NvDRSProfileHandle,
+    matched_application: Option<NVDRS_APPLICATION>,
 }
 
 impl Profile<'_> {
-    /// Reads the full [`DwordSettingState`] for `setting_id`: current value,
-    /// predefined default (when valid), and whether the two are equal.
-    ///
-    /// Used to render "user override vs. driver default" in the UI and to decide
-    /// whether a baseline snapshot must be captured before the first write.
+    /// Reads the profile's exact user/predefined identity and its composition counts.
+    pub fn identity(&self) -> Result<ProfileIdentity, NvapiError> {
+        let func = self
+            .session
+            .nvapi
+            .get_profile_info
+            .ok_or(NvapiError::DrsApiUnavailable("GetProfileInfo"))?;
+        let mut info: NVDRS_PROFILE = zeroed_versioned();
+        let status = unsafe { (func)(self.session.handle(), self.handle, &raw mut info) };
+        if status != 0 {
+            return Err(NvapiError::DrsOperationFailed {
+                operation: "get profile info",
+                status,
+            });
+        }
+        Ok(ProfileIdentity {
+            name: read_wide(&info.profileName),
+            is_predefined: info.isPredefined != 0,
+            application_count: info.numOfApps,
+            setting_count: info.numOfSettings,
+        })
+    }
+
+    /// Returns the exact application witness returned by full-path lookup.
+    pub fn matched_application(&self) -> Option<ApplicationIdentity> {
+        self.matched_application
+            .as_ref()
+            .map(ApplicationIdentity::from)
+    }
+
+    /// Enumerates every application associated with this profile.
+    pub fn applications(&self) -> Result<Vec<ApplicationIdentity>, NvapiError> {
+        let func = self
+            .session
+            .nvapi
+            .enum_applications
+            .ok_or(NvapiError::DrsApiUnavailable("EnumApplications"))?;
+        let count = self.identity()?.application_count;
+        let mut applications = Vec::with_capacity(count as usize);
+        for index in 0..count {
+            let mut item: NVDRS_APPLICATION = zeroed_versioned();
+            let mut requested = 1;
+            let status = unsafe {
+                (func)(
+                    self.session.handle(),
+                    self.handle,
+                    index,
+                    &raw mut requested,
+                    &raw mut item,
+                )
+            };
+            if status != 0 || requested != 1 {
+                return Err(NvapiError::DrsOperationFailed {
+                    operation: "enumerate applications",
+                    status: if status != 0 { status } else { -1 },
+                });
+            }
+            applications.push(ApplicationIdentity::from(&item));
+        }
+        Ok(applications)
+    }
+
+    /// Enumerates every explicitly stored setting, including type, source, and
+    /// values. This is used as a deletion ownership witness.
+    pub fn settings(&self) -> Result<Vec<SettingIdentity>, NvapiError> {
+        let func = self
+            .session
+            .nvapi
+            .enum_settings
+            .ok_or(NvapiError::DrsApiUnavailable("EnumSettings"))?;
+        let count = self.identity()?.setting_count;
+        let mut settings = Vec::with_capacity(count as usize);
+        for index in 0..count {
+            let mut item = zeroed_setting_for_read();
+            let mut requested = 1;
+            let status = unsafe {
+                (func)(
+                    self.session.handle(),
+                    self.handle,
+                    index,
+                    &raw mut requested,
+                    &raw mut item,
+                )
+            };
+            if status != 0 || requested != 1 {
+                return Err(NvapiError::DrsOperationFailed {
+                    operation: "enumerate settings",
+                    status: if status != 0 { status } else { -1 },
+                });
+            }
+            settings.push(setting_identity(&item)?);
+        }
+        Ok(settings)
+    }
+
+    /// Adds an executable with its full path in `appName` and basename as the
+    /// user-friendly label. Callers must save and then verify with full-path
+    /// `FindApplicationByName` before taking ownership of the profile.
+    pub fn create_application(&self, executable_path: &str) -> Result<(), NvapiError> {
+        let func = self
+            .session
+            .nvapi
+            .create_application
+            .ok_or(NvapiError::DrsApiUnavailable("CreateApplication"))?;
+        let path = std::path::Path::new(executable_path);
+        let file_name = path
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .filter(|value| !value.is_empty())
+            .ok_or(NvapiError::StringConversion)?;
+        let full_path = executable_path.replace('\\', "/");
+        let mut application: NVDRS_APPLICATION = zeroed_versioned();
+        write_wide(&mut application.appName, &full_path)?;
+        write_wide(&mut application.userFriendlyName, file_name)?;
+        // NVIDIA defines fileInFolder as an additional file-name selector,
+        // not as a directory. The full path lives in appName.
+        let status = unsafe { (func)(self.session.handle(), self.handle, &raw mut application) };
+        if status != 0 {
+            return Err(NvapiError::DrsOperationFailed {
+                operation: "create application",
+                status,
+            });
+        }
+        Ok(())
+    }
+
+    /// Removes the exact application returned for the selected full path.
+    pub fn delete_application_exact(
+        &self,
+        expected: &ApplicationIdentity,
+    ) -> Result<(), NvapiError> {
+        let func = self
+            .session
+            .nvapi
+            .delete_application_ex
+            .ok_or(NvapiError::DrsApiUnavailable("DeleteApplicationEx"))?;
+        let matching = self
+            .applications()?
+            .into_iter()
+            .filter(|application| application == expected)
+            .count();
+        if matching != 1 {
+            return Err(NvapiError::ApplicationWitnessMismatch);
+        }
+        let mut application = application_from_identity(expected)?;
+        let status = unsafe { (func)(self.session.handle(), self.handle, &raw mut application) };
+        if status != 0 {
+            return Err(NvapiError::DrsOperationFailed {
+                operation: "delete application",
+                status,
+            });
+        }
+        Ok(())
+    }
+
+    /// Deletes this profile only when NVAPI marks it as user-created. Callers
+    /// must first compare the full application and setting composition with the
+    /// durable RenderPilot receipt.
+    pub fn delete_user_profile(&self) -> Result<(), NvapiError> {
+        if self.identity()?.is_predefined {
+            return Err(NvapiError::ProfileIsPredefined);
+        }
+        let func = self
+            .session
+            .nvapi
+            .delete_profile
+            .ok_or(NvapiError::DrsApiUnavailable("DeleteProfile"))?;
+        let status = unsafe { (func)(self.session.handle(), self.handle) };
+        if status != 0 {
+            return Err(NvapiError::DrsOperationFailed {
+                operation: "delete profile",
+                status,
+            });
+        }
+        Ok(())
+    }
+
+    /// Reads the current and predefined values, profile location, and NVIDIA's
+    /// `isCurrentPredefined` source flag for `setting_id`.
     pub fn get_dword_full(&self, setting_id: u32) -> Result<DwordSettingState, NvapiError> {
         self.session
             .nvapi
@@ -564,9 +930,174 @@ impl Profile<'_> {
     }
 }
 
+fn application_from_identity(
+    identity: &ApplicationIdentity,
+) -> Result<NVDRS_APPLICATION, NvapiError> {
+    let mut application: NVDRS_APPLICATION = zeroed_versioned();
+    write_wide(&mut application.appName, &identity.app_name)?;
+    write_wide(
+        &mut application.userFriendlyName,
+        &identity.user_friendly_name,
+    )?;
+    write_wide(&mut application.launcher, &identity.launcher)?;
+    write_wide(&mut application.fileInFolder, &identity.file_in_folder)?;
+    write_wide(&mut application.commandLine, &identity.command_line)?;
+    application.flags = identity.flags;
+    application.isPredefined = u32::from(identity.is_predefined);
+    Ok(application)
+}
+
+fn setting_identity(setting: &NVDRS_SETTING) -> Result<SettingIdentity, NvapiError> {
+    let current_value = setting_value(setting, false)?;
+    let predefined_value = if setting.isPredefinedValid != 0 {
+        Some(setting_value(setting, true)?)
+    } else {
+        None
+    };
+    Ok(SettingIdentity {
+        id: setting.settingId,
+        setting_type: setting.settingType,
+        location: setting.settingLocation,
+        is_current_predefined: setting.isCurrentPredefined != 0,
+        is_predefined_valid: setting.isPredefinedValid != 0,
+        current_value,
+        predefined_value,
+    })
+}
+
+fn setting_value(setting: &NVDRS_SETTING, predefined: bool) -> Result<String, NvapiError> {
+    match setting.settingType {
+        NVDRS_DWORD_TYPE => {
+            // SAFETY: the DRS type is DWORD, so the matching union member is valid.
+            let value = unsafe {
+                if predefined {
+                    setting.predefinedValue.u32PredefinedValue
+                } else {
+                    setting.currentValue.u32CurrentValue
+                }
+            };
+            Ok(format!("dword:{value:08x}"))
+        }
+        NVDRS_QWORD_TYPE => {
+            // SAFETY: the DRS type is QWORD, so the matching union member is valid.
+            let value_bytes = unsafe {
+                if predefined {
+                    setting.predefinedValue.u64PredefinedValue
+                } else {
+                    setting.currentValue.u64CurrentValue
+                }
+            };
+            let value = u64::from_ne_bytes(value_bytes);
+            Ok(format!("qword:{value:016x}"))
+        }
+        1 => {
+            // SAFETY: the DRS type is binary, so the matching union member is valid.
+            let binary = unsafe {
+                if predefined {
+                    &setting.predefinedValue.binaryPredefinedValue
+                } else {
+                    &setting.currentValue.binaryCurrentValue
+                }
+            };
+            let length = binary.valueLength as usize;
+            if length > binary.valueData.len() {
+                return Err(NvapiError::UnexpectedStatus(-1));
+            }
+            let value = hex::encode(&binary.valueData[..length]);
+            Ok(format!("binary:{length}:{value}"))
+        }
+        2 | 3 => {
+            // SAFETY: both DRS string types use the matching wide-string union member.
+            let value = unsafe {
+                if predefined {
+                    &setting.predefinedValue.wszPredefinedValue
+                } else {
+                    &setting.currentValue.wszCurrentValue
+                }
+            };
+            Ok(format!("string:{}", read_wide(value)))
+        }
+        _ => Err(NvapiError::UnexpectedSettingType),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::to_wide;
+    use super::{setting_value, to_wide, zeroed_setting_for_read};
+    use crate::ffi::{
+        NVAPI_BINARY_DATA_MAX, NVDRS_BINARY_SETTING, NVDRS_QWORD_TYPE, NVDRS_SETTING,
+        NVDRS_SETTING_CURRENT, NVDRS_SETTING_PREDEFINED, NVDRS_SETTING_VER,
+    };
+
+    #[test]
+    fn qword_values_are_serialized_in_profile_witnesses() {
+        let setting = NVDRS_SETTING {
+            version: NVDRS_SETTING_VER,
+            settingName: [0; crate::ffi::NVAPI_UNICODE_STRING_MAX],
+            settingId: 7,
+            settingType: NVDRS_QWORD_TYPE,
+            settingLocation: 0,
+            isCurrentPredefined: 0,
+            isPredefinedValid: 1,
+            predefinedValue: NVDRS_SETTING_PREDEFINED {
+                u64PredefinedValue: 0x1122_3344_5566_7788_u64.to_ne_bytes(),
+            },
+            currentValue: NVDRS_SETTING_CURRENT {
+                u64CurrentValue: 0x8877_6655_4433_2211_u64.to_ne_bytes(),
+            },
+        };
+        assert_eq!(
+            setting_value(&setting, false).expect("current QWORD"),
+            "qword:8877665544332211"
+        );
+        assert_eq!(
+            setting_value(&setting, true).expect("predefined QWORD"),
+            "qword:1122334455667788"
+        );
+    }
+
+    #[test]
+    fn binary_read_constructor_sets_both_union_capacities() {
+        let setting = zeroed_setting_for_read();
+        // SAFETY: constructor initializes both binary union arms as binary buffers.
+        let predefined = unsafe { setting.predefinedValue.binaryPredefinedValue.valueLength };
+        // SAFETY: constructor initializes both binary union arms as binary buffers.
+        let current = unsafe { setting.currentValue.binaryCurrentValue.valueLength };
+        assert_eq!(predefined, NVAPI_BINARY_DATA_MAX as u32);
+        assert_eq!(current, NVAPI_BINARY_DATA_MAX as u32);
+        assert_eq!(setting.version, NVDRS_SETTING_VER);
+    }
+
+    #[test]
+    fn binary_setting_values_keep_returned_length_and_bytes() {
+        let mut setting = zeroed_setting_for_read();
+        setting.settingType = 1;
+        let mut data = [0; NVAPI_BINARY_DATA_MAX];
+        data[..3].copy_from_slice(&[0x00, 0x7f, 0xff]);
+        setting.currentValue = NVDRS_SETTING_CURRENT {
+            binaryCurrentValue: NVDRS_BINARY_SETTING {
+                valueLength: 3,
+                valueData: data,
+            },
+        };
+        assert_eq!(
+            setting_value(&setting, false).expect("binary current value"),
+            "binary:3:007fff"
+        );
+    }
+
+    #[test]
+    fn binary_setting_values_reject_lengths_over_the_buffer() {
+        let mut setting = zeroed_setting_for_read();
+        setting.settingType = 1;
+        setting.currentValue = NVDRS_SETTING_CURRENT {
+            binaryCurrentValue: NVDRS_BINARY_SETTING {
+                valueLength: (NVAPI_BINARY_DATA_MAX + 1) as u32,
+                valueData: [0; NVAPI_BINARY_DATA_MAX],
+            },
+        };
+        assert!(setting_value(&setting, false).is_err());
+    }
 
     #[test]
     fn to_wide_appends_a_nul_terminator() {

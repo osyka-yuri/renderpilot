@@ -71,6 +71,8 @@ use self::version::database_has_user_schema;
 //             and exact immutable configuration baseline custody.
 //   19 → 20: add the nullable RenoDX ReShade configuration receipt and shared
 //             Engine.ini configuration journal.
+//   20 → 21: add NVAPI profile ownership receipts, shared setting claims, and
+//             a crash-recovery journal; remove obsolete v20 basename-only baselines.
 pub(super) fn pragma_column_names(
     connection: &Connection,
     table_name: &str,

@@ -442,23 +442,97 @@ pub mod nvapi_executable_overrides {
     pub const ALL: &[&str] = &[GAME_ID, SELECTED_PATH, SELECTED_BASENAME, UPDATED_AT];
 }
 
-pub mod nvapi_setting_baselines {
+pub mod nvapi_owned_profiles {
     pub const GAME_ID: &str = "game_id";
-    pub const SETTING_KEY: &str = "setting_key";
-    pub const BASELINE_DWORD: &str = "baseline_dword";
-    pub const BASELINE_WAS_PREDEFINED: &str = "baseline_was_predefined";
-    pub const PREDEFINED_DWORD: &str = "predefined_dword";
-    pub const CAPTURED_EXE: &str = "captured_exe";
-    pub const CAPTURED_AT: &str = "captured_at";
-
+    pub const PROFILE_NAME: &str = "profile_name";
+    pub const BINDING_PATH: &str = "binding_path";
+    pub const APPLICATION_WITNESS_JSON: &str = "application_witness_json";
+    pub const COMPOSITION_JSON: &str = "composition_json";
+    pub const STATE: &str = "state";
+    pub const UPDATED_AT: &str = "updated_at";
     pub const ALL: &[&str] = &[
         GAME_ID,
-        SETTING_KEY,
-        BASELINE_DWORD,
-        BASELINE_WAS_PREDEFINED,
-        PREDEFINED_DWORD,
-        CAPTURED_EXE,
-        CAPTURED_AT,
+        PROFILE_NAME,
+        BINDING_PATH,
+        APPLICATION_WITNESS_JSON,
+        COMPOSITION_JSON,
+        STATE,
+        UPDATED_AT,
+    ];
+}
+
+pub mod nvapi_drs_targets {
+    pub const TARGET_ID: &str = "target_id";
+    pub const PROFILE_NAME: &str = "profile_name";
+    pub const PROFILE_IS_PREDEFINED: &str = "profile_is_predefined";
+    pub const KIND: &str = "kind";
+    pub const IDENTITY_JSON: &str = "identity_json";
+    pub const ALL: &[&str] = &[
+        TARGET_ID,
+        PROFILE_NAME,
+        PROFILE_IS_PREDEFINED,
+        KIND,
+        IDENTITY_JSON,
+    ];
+}
+
+pub mod nvapi_drs_target_app_witnesses {
+    pub const TARGET_ID: &str = "target_id";
+    pub const EXECUTABLE_PATH: &str = "executable_path";
+    pub const APPLICATION_JSON: &str = "application_json";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[TARGET_ID, EXECUTABLE_PATH, APPLICATION_JSON, UPDATED_AT];
+}
+
+pub mod nvapi_target_setting_claims {
+    pub const TARGET_ID: &str = "target_id";
+    pub const SETTING_ID: &str = "setting_id";
+    pub const ORIGINAL_PRESENT: &str = "original_present";
+    pub const ORIGINAL_VALUE: &str = "original_value";
+    pub const EXPECTED_PRESENT: &str = "expected_present";
+    pub const EXPECTED_VALUE: &str = "expected_value";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[
+        TARGET_ID,
+        SETTING_ID,
+        ORIGINAL_PRESENT,
+        ORIGINAL_VALUE,
+        EXPECTED_PRESENT,
+        EXPECTED_VALUE,
+        UPDATED_AT,
+    ];
+}
+
+pub mod nvapi_game_claim_refs {
+    pub const GAME_ID: &str = "game_id";
+    pub const TARGET_ID: &str = "target_id";
+    pub const SETTING_ID: &str = "setting_id";
+    pub const EXECUTABLE_PATH: &str = "executable_path";
+    pub const ALL: &[&str] = &[GAME_ID, TARGET_ID, SETTING_ID, EXECUTABLE_PATH];
+}
+
+pub mod pending_drs_operations {
+    pub const OP_ID: &str = "op_id";
+    pub const GAME_ID: &str = "game_id";
+    pub const TARGET_ID: &str = "target_id";
+    pub const KIND: &str = "kind";
+    pub const BEFORE_JSON: &str = "before_json";
+    pub const AFTER_JSON: &str = "after_json";
+    pub const OBSERVED_JSON: &str = "observed_json";
+    pub const PHASE: &str = "phase";
+    pub const CREATED_AT: &str = "created_at";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[
+        OP_ID,
+        GAME_ID,
+        TARGET_ID,
+        KIND,
+        BEFORE_JSON,
+        AFTER_JSON,
+        OBSERVED_JSON,
+        PHASE,
+        CREATED_AT,
+        UPDATED_AT,
     ];
 }
 
@@ -518,7 +592,18 @@ pub const CONTRACT_TABLES: &[(&str, &[&str])] = &[
         "nvapi_executable_overrides",
         nvapi_executable_overrides::ALL,
     ),
-    ("nvapi_setting_baselines", nvapi_setting_baselines::ALL),
+    ("nvapi_owned_profiles", nvapi_owned_profiles::ALL),
+    ("nvapi_drs_targets", nvapi_drs_targets::ALL),
+    (
+        "nvapi_drs_target_app_witnesses",
+        nvapi_drs_target_app_witnesses::ALL,
+    ),
+    (
+        "nvapi_target_setting_claims",
+        nvapi_target_setting_claims::ALL,
+    ),
+    ("nvapi_game_claim_refs", nvapi_game_claim_refs::ALL),
+    ("pending_drs_operations", pending_drs_operations::ALL),
     ("game_ui_state", game_ui_state::ALL),
     (
         "profile_addon_capabilities",

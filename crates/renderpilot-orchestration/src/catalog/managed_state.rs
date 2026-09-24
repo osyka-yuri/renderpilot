@@ -48,7 +48,7 @@ impl ManagedInverseAction {
             }
             Self::UninstallOptiScaler => "OptiScaler add-on uninstall".to_owned(),
             Self::UninstallAddon(kind) => format!("{} add-on uninstall", addon_kind_name(*kind)),
-            Self::RestoreNvapi => "NVAPI baseline restore".to_owned(),
+            Self::RestoreNvapi => "NVIDIA setting claim restore".to_owned(),
         }
     }
 }
@@ -88,7 +88,21 @@ impl ManagedCleanupPlan {
                 reason: "durable recovery did not finish after acquiring the game lock".to_owned(),
             });
         }
-
+        if inventory.nvapi_pending_count != 0 {
+            return Err(ServiceError::GameRemovalCleanupFailed {
+                game_id: game_id.as_str().to_owned(),
+                action: "pending NVIDIA driver recovery".to_owned(),
+                reason: "a durable DRS operation must be reconciled before removing this game"
+                    .to_owned(),
+            });
+        }
+        if inventory.nvapi_owned_profile {
+            return Err(ServiceError::GameRemovalCleanupFailed {
+                game_id: game_id.as_str().to_owned(),
+                action: "RenderPilot-owned NVIDIA profile".to_owned(),
+                reason: "delete the owned NVIDIA profile from the game details page before removing this game".to_owned(),
+            });
+        }
         let optiscaler_footprint = inventory
             .optiscaler_state
             .as_ref()
@@ -291,7 +305,7 @@ impl ManagedCleanupPlan {
         if let Some(addon) = inventory.addon {
             actions.push(ManagedInverseAction::UninstallAddon(addon.kind()));
         }
-        if inventory.nvapi_baseline_count > 0 {
+        if inventory.nvapi_claim_count > 0 {
             actions.push(ManagedInverseAction::RestoreNvapi);
         }
         let boundary = match shared_renodx.as_ref() {

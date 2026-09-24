@@ -14,8 +14,8 @@ import {
  * Reactive owner of NVIDIA's **global/base** DLSS driver settings.
  *
  * Unlike the per-game NVIDIA driver context this targets the base profile
- * (`_GLOBAL_DRIVER_PROFILE_`), so there is no executable selection and no
- * per-game baseline. It composes the shared {@link createNvapiSettingsStore}
+ * (`_GLOBAL_DRIVER_PROFILE_`), so there is no executable selection or
+ * per-game original state to restore. It composes the shared {@link createNvapiSettingsStore}
  * for everything else (family grouping, warnings, optimistic writes) and is
  * loaded once when the Settings → NVIDIA tab is first shown.
  */
