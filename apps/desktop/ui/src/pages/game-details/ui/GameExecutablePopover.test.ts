@@ -252,6 +252,59 @@ describe('GameExecutablePopover', () => {
     });
   });
 
+  it('displays tooltip on keyboard focus of candidate option and ignores non-keyboard focus', async () => {
+    const exe = executableContext({
+      supportedCandidates: [
+        executableCandidate('game.exe', 'game.exe', null),
+        executableCandidate('alternate.exe', 'bin/alternate.exe', null),
+      ],
+    });
+    const trigger = render({ exe });
+
+    await openPopover(trigger);
+    const content = popoverContent();
+    const alternateLabel = findOption(content, 'alternate.exe');
+    const radioItem = alternateLabel.querySelector<HTMLButtonElement>('[role="radio"]');
+    if (!radioItem) {
+      throw new Error('Radio item not found');
+    }
+
+    // 1. Programmatic / non-keyboard focus does not trigger tooltip
+    radioItem.focus();
+    flushSync();
+    expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+
+    // 2. Keyboard focus (with :focus-visible) triggers tooltip
+    vi.spyOn(radioItem, 'matches').mockImplementation(function (this: Element, selector: string) {
+      if (selector === ':focus-visible') {
+        return document.activeElement === this;
+      }
+      return Element.prototype.matches.call(this, selector);
+    });
+
+    radioItem.blur();
+    flushSync();
+    radioItem.focus();
+    flushSync();
+
+    await vi.waitFor(() => {
+      const tooltip = document.body.querySelector<HTMLElement>('[role="tooltip"]');
+      expect(tooltip).not.toBeNull();
+      expect(tooltip?.textContent).toContain('alternate.exe');
+      if (tooltip?.id) {
+        expect(radioItem.getAttribute('aria-describedby')).toBe(tooltip.id);
+        expect(alternateLabel.getAttribute('aria-describedby')).toBeNull();
+      }
+    });
+
+    // 3. Blur dismisses tooltip
+    radioItem.blur();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+    });
+  });
+
   it('keeps the selector open and presents an accessible error when the selection fails', async () => {
     const exe = executableContext({
       supportedCandidates: [executableCandidate('alternate.exe', 'bin/alternate.exe', null)],

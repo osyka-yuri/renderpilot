@@ -191,8 +191,8 @@
   {/each}
 
   {#if hasAddonsTab}
-    <TabsContent value={ADDONS_TAB_VALUE} class="mt-0">
-      <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,50rem),1fr))] gap-3">
+    <TabsContent value={ADDONS_TAB_VALUE} class="mt-0 min-w-0">
+      <div class="grid grid-cols-1 gap-3">
         {#if renodxEnabled}
           <RenoDxCard
             {gameId}

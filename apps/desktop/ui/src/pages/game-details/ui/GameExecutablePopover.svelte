@@ -43,6 +43,13 @@
     onMoveProfile?: (path: string, selectAutomatically: boolean) => boolean | Promise<boolean>;
   };
 
+  type CandidateTooltipTriggerProps = {
+    onfocus?: (event: FocusEvent) => void;
+    onblur?: (event: FocusEvent) => void;
+    'aria-describedby'?: string;
+    [key: string]: unknown;
+  };
+
   const {
     gameId,
     exe,
@@ -197,7 +204,7 @@
   });
 </script>
 
-<Tooltip>
+<Tooltip disabled={open}>
   {#if locked}
     <TooltipTrigger>
       {#snippet child({ props })}
@@ -245,17 +252,17 @@
           {#if exe.changeError}
             <p role="alert" class="text-xs text-destructive">
               <span class="font-medium">{t('gameDetails.executable.changeFailed')}</span>
-              <span class="block">{exe.changeError}</span>
+              <span class="block wrap-break-word">{exe.changeError}</span>
             </p>
           {:else if exe.refreshError}
             <p role="status" class="text-xs text-warning">
               <span class="font-medium">{t('gameDetails.executable.refreshFailed')}</span>
-              <span class="block">{exe.refreshError}</span>
+              <span class="block wrap-break-word">{exe.refreshError}</span>
             </p>
           {:else if exe.loadError}
             <p role="alert" class="text-xs text-destructive">
               <span class="font-medium">{t('gameDetails.executable.loadFailed')}</span>
-              <span class="block">{exe.loadError}</span>
+              <span class="block wrap-break-word">{exe.loadError}</span>
             </p>
           {/if}
         </div>
@@ -265,7 +272,7 @@
         <RadioGroup
           value={exe.effectiveAbsolutePath ?? ''}
           aria-label={t('gameDetails.executable.groupLabel')}
-          class="max-h-72 gap-0 overflow-y-auto p-1"
+          class="max-h-72 min-w-0 grid-cols-1 gap-0 overflow-x-hidden overflow-y-auto p-1"
           onValueChange={selectCandidate}
         >
           {#each candidateGroups as group (group.key)}
@@ -276,18 +283,45 @@
               </p>
               {#each group.candidates as candidate, index (candidate.absolute_path)}
                 {@const candidateId = `${componentId}-${group.key}-${index}`}
-                <label
-                  for={candidateId}
-                  class="flex min-h-10 w-full cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-start hover:bg-accent has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring"
-                >
-                  <RadioGroupItem id={candidateId} value={candidate.absolute_path} class="mt-0.5" />
-                  <span class="flex min-w-0 flex-col">
-                    <span class="truncate text-sm">{candidate.file_name}</span>
-                    <span class="truncate text-xs text-muted-foreground">
-                      {candidate.relative_path}
-                    </span>
-                  </span>
-                </label>
+                <Tooltip ignoreNonKeyboardFocus>
+                  <TooltipTrigger>
+                    {#snippet child({ props }: { props: CandidateTooltipTriggerProps })}
+                      {@const {
+                        onfocus,
+                        onblur,
+                        tabindex: _tabindex,
+                        'aria-describedby': ariaDescribedby,
+                        ...labelProps
+                      } = props}
+                      <label
+                        {...labelProps}
+                        for={candidateId}
+                        class="flex min-h-10 w-full cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-start hover:bg-accent has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring"
+                      >
+                        <RadioGroupItem
+                          id={candidateId}
+                          value={candidate.absolute_path}
+                          class="mt-0.5 shrink-0"
+                          {onfocus}
+                          {onblur}
+                          aria-describedby={ariaDescribedby}
+                        />
+                        <span class="flex min-w-0 flex-1 flex-col overflow-hidden">
+                          <span class="truncate text-sm">{candidate.file_name}</span>
+                          <span class="truncate text-xs text-muted-foreground">
+                            {candidate.relative_path}
+                          </span>
+                        </span>
+                      </label>
+                    {/snippet}
+                  </TooltipTrigger>
+                  <TooltipContent side="left" sideOffset={6} class="max-w-xs wrap-break-word">
+                    <span class="block font-medium">{candidate.file_name}</span>
+                    {#if candidate.relative_path && candidate.relative_path !== candidate.file_name}
+                      <span class="mt-0.5 block opacity-80">{candidate.relative_path}</span>
+                    {/if}
+                  </TooltipContent>
+                </Tooltip>
               {/each}
             </div>
           {/each}
