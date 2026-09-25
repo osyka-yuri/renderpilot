@@ -20,6 +20,8 @@ pub mod file_safety;
 mod fs;
 pub mod game_executable;
 mod game_mutation_lock;
+/// Optional, process-local GitHub authentication for exact github.com requests.
+pub mod github_auth;
 pub mod libraries;
 /// Coordinated CDN manifest refresh (passive TTL vs forced + cooldown).
 pub mod manifests;

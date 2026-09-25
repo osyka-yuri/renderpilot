@@ -1,5 +1,8 @@
 use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
+use renderpilot_orchestration::github_auth::{
+    GitHubToken, authorization_header_name, is_github_auth_target_url,
+};
 use serde::Deserialize;
 
 use super::{
@@ -299,10 +302,24 @@ fn fetch_offer(current_version: &str) -> Result<Option<UpdateOffer>> {
     let endpoint = crate::updater_contract::UPDATER_ENDPOINTS
         .first()
         .ok_or_else(|| PortableRuntimeError::new("portable_update_endpoint", "no endpoint"))?;
-    let response = client
-        .get(*endpoint)
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)
+    let token = is_github_auth_target_url(endpoint)
+        .then(GitHubToken::from_local_machine)
+        .flatten();
+    let mut authorization = token
+        .as_ref()
+        .and_then(|token| token.authorization_header_for_url_str(endpoint));
+    let response = send_with_anonymous_retry(authorization.is_some(), |use_authorization| {
+        let mut request = client.get(*endpoint);
+        if use_authorization && let Some(header) = authorization.take() {
+            request = request.header(authorization_header_name(), header);
+        }
+        request.send()
+    })
+    .map_err(|error| PortableRuntimeError::new("portable_update_check", error.to_string()))?;
+    drop(authorization);
+    drop(token);
+    let response = response
+        .error_for_status()
         .map_err(|error| PortableRuntimeError::new("portable_update_check", error.to_string()))?;
     let bytes = read_limited_response(
         response,
@@ -344,6 +361,31 @@ fn fetch_offer(current_version: &str) -> Result<Option<UpdateOffer>> {
         url: platform.url,
         signature: platform.signature,
     }))
+}
+
+trait BlockingResponseStatus {
+    fn is_success(&self) -> bool;
+}
+
+impl BlockingResponseStatus for reqwest::blocking::Response {
+    fn is_success(&self) -> bool {
+        self.status().is_success()
+    }
+}
+
+fn send_with_anonymous_retry<R, E>(
+    authenticated: bool,
+    mut send: impl FnMut(bool) -> std::result::Result<R, E>,
+) -> std::result::Result<R, E>
+where
+    R: BlockingResponseStatus,
+{
+    let response = send(authenticated)?;
+    if authenticated && !response.is_success() {
+        send(false)
+    } else {
+        Ok(response)
+    }
 }
 
 fn http_client(timeout: Duration) -> Result<reqwest::blocking::Client> {
@@ -392,6 +434,71 @@ mod tests {
     use std::io::Cursor;
 
     use super::*;
+
+    #[test]
+    fn authenticated_status_failure_retries_once_without_authorization() {
+        #[derive(Debug)]
+        struct StubResponse(bool);
+
+        impl BlockingResponseStatus for StubResponse {
+            fn is_success(&self) -> bool {
+                self.0
+            }
+        }
+
+        let attempts = std::sync::Mutex::new(Vec::new());
+        let response = send_with_anonymous_retry(true, |authenticated| {
+            attempts.lock().expect("attempts lock").push(authenticated);
+            Ok::<_, &'static str>(StubResponse(!authenticated))
+        })
+        .expect("anonymous retry should succeed");
+
+        assert!(response.is_success());
+        assert_eq!(*attempts.lock().expect("attempts lock"), [true, false]);
+    }
+
+    #[test]
+    fn portable_transport_failure_does_not_retry() {
+        #[derive(Debug)]
+        struct StubResponse(bool);
+
+        impl BlockingResponseStatus for StubResponse {
+            fn is_success(&self) -> bool {
+                self.0
+            }
+        }
+
+        let attempts = std::sync::Mutex::new(Vec::new());
+        let result = send_with_anonymous_retry(true, |authenticated| {
+            attempts.lock().expect("attempts lock").push(authenticated);
+            Err::<StubResponse, _>("transport failure")
+        });
+
+        assert_eq!(result.expect_err("transport failure"), "transport failure");
+        assert_eq!(*attempts.lock().expect("attempts lock"), [true]);
+    }
+
+    #[test]
+    fn unauthenticated_status_failure_does_not_retry_off_host() {
+        #[derive(Debug)]
+        struct StubResponse(bool);
+
+        impl BlockingResponseStatus for StubResponse {
+            fn is_success(&self) -> bool {
+                self.0
+            }
+        }
+
+        let attempts = std::sync::Mutex::new(Vec::new());
+        let response = send_with_anonymous_retry(false, |authenticated| {
+            attempts.lock().expect("attempts lock").push(authenticated);
+            Ok::<_, &'static str>(StubResponse(false))
+        })
+        .expect("status response should reach the caller");
+
+        assert!(!response.is_success());
+        assert_eq!(*attempts.lock().expect("attempts lock"), [false]);
+    }
 
     #[test]
     fn response_reader_stops_after_the_bounded_overflow_probe() {

@@ -6,6 +6,9 @@ use crate::portable_runtime::{
     error::{PortableRuntimeError, Result},
     staging::{StagedVerifiedRpu, stage_verified_rpu_expected},
 };
+use renderpilot_orchestration::github_auth::{
+    GitHubToken, authorization_header_name, is_github_auth_target_url,
+};
 
 const MAX_RPU_BYTES: u64 = 1024 * 1024 * 1024;
 const LOGICAL_PROGRESS_BYTES: u64 = 64 * 1024;
@@ -30,13 +33,26 @@ pub(super) fn download_and_stage(
     offer: &UpdateOffer,
     emit: &mut impl FnMut(PortableUpdateEvent) -> Result<()>,
 ) -> DownloadResult<(u64, StagedVerifiedRpu)> {
-    let response = http_client(DOWNLOAD_TIMEOUT)?
-        .get(&offer.url)
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)
-        .map_err(|error| {
-            PortableRuntimeError::new("portable_update_download", error.to_string())
-        })?;
+    let client = http_client(DOWNLOAD_TIMEOUT)?;
+    let token = is_github_auth_target_url(&offer.url)
+        .then(GitHubToken::from_local_machine)
+        .flatten();
+    let mut authorization = token
+        .as_ref()
+        .and_then(|token| token.authorization_header_for_url_str(&offer.url));
+    let response = super::send_with_anonymous_retry(authorization.is_some(), |use_authorization| {
+        let mut request = client.get(&offer.url);
+        if use_authorization && let Some(header) = authorization.take() {
+            request = request.header(authorization_header_name(), header);
+        }
+        request.send()
+    })
+    .map_err(|error| PortableRuntimeError::new("portable_update_download", error.to_string()))?;
+    drop(authorization);
+    drop(token);
+    let response = response.error_for_status().map_err(|error| {
+        PortableRuntimeError::new("portable_update_download", error.to_string())
+    })?;
     let content_length = response.content_length();
     if content_length.is_some_and(|length| length > MAX_RPU_BYTES) {
         return Err(operation_error(
@@ -133,6 +149,59 @@ pub(in crate::portable_runtime) fn read_limited_body_with_events(
 
 fn operation_error(code: &'static str, message: impl Into<String>) -> DownloadStageError {
     DownloadStageError::Operation(PortableRuntimeError::new(code, message))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{io::Cursor, sync::Mutex};
+
+    use super::*;
+    use crate::portable_runtime::app_protocol::PortableUpdateEvent as Event;
+
+    #[derive(Debug)]
+    struct StubResponse(bool);
+
+    impl super::super::BlockingResponseStatus for StubResponse {
+        fn is_success(&self) -> bool {
+            self.0
+        }
+    }
+
+    #[test]
+    fn anonymous_status_retry_produces_one_download_event_sequence() {
+        let attempts = Mutex::new(Vec::new());
+        let response = super::super::send_with_anonymous_retry(true, |authenticated| {
+            attempts.lock().expect("attempts lock").push(authenticated);
+            Ok::<_, &'static str>(StubResponse(!authenticated))
+        })
+        .expect("anonymous retry should succeed");
+        assert!(response.0);
+        assert_eq!(*attempts.lock().expect("attempts lock"), [true, false]);
+
+        let mut events = Vec::new();
+        let bytes = read_limited_body_with_events(
+            Cursor::new(b"artifact"),
+            MAX_RPU_BYTES,
+            Some(8),
+            "portable_update_test",
+            "too large",
+            &mut |event| {
+                events.push(event);
+                Ok(())
+            },
+        )
+        .expect("body and events should succeed");
+
+        assert_eq!(bytes, b"artifact");
+        assert_eq!(
+            events,
+            [
+                Event::download_started(Some(8)),
+                Event::download_progress(8),
+                Event::download_finished(),
+            ]
+        );
+    }
 }
 
 #[derive(Default)]

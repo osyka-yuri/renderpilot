@@ -26,10 +26,10 @@ Import-Module (Join-Path $PSScriptRoot "release-github-client.psm1") -Force
 if ($PSVersionTable.PSVersion.Major -lt 7 -or -not $IsWindows) {
     throw "Publishing RenderPilot release assets requires PowerShell 7 on Windows."
 }
-if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
-    throw "Publishing RenderPilot release assets requires the authenticated GH_TOKEN environment variable."
+$gitHubToken = Get-RenderPilotGitHubToken
+if ([string]::IsNullOrWhiteSpace($gitHubToken)) {
+    throw "Publishing RenderPilot release assets requires GH_TOKEN, GITHUB_TOKEN, or an authenticated GitHub CLI."
 }
-$gitHubToken = $env:GH_TOKEN
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 }

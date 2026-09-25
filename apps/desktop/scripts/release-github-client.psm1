@@ -4,6 +4,108 @@ $ErrorActionPreference = 'Stop'
 $script:GitHubApiVersion = '2022-11-28'
 $script:GitHubAcceptHeader = 'application/vnd.github+json'
 
+function Invoke-RenderPilotGitHubCliToken {
+    param(
+        [string] $ExecutablePath,
+        [string[]] $Arguments = @('auth', 'token', '--hostname', 'github.com'),
+        [int] $TimeoutMilliseconds = 2000
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+        $command = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -eq $command) {
+            return $null
+        }
+        $ExecutablePath = $command.Source
+    }
+
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $ExecutablePath
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in $Arguments) {
+        $startInfo.ArgumentList.Add($argument)
+    }
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    $started = $false
+    try {
+        $started = $process.Start()
+        if (-not $started) {
+            return $null
+        }
+        $outputTask = $process.StandardOutput.ReadToEndAsync()
+        $null = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutMilliseconds) -or $process.ExitCode -ne 0) {
+            return $null
+        }
+        if (-not $outputTask.Wait(250)) {
+            return $null
+        }
+        $token = $outputTask.Result.Trim()
+        if ([string]::IsNullOrWhiteSpace($token) -or $token.Length -gt 4096) {
+            return $null
+        }
+        return $token
+    }
+    catch {
+        return $null
+    }
+    finally {
+        if ($started) {
+            try {
+                if (-not $process.HasExited) {
+                    $process.Kill($true)
+                    $null = $process.WaitForExit(1000)
+                }
+            }
+            catch {
+                # A failed local token lookup must not interrupt publisher cleanup.
+            }
+        }
+        $process.Dispose()
+    }
+}
+
+function Get-RenderPilotGitHubToken {
+    [CmdletBinding()]
+    param(
+        [scriptblock] $EnvironmentReader,
+        [scriptblock] $GitHubCli
+    )
+
+    if ($null -eq $EnvironmentReader) {
+        $EnvironmentReader = {
+            param([string] $Name)
+            [Environment]::GetEnvironmentVariable($Name, 'Process')
+        }
+    }
+    if ($null -eq $GitHubCli) {
+        $GitHubCli = { Invoke-RenderPilotGitHubCliToken }
+    }
+
+    foreach ($name in @('GH_TOKEN', 'GITHUB_TOKEN')) {
+        $value = [string] (& $EnvironmentReader $name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value.Trim()
+        }
+    }
+
+    try {
+        $value = (@(& $GitHubCli) -join [Environment]::NewLine).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    }
+    catch {
+        # An unavailable or unauthenticated gh CLI means publishing cannot proceed.
+        return $null
+    }
+    return $null
+}
+
 function Get-RenderPilotGitHubProperty {
     param(
         [Parameter(Mandatory)] $Object,
@@ -114,6 +216,7 @@ function Invoke-RenderPilotGitHubJson {
         Uri = "$baseUri$Endpoint"
         Method = $Method
         Headers = $headers
+        MaximumRedirection = 0
         SkipHttpErrorCheck = $true
         ErrorAction = 'Stop'
     }
@@ -271,6 +374,7 @@ function Assert-RenderPilotGitHubPeeledTagCommit {
 
 Export-ModuleMember -Function @(
     'Assert-RenderPilotGitHubPeeledTagCommit',
+    'Get-RenderPilotGitHubToken',
     'Get-RenderPilotGitHubPeeledTagCommit',
     'Get-RenderPilotGitHubReleaseById',
     'Get-RenderPilotGitHubReleaseByTag',

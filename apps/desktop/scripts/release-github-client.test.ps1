@@ -1,7 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot 'release-github-client.psm1') -Force
+$gitHubClientModule = Import-Module (Join-Path $PSScriptRoot 'release-github-client.psm1') -Force -PassThru
 
 function Assert-True {
     param(
@@ -81,6 +81,48 @@ $token = 'unit-test-token'
 $commit = 'a' * 40
 $movedCommit = 'b' * 40
 
+# Token resolution uses the shared precedence and never requires a real gh login.
+$environment = @{ GH_TOKEN = 'primary-token'; GITHUB_TOKEN = 'secondary-token' }
+$environmentReader = { param([string] $Name) $environment[$Name] }.GetNewClosure()
+$primaryToken = Get-RenderPilotGitHubToken `
+    -EnvironmentReader $environmentReader `
+    -GitHubCli { throw 'gh must not run when GH_TOKEN is set.' }
+Assert-Equal -Actual $primaryToken -Expected 'primary-token' -Message 'GH_TOKEN must take precedence.'
+
+$environment.GH_TOKEN = ' '
+$secondaryToken = Get-RenderPilotGitHubToken `
+    -EnvironmentReader $environmentReader `
+    -GitHubCli { throw 'gh must not run when GITHUB_TOKEN is set.' }
+Assert-Equal -Actual $secondaryToken -Expected 'secondary-token' -Message 'GITHUB_TOKEN must be the second source.'
+
+$environment.GITHUB_TOKEN = ''
+$cliToken = Get-RenderPilotGitHubToken `
+    -EnvironmentReader $environmentReader `
+    -GitHubCli { 'cli-token' }
+Assert-Equal -Actual $cliToken -Expected 'cli-token' -Message 'Authenticated gh must be the final token source.'
+$noToken = Get-RenderPilotGitHubToken `
+    -EnvironmentReader $environmentReader `
+    -GitHubCli { $null }
+Assert-True -Condition ($null -eq $noToken) -Message 'Missing credentials must not invent a token.'
+$failedCli = Get-RenderPilotGitHubToken `
+    -EnvironmentReader $environmentReader `
+    -GitHubCli { throw 'mock CLI failure' }
+Assert-True -Condition ($null -eq $failedCli) -Message 'CLI failure must fail token discovery closed.'
+
+# A hung local credential helper must not stall release publication indefinitely.
+$pwshExecutable = (Get-Process -Id $PID).Path
+$timeoutWatch = [System.Diagnostics.Stopwatch]::StartNew()
+$timedOutCli = & $gitHubClientModule {
+    param([string] $Executable)
+    Invoke-RenderPilotGitHubCliToken `
+        -ExecutablePath $Executable `
+        -Arguments @('-NoProfile', '-Command', 'Start-Sleep -Seconds 5') `
+        -TimeoutMilliseconds 100
+} $pwshExecutable
+$timeoutWatch.Stop()
+Assert-True -Condition ($null -eq $timedOutCli) -Message 'A hung CLI must fail token lookup closed.'
+Assert-True -Condition ($timeoutWatch.Elapsed.TotalSeconds -lt 3) -Message 'A hung CLI must be terminated promptly.'
+
 # 200 responses parse structured JSON and preserve the fixed REST headers.
 $seenRequests = [System.Collections.Generic.List[object]]::new()
 $response200 = New-MockResponse -StatusCode 200 -Content '{"id":501}'
@@ -99,6 +141,7 @@ Assert-Equal -Actual $ok.StatusCode -Expected 200 -Message 'HTTP 200 status was 
 Assert-Equal -Actual $ok.Json.id -Expected 501 -Message 'HTTP 200 JSON was not parsed.'
 Assert-Equal -Actual $seenRequests[0].Headers['X-GitHub-Api-Version'] -Expected '2022-11-28' -Message 'GitHub API version must be fixed.'
 Assert-True -Condition $seenRequests[0].SkipHttpErrorCheck -Message 'GitHub client must inspect HTTP failures itself.'
+Assert-Equal -Actual $seenRequests[0].MaximumRedirection -Expected 0 -Message 'Authenticated GitHub requests must not follow redirects.'
 
 # A successful create exposes the created release object directly. Callers can
 # validate and use this read-your-write response without an eventually
