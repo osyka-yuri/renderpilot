@@ -143,9 +143,9 @@ pub(super) fn seed_optiscaler_rows(
                 named_params! {
                     ":game_id": game_id.as_str(),
                     ":release_id": release_id,
-                    ":target_exe_path": format!("{}/Game.exe", target_dir(game_id)),
-                    ":target_dir": target_dir(game_id),
-                    ":release_files_json": release_files_json(game_id),
+                    ":target_exe_path": format!("{}/Game.exe", target_dir()),
+                    ":target_dir": target_dir(),
+                    ":release_files_json": release_files_json(),
                     ":proxy_topology_id": topology_id(game_id),
                     ":config_base_release": release_id,
                     ":configuration_baseline_json": configuration_baseline_json,
@@ -177,8 +177,7 @@ pub(super) fn seed_optiscaler_rows(
     }
 }
 
-pub(super) fn target_dir(game_id: &GameId) -> String {
-    let _ = game_id;
+pub(super) fn target_dir() -> String {
     "C:/Games/Consolidation".to_owned()
 }
 
@@ -186,9 +185,9 @@ pub(super) fn topology_id(game_id: &GameId) -> String {
     format!("optiscaler:{game_id}")
 }
 
-pub(super) fn release_files_json(game_id: &GameId) -> String {
+pub(super) fn release_files_json() -> String {
     serde_json::json!([{
-        "path": format!("{}/OptiScaler.ini", target_dir(game_id)),
+        "path": format!("{}/OptiScaler.ini", target_dir()),
         "installed": {
             "identity": "config-identity",
             "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -206,7 +205,7 @@ pub(super) fn topology_json(
     payload_game_id: &str,
     outer_implementation: &str,
 ) -> String {
-    let root = format!("{}/dxgi.dll", target_dir(game_id));
+    let root = format!("{}/dxgi.dll", target_dir());
     serde_json::json!({
         "id": topology_id(game_id),
         "game_id": payload_game_id,

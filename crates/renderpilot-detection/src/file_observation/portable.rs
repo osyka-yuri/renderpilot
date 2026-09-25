@@ -8,7 +8,7 @@ use std::{
 
 use renderpilot_application::AppResult;
 
-use super::common::{read_and_hash, unavailable_or_error, unavailable_probe};
+use super::common::read_and_hash;
 use super::{
     FileIdentityProbeResult, FileObservationResult, StableFileSnapshot, StrongFileCacheKey,
 };
@@ -19,22 +19,22 @@ pub(super) fn probe_system_identity(path: &Path) -> AppResult<FileIdentityProbeR
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Ok(FileIdentityProbeResult::Missing);
         }
-        Err(error) => return Ok(unavailable_probe(path, error)),
+        Err(_) => return Ok(FileIdentityProbeResult::Unavailable),
     };
     let before = match file.metadata() {
         Ok(metadata) if metadata.is_file() => portable_cache_key(&metadata),
         Ok(_) => return Ok(FileIdentityProbeResult::Unavailable),
-        Err(error) => return Ok(unavailable_probe(path, error)),
+        Err(_) => return Ok(FileIdentityProbeResult::Unavailable),
     };
     let after = match file.metadata() {
         Ok(metadata) if metadata.is_file() => portable_cache_key(&metadata),
         Ok(_) => return Ok(FileIdentityProbeResult::Unavailable),
-        Err(error) => return Ok(unavailable_probe(path, error)),
+        Err(_) => return Ok(FileIdentityProbeResult::Unavailable),
     };
     let reopened = match File::open(path).and_then(|file| file.metadata()) {
         Ok(metadata) if metadata.is_file() => portable_cache_key(&metadata),
         Ok(_) => return Ok(FileIdentityProbeResult::Unavailable),
-        Err(error) => return Ok(unavailable_probe(path, error)),
+        Err(_) => return Ok(FileIdentityProbeResult::Unavailable),
     };
     if before == after && before == reopened {
         Ok(FileIdentityProbeResult::Available(before))
@@ -49,26 +49,26 @@ pub(super) fn observe_system_file(path: &Path) -> AppResult<FileObservationResul
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Ok(FileObservationResult::Missing);
         }
-        Err(error) => return Ok(unavailable_or_error(path, error)),
+        Err(_) => return Ok(FileObservationResult::Unavailable),
     };
     let before = match file.metadata() {
         Ok(metadata) if metadata.is_file() => portable_cache_key(&metadata),
         Ok(_) => return Ok(FileObservationResult::Unavailable),
-        Err(error) => return Ok(unavailable_or_error(path, error)),
+        Err(_) => return Ok(FileObservationResult::Unavailable),
     };
-    let (bytes, sha256) = match read_and_hash(&mut file, path) {
+    let (bytes, sha256) = match read_and_hash(&mut file) {
         Ok(value) => value,
-        Err(error) => return Ok(unavailable_or_error(path, error)),
+        Err(_) => return Ok(FileObservationResult::Unavailable),
     };
     let after = match file.metadata() {
         Ok(metadata) if metadata.is_file() => portable_cache_key(&metadata),
         Ok(_) => return Ok(FileObservationResult::Unavailable),
-        Err(error) => return Ok(unavailable_or_error(path, error)),
+        Err(_) => return Ok(FileObservationResult::Unavailable),
     };
     let reopened = match File::open(path).and_then(|file| file.metadata()) {
         Ok(metadata) if metadata.is_file() => portable_cache_key(&metadata),
         Ok(_) => return Ok(FileObservationResult::Unavailable),
-        Err(error) => return Ok(unavailable_or_error(path, error)),
+        Err(_) => return Ok(FileObservationResult::Unavailable),
     };
     if before != after || before != reopened {
         return Ok(FileObservationResult::Unavailable);

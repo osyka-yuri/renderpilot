@@ -30,10 +30,10 @@ pub(super) fn uninstall_shared_locked(
         plan.retain_reachable(None);
     }
 
-    let registered_exe = super::route::registered_vulkan_exe_for_uninstall(
-        context, game_id, record,
-    )
-    .ok_or_else(|| errors::invalid("Vulkan uninstall has no registered executable".to_owned()))?;
+    let registered_exe =
+        super::route::registered_vulkan_exe_for_uninstall(record).ok_or_else(|| {
+            errors::invalid("Vulkan uninstall has no registered executable".to_owned())
+        })?;
     let layer_dir = crate::addons::renodx::platform::vulkan::program_data::layer_dir()
         .ok_or_else(errors::vulkan_unsupported_platform)?;
     let registry = crate::addons::renodx::platform::vulkan::native_registry()
@@ -130,7 +130,7 @@ pub(super) fn uninstall_locked(
 ) -> Result<(), ServiceError> {
     let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
-    if super::route::registered_vulkan_exe_for_uninstall(context, game_id, &record).is_some() {
+    if super::route::registered_vulkan_exe_for_uninstall(&record).is_some() {
         return Err(ServiceError::invalid_input(
             "shared Vulkan uninstall requires the combined mutation boundary",
         ));

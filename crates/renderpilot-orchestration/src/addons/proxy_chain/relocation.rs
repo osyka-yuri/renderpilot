@@ -104,7 +104,7 @@ pub(super) fn execute_update(
         }
     }
 
-    execute_fresh_install(context, plan, outer_bytes, mutation, changed)
+    execute_fresh_install(plan, outer_bytes, mutation, changed)
 }
 
 /// Releases a topology root before installing the same outer proxy elsewhere.

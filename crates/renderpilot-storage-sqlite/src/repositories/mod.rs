@@ -358,14 +358,13 @@ impl SqliteStorage {
                 transaction,
                 unit.game.id(),
             )?;
-            let report = persist_scan_result_in_transaction(
+            persist_scan_result_in_transaction(
                 transaction,
                 unit.game,
                 unit.components,
                 unit.artifacts,
                 unit.prune_empty_operations,
             )?;
-            let _ = report;
             observations::replace_game_observations_within_transaction(
                 transaction,
                 unit.game.id(),

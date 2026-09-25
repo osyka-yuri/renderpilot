@@ -133,7 +133,7 @@ fn partial_stage_intent_is_adopted_only_for_cleanup_and_keeps_endpoint_pending()
             target_digest: hash_bytes(b"never-required-for-abort").expect("digest"),
         };
     }
-    prepared.cas(next, false).expect("stage intent");
+    prepared.cas(next).expect("stage intent");
     adopt_intent_authorized_artifacts(&mut prepared).expect("adopt partial stage");
     let record = &prepared.journal.operations()[0];
     assert!(
@@ -185,7 +185,7 @@ fn partial_custody_intent_is_adopted_without_preimage_digest_assumption() {
             target_digest: hash_bytes(b"stage").expect("digest"),
         };
     }
-    prepared.cas(next, false).expect("stage intent");
+    prepared.cas(next).expect("stage intent");
     let mut next = prepared.journal.clone();
     if let DomainOperationEffect::Write(effect) = next.operations_mut()[0].effect_mut() {
         *effect.state_mut() = DomainWriteState::Staged {
@@ -197,14 +197,14 @@ fn partial_custody_intent_is_adopted_without_preimage_digest_assumption() {
         ArtifactSlot::Stage,
         &stage_observed,
     );
-    prepared.cas(next, false).expect("staged");
+    prepared.cas(next).expect("staged");
     let mut next = prepared.journal.clone();
     if let DomainOperationEffect::Write(effect) = next.operations_mut()[0].effect_mut() {
         *effect.state_mut() = DomainWriteState::CaptureIntent {
             stage: durable(&stage_observed),
         };
     }
-    prepared.cas(next, false).expect("capture intent");
+    prepared.cas(next).expect("capture intent");
     adopt_intent_authorized_artifacts(&mut prepared).expect("adopt partial custody");
     let record = &prepared.journal.operations()[0];
     assert!(
@@ -247,7 +247,7 @@ fn create_directory_stage_intent_is_preserved_with_a_cleanup_only_directory() {
     if let DomainOperationEffect::CreateDirectory(effect) = next.operations_mut()[0].effect_mut() {
         *effect.state_mut() = DomainCreateDirectoryState::StageIntent;
     }
-    prepared.cas(next, false).expect("directory stage intent");
+    prepared.cas(next).expect("directory stage intent");
     adopt_intent_authorized_artifacts(&mut prepared).expect("adopt partial directory");
     let record = &prepared.journal.operations()[0];
     assert!(
@@ -294,7 +294,7 @@ fn create_directory_abort_rejects_an_occupied_private_discard() {
     if let DomainOperationEffect::CreateDirectory(effect) = next.operations_mut()[0].effect_mut() {
         *effect.state_mut() = DomainCreateDirectoryState::StageIntent;
     }
-    prepared.cas(next, false).expect("directory stage intent");
+    prepared.cas(next).expect("directory stage intent");
     assert!(adopt_intent_authorized_artifacts(&mut prepared).is_err());
     assert!(matches!(
         observe_private_artifact(&prepared, 0, ArtifactSlot::Discard).expect("discard"),
@@ -327,7 +327,7 @@ fn cleanup_artifact_intent_retries_an_unlink_after_a_crash() {
             target_digest: hash_bytes(b"cleanup").expect("digest"),
         };
     }
-    prepared.cas(next, false).expect("persist stage intent");
+    prepared.cas(next).expect("persist stage intent");
     let mut next = prepared.journal.clone();
     if let DomainOperationEffect::Write(effect) = next.operations_mut()[0].effect_mut() {
         *effect.state_mut() = DomainWriteState::Staged {
@@ -339,21 +339,21 @@ fn cleanup_artifact_intent_retries_an_unlink_after_a_crash() {
         ArtifactSlot::Stage,
         &expected,
     );
-    prepared.cas(next, false).expect("persist staged");
+    prepared.cas(next).expect("persist staged");
     let mut next = prepared.journal.clone();
     if let DomainOperationEffect::Write(effect) = next.operations_mut()[0].effect_mut() {
         *effect.state_mut() = DomainWriteState::Preserved;
     }
-    prepared.cas(next, false).expect("persist preserved");
+    prepared.cas(next).expect("persist preserved");
     let mut next = prepared.journal.clone();
     next.set_cleanup(JournalCleanup::ArtifactRemoveIntent {
         operation_id: 0,
         artifact: ArtifactSlot::Stage,
         expected: durable(&expected),
     });
-    prepared.cas(next, false).expect("persist cleanup intent");
+    prepared.cas(next).expect("persist cleanup intent");
     prepared
-        .cleanup_private_artifacts(false)
+        .cleanup_private_artifacts()
         .expect("retry cleanup unlink");
     assert_eq!(
         observe_private_artifact(&prepared, 0, ArtifactSlot::Stage).expect("stage"),
@@ -481,7 +481,7 @@ fn advance_write_to_captured(
             target_digest: stage_digest,
         };
     }
-    prepared.cas(next, false).expect("cas to stage intent");
+    prepared.cas(next).expect("cas to stage intent");
 
     let mut next = prepared.journal.clone();
     if let DomainOperationEffect::Write(effect) = next.operations_mut()[0].effect_mut() {
@@ -490,7 +490,7 @@ fn advance_write_to_captured(
         };
     }
     set_artifact(&mut next.operations_mut()[0], ArtifactSlot::Stage, stage);
-    prepared.cas(next, false).expect("cas to staged");
+    prepared.cas(next).expect("cas to staged");
 
     let mut next = prepared.journal.clone();
     if let DomainOperationEffect::Write(effect) = next.operations_mut()[0].effect_mut() {
@@ -498,7 +498,7 @@ fn advance_write_to_captured(
             stage: durable(stage),
         };
     }
-    prepared.cas(next, false).expect("cas to capture intent");
+    prepared.cas(next).expect("cas to capture intent");
 
     let mut next = prepared.journal.clone();
     if let DomainOperationEffect::Write(effect) = next.operations_mut()[0].effect_mut() {
@@ -512,7 +512,7 @@ fn advance_write_to_captured(
         ArtifactSlot::Custody,
         custody,
     );
-    prepared.cas(next, false).expect("cas to captured");
+    prepared.cas(next).expect("cas to captured");
 }
 
 fn advance_write_to_publish_intent(
@@ -528,7 +528,7 @@ fn advance_write_to_publish_intent(
             custody: durable(custody),
         };
     }
-    prepared.cas(next, false).expect("cas to publish intent");
+    prepared.cas(next).expect("cas to publish intent");
 }
 
 #[test]

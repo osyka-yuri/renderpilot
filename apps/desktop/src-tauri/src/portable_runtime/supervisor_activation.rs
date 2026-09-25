@@ -52,7 +52,6 @@ pub(super) struct CurrentGeneration {
 
 pub(super) struct ActivatedTrial {
     pub(super) trial: TrialProcess,
-    pub(super) journal: std::path::PathBuf,
 }
 
 #[derive(Clone, Copy)]
@@ -339,7 +338,7 @@ fn activate_generation_inner(
         let status = diagnostics.milestone(PortableMilestone::ActivationCommitted);
         super::diagnostics_files::report_emit_failure(status);
     }
-    Ok(ActivatedTrial { trial, journal })
+    Ok(ActivatedTrial { trial })
 }
 
 pub(super) trait CatalogMigrationTrial {

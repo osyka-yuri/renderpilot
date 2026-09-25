@@ -3,22 +3,14 @@
 use std::{
     fs::File,
     io::{self, Read},
-    path::Path,
 };
 
 use renderpilot_domain::Sha256Hash;
 use sha2::{Digest, Sha256};
 
-use crate::error::detection_context_error;
-
-use super::{FileIdentityProbeResult, FileObservationResult};
-
 const HASH_BUFFER_SIZE: usize = 256 * 1024;
 
-pub(super) fn read_and_hash(
-    file: &mut File,
-    path: &Path,
-) -> Result<(Vec<u8>, Sha256Hash), io::Error> {
+pub(super) fn read_and_hash(file: &mut File) -> Result<(Vec<u8>, Sha256Hash), io::Error> {
     let mut bytes = Vec::new();
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; HASH_BUFFER_SIZE];
@@ -39,19 +31,5 @@ pub(super) fn read_and_hash(
             format!("invalid SHA-256: {message}"),
         )
     })?;
-    let _ = path;
     Ok((bytes, sha256))
-}
-
-pub(super) fn unavailable_or_error(path: &Path, error: io::Error) -> FileObservationResult {
-    let _ = detection_context_error(format_args!("could not observe {}", path.display()), error);
-    FileObservationResult::Unavailable
-}
-
-pub(super) fn unavailable_probe(path: &Path, error: io::Error) -> FileIdentityProbeResult {
-    let _ = detection_context_error(
-        format_args!("could not acquire observation lease for {}", path.display()),
-        error,
-    );
-    FileIdentityProbeResult::Unavailable
 }

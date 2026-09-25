@@ -62,14 +62,12 @@ fn pending_path(root: &Path, bytes: &[u8]) -> PathBuf {
 }
 
 fn require_absent_pending_file(path: &Path) -> Result<()> {
-    let metadata = match std::fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error.into()),
-    };
-    let _ = metadata;
-    Err(PortableRuntimeError::new(
-        "portable_publication",
-        "existing pending publication was retained; no raw-path cleanup is authorized",
-    ))
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Err(PortableRuntimeError::new(
+            "portable_publication",
+            "existing pending publication was retained; no raw-path cleanup is authorized",
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }

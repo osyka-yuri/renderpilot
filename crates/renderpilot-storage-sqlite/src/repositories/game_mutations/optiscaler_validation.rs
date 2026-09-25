@@ -23,7 +23,7 @@ pub(super) fn validate_optiscaler_transition<'a>(
         ensure_exact_before_state(transaction, game_id, None)?;
         ensure_exact_before_topology(transaction, game_id, None)?;
         validate_exact_adoption_shape(transaction, state, topology)?;
-        validate_optiscaler_live_observations(state, topology)?;
+        validate_optiscaler_receipt_metadata(state, topology)?;
         return Ok(None);
     }
 

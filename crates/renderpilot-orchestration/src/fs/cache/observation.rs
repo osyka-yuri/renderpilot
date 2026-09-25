@@ -44,16 +44,15 @@ pub(super) struct CacheFileSnapshot {
 /// intentionally non-deleting. Keeping that owner structural preserves the
 /// observation lifetime without target-specific lint suppression.
 #[derive(Debug)]
-pub(super) struct RetainedCacheFile(fs::File);
+pub(super) struct RetainedCacheFile {
+    // Retains the exact observed object on platforms that cannot retire it by handle.
+    _file: fs::File,
+}
 
 impl RetainedCacheFile {
-    pub(super) fn retain(&self) {
-        let _ = &self.0;
-    }
-
     #[cfg(windows)]
     pub(super) fn file(&self) -> &fs::File {
-        &self.0
+        &self._file
     }
 }
 
@@ -106,7 +105,7 @@ pub(super) fn read_cache_file_locked(
         sha256: Sha256::digest(&bytes).into(),
     });
     Ok(Some(CacheFileSnapshot {
-        owner: RetainedCacheFile(file),
+        owner: RetainedCacheFile { _file: file },
         bytes,
         metadata,
         generation,

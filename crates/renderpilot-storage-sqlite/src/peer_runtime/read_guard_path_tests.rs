@@ -52,6 +52,22 @@ fn canonical_root_accepts_absolute_drive_and_unc_forms() {
 }
 
 #[test]
+fn canonical_root_accepts_posix_drive_and_unc_share_roots() {
+    for (input, expected) in [
+        ("/", "/"),
+        ("C:/", "C:/"),
+        ("//server/share", "//server/share"),
+    ] {
+        assert_eq!(
+            test_strict_absolute_path(input)
+                .unwrap_or_else(|error| panic!("{input}: {error}"))
+                .as_str(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn canonical_root_rejects_relative_dot_escape_duplicate_and_malformed_forms() {
     for path in [
         "",
@@ -90,5 +106,30 @@ fn guard_containment_is_component_aware_and_strict() {
     assert!(!test_is_strict_descendant(
         "C:/game",
         "C:/other/../game/peer.dll"
+    ));
+}
+
+#[test]
+fn guard_containment_preserves_path_anchors_and_root_boundaries() {
+    assert!(test_is_strict_descendant("/", "/games/peer.dll"));
+    assert!(test_is_strict_descendant("C:/", "C:/Games/peer.dll"));
+    assert!(test_is_strict_descendant(
+        "//server/share",
+        "//server/share/game/peer.dll"
+    ));
+
+    assert!(!test_is_strict_descendant("/", "C:/file"));
+    assert!(!test_is_strict_descendant(
+        "//server/share",
+        "/server/share/file"
+    ));
+    assert!(!test_is_strict_descendant(
+        "//server/share",
+        "//server/share"
+    ));
+    assert!(!test_is_strict_descendant("/games", "/games2/peer.dll"));
+    assert!(!test_is_strict_descendant(
+        "//server/share",
+        "//server/share2/file"
     ));
 }

@@ -17,9 +17,7 @@ use renderpilot_application::{
 };
 use renderpilot_domain::{ComponentFile, ComponentRollbackBaseline, Sha256Hash};
 
-use crate::coordinated_files::{
-    CoordinatedFilePlan, FilePlanBatchLog, execute_file_plans, execute_restore_batch,
-};
+use crate::coordinated_files::{CoordinatedFilePlan, execute_file_plans, execute_restore_batch};
 
 use super::types::AppliedFsLog;
 
@@ -266,8 +264,7 @@ pub(super) fn restore_baseline_preserving_sidecars(
             baseline_sha256: require_baseline_hash(file)?,
         });
     }
-    let _log: FilePlanBatchLog =
-        execute_restore_batch(restores, Vec::new()).map_err(map_service_error)?;
+    execute_restore_batch(restores, Vec::new()).map_err(map_service_error)?;
 
     // Flush restored copies before auxiliary-file verification.
     sync_component_file_dirs(current.iter().chain(baseline));

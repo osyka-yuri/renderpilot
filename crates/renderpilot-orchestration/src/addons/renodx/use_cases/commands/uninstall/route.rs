@@ -11,12 +11,11 @@ pub(super) fn uninstall(context: &Context, game_id: &GameId) -> Result<(), Servi
         let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
             .ok_or_else(errors::not_installed)?;
         if record.host_kind() == Some(InstalledAddonHostKind::SharedVulkanLayer) {
-            let executable = registered_vulkan_exe_for_uninstall(context, game_id, &record)
-                .ok_or_else(|| {
-                    ServiceError::invalid_input(
-                        "active shared RenoDX uninstall has no registered executable",
-                    )
-                })?;
+            let executable = registered_vulkan_exe_for_uninstall(&record).ok_or_else(|| {
+                ServiceError::invalid_input(
+                    "active shared RenoDX uninstall has no registered executable",
+                )
+            })?;
             drop(guard);
 
             let guards =
@@ -24,8 +23,7 @@ pub(super) fn uninstall(context: &Context, game_id: &GameId) -> Result<(), Servi
             let current = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
                 .ok_or_else(errors::not_installed)?;
             if current.host_kind() != Some(InstalledAddonHostKind::SharedVulkanLayer)
-                || registered_vulkan_exe_for_uninstall(context, game_id, &current)
-                    != Some(executable)
+                || registered_vulkan_exe_for_uninstall(&current) != Some(executable)
             {
                 drop(guards);
                 continue;
@@ -72,8 +70,6 @@ pub(super) fn uninstall_locked(
 }
 
 pub(super) fn registered_vulkan_exe_for_uninstall(
-    _context: &Context,
-    _game_id: &GameId,
     record: &InstalledAddon,
 ) -> Option<std::path::PathBuf> {
     match record.host_kind() {

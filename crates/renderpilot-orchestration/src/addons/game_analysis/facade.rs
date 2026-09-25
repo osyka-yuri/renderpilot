@@ -681,16 +681,14 @@ pub fn analyze_unreal_installation<'game>(
                     .expect("guaranteed matching installation context");
             }
         }
-        Err(MarkerScanIncomplete::BudgetExhausted { scanned_bytes }) => {
+        Err(MarkerScanIncomplete::BudgetExhausted { .. }) => {
             if let Some(ref primary) = bound_primary {
                 diagnostics.push(DetectionDiagnostic::MarkerScanIncompleteBudgetExhausted {
                     file_path: primary.path().to_path_buf(),
                 });
             }
-            let _ = scanned_bytes;
         }
-        Err(MarkerScanIncomplete::TruncatedFile { path }) => {
-            let _ = path;
+        Err(MarkerScanIncomplete::TruncatedFile { .. }) => {
             // Real TruncatedSection diagnostic is generated with actual section name,
             // total raw size, and scanned bytes via `map_coverage_to_diagnostics` below.
         }

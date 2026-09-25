@@ -206,9 +206,8 @@ fn run_split_phases(
 fn rollback_payload(
     receipt: &InstallReceipt,
     addon_dir: &Path,
-    _mode: PayloadRollback,
+    mode: PayloadRollback,
 ) -> Result<(), ServiceError> {
-    let mode = _mode;
     let rollback_result = match mode {
         PayloadRollback::Flat => {
             engine::uninstall(&receipt.created_files, &receipt.backed_up_files)

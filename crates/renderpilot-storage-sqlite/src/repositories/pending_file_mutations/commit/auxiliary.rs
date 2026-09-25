@@ -434,10 +434,8 @@ pub(in crate::repositories) fn direct_parent_lexical(path: &str) -> Option<Strin
 
 /// SQLite does not inspect live files.  Native observation belongs to the
 /// filesystem authority, not this persistence adapter.
-pub(in crate::repositories) fn validate_optiscaler_live_file(
+pub(in crate::repositories) fn validate_optiscaler_file_receipt_metadata(
     path: &renderpilot_domain::PathRef,
-    _expected: &Sha256Hash,
-    _role: &str,
 ) -> AppResult<()> {
     if path.as_str().trim().is_empty() || path.as_str().contains('\0') {
         return Err(AppError::storage_failed(
@@ -449,10 +447,9 @@ pub(in crate::repositories) fn validate_optiscaler_live_file(
 
 /// SQLite does not inspect live directories; native observation belongs to the
 /// filesystem authority.
-pub(in crate::repositories) fn validate_optiscaler_live_directory(
+pub(in crate::repositories) fn validate_optiscaler_directory_receipt_metadata(
     path: &renderpilot_domain::PathRef,
     expected_identity: &str,
-    _role: &str,
 ) -> AppResult<()> {
     if path.as_str().trim().is_empty()
         || path.as_str().contains('\0')

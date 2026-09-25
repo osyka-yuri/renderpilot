@@ -290,10 +290,10 @@ fn optiscaler_inventory_includes_direct_paths_and_json_paths_from_both_tables() 
         .map(|path| path.to_string_lossy().replace('\\', "/"))
         .collect::<Vec<_>>();
     for expected in [
-        format!("{}/Game.exe", target_dir(source.id())),
-        target_dir(source.id()),
-        format!("{}/OptiScaler.ini", target_dir(source.id())),
-        format!("{}/dxgi.dll", target_dir(source.id())),
+        format!("{}/Game.exe", target_dir()),
+        target_dir(),
+        format!("{}/OptiScaler.ini", target_dir()),
+        format!("{}/dxgi.dll", target_dir()),
     ] {
         assert!(
             paths.iter().any(|path| path == &expected),

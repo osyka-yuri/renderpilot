@@ -84,7 +84,7 @@ pub(crate) fn snapshot_active_update_phase3(
     prepared: &LumaActiveUpdatePrepared,
 ) -> Result<ActiveUpdatePhase3, ServiceError> {
     let current = snapshot_update_route(context, manifest, guard)?;
-    let _current = require_unchanged_active(current, phase1)?;
+    require_unchanged_active(current, phase1)?;
 
     let authority = LumaPeerRootAuthority::resolve(
         phase1.canonical_game_root(),

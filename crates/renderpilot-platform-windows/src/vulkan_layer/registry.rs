@@ -61,9 +61,8 @@ pub trait LayerRegistry {
     /// [`registered_layers`](Self::registered_layers) instead.
     fn observe_canonical_registration(
         &self,
-        manifest_path: &Path,
+        _manifest_path: &Path,
     ) -> io::Result<RegistryValueState> {
-        let _ = manifest_path;
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "canonical registry participant is not implemented by this registry",
@@ -72,8 +71,7 @@ pub trait LayerRegistry {
 
     /// Test-fixture compatibility for the removed direct installer.
     #[cfg(test)]
-    fn activate_canonical_registration(&self, manifest_path: &Path) -> io::Result<()> {
-        let _ = manifest_path;
+    fn activate_canonical_registration(&self, _manifest_path: &Path) -> io::Result<()> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "canonical registry participant is not implemented by this registry",
@@ -85,10 +83,9 @@ pub trait LayerRegistry {
     /// never the containing key.
     fn restore_canonical_registration(
         &self,
-        manifest_path: &Path,
-        state: &RegistryValueState,
+        _manifest_path: &Path,
+        _state: &RegistryValueState,
     ) -> io::Result<()> {
-        let _ = (manifest_path, state);
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "canonical registry participant is not implemented by this registry",

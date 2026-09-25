@@ -1167,9 +1167,19 @@ fn test_ue3_probe_lexical_sort_and_canonical_containment() {
     // With canonical containment active, it is strictly rejected and A_Package (867) is chosen.
     let symlink_path = cooked_pc.join("00_OutsideLink.upk");
     #[cfg(windows)]
-    let symlink_created = std::os::windows::fs::symlink_file(&outside_pkg, &symlink_path).is_ok();
+    let symlink_created = match std::os::windows::fs::symlink_file(&outside_pkg, &symlink_path) {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!("symlink containment subcase skipped: {error}");
+            false
+        }
+    };
     #[cfg(unix)]
-    let symlink_created = std::os::unix::fs::symlink(&outside_pkg, &symlink_path).is_ok();
+    let symlink_created = {
+        std::os::unix::fs::symlink(&outside_pkg, &symlink_path)
+            .expect("create escaped-package symlink");
+        true
+    };
 
     // B_Package has version 868, A_Package has version 867
     // Lexical sorting by relative path ensures A_Package is probed before B_Package
@@ -1202,10 +1212,12 @@ fn test_ue3_probe_lexical_sort_and_canonical_containment() {
             }
         )
     });
-    assert!(
-        !has_outside_proof,
-        "Escaped package outside root must never establish presence proof"
-    );
+    if symlink_created {
+        assert!(
+            !has_outside_proof,
+            "Escaped package outside root must never establish presence proof"
+        );
+    }
 
     let has_ue3_proof = report.presence_proofs.iter().any(|p| {
         matches!(
@@ -1232,7 +1244,6 @@ fn test_ue3_probe_lexical_sort_and_canonical_containment() {
         inside_canonical.starts_with(context.root_path()),
         "Inside canonical package must be contained in installation context root"
     );
-    let _ = symlink_created;
 }
 
 /// Regression test: Duplicate search directory traversal does not starve unique UE3 candidates

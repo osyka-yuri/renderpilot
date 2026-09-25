@@ -145,10 +145,10 @@ impl Manifest {
                 FileBefore::Snapshot {
                     snapshot_path,
                     sha256,
-                    len,
+                    ..
                 } => {
                     relative_snapshot(snapshot_path)?;
-                    validate_digest_and_length(sha256, *len)?;
+                    validate_sha256_hex(sha256)?;
                 }
             }
             match &file.after {
@@ -157,8 +157,8 @@ impl Manifest {
                         "removed file `{live_key}` is missing its tomb path"
                     )));
                 }
-                FileAfter::Present { sha256, len } => {
-                    validate_digest_and_length(sha256, *len)?;
+                FileAfter::Present { sha256, .. } => {
+                    validate_sha256_hex(sha256)?;
                     if file.stage_path.is_none() {
                         return Err(ManifestError(format!(
                             "written file `{live_key}` is missing its stage path"
@@ -388,7 +388,7 @@ fn overlapping_target(paths: &BTreeSet<String>) -> Option<String> {
     None
 }
 
-fn validate_digest_and_length(digest: &str, _len: u64) -> Result<(), ManifestError> {
+fn validate_sha256_hex(digest: &str) -> Result<(), ManifestError> {
     if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(ManifestError(format!("invalid SHA-256 digest `{digest}`")));
     }

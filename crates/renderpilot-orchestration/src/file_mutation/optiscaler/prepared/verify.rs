@@ -29,7 +29,7 @@ impl PreparedFileMutation<'_> {
             };
             set_endpoint_expected(effect.endpoint_mut(), &actual);
         }
-        self.cas(next, false)?;
+        self.cas(next)?;
         self.next_operation_id += 1;
         let ordinal =
             u32::try_from(index).map_err(|_| crate::failed("operation index overflow"))?;

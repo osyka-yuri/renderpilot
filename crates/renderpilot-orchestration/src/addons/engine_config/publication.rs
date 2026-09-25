@@ -525,7 +525,7 @@ fn rename_stage_relative(
     let mut storage = Vec::with_capacity(slots);
     storage.resize_with(slots, MaybeUninit::<FILE_RENAME_INFORMATION>::zeroed);
     let rename = storage.as_mut_ptr().cast::<FILE_RENAME_INFORMATION>();
-    let status = unsafe {
+    unsafe {
         (*rename).Anonymous.ReplaceIfExists = replace_if_exists;
         (*rename).RootDirectory = parent.as_raw_handle();
         (*rename).FileNameLength = name_bytes;
@@ -547,9 +547,7 @@ fn rename_stage_relative(
                 "stage rename failed with NTSTATUS {status:#010x}"
             )));
         }
-        status
-    };
-    let _ = status;
+    }
     Ok(())
 }
 

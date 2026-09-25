@@ -231,8 +231,7 @@ pub(crate) fn lower_dlss_cascade_decision(
         } => {
             let managed_sidecar = require_managed_sidecar(live_path, sidecar_path)?;
             require_equal_digests(live_path, expected_active_digest, expected_baseline_digest)?;
-            let _live_before =
-                require_present_digest(live_path, live_snapshot, expected_active_digest, false)?;
+            require_present_digest(live_path, live_snapshot, expected_active_digest, false)?;
             let sidecar_before = require_present_digest(
                 &managed_sidecar,
                 sidecar_snapshot,
@@ -259,8 +258,7 @@ pub(crate) fn lower_dlss_cascade_decision(
         } => {
             require_managed_sidecar(live_path, sidecar_path)?;
             require_equal_digests(live_path, expected_active_digest, expected_baseline_digest)?;
-            let _live_before =
-                require_present_digest(live_path, live_snapshot, expected_active_digest, false)?;
+            require_present_digest(live_path, live_snapshot, expected_active_digest, false)?;
             require_absent(sidecar_path, sidecar_snapshot)?;
             Ok(())
         }

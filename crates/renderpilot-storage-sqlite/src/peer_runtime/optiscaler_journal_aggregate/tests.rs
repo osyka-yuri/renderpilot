@@ -323,7 +323,7 @@ fn assert_recovery_rejects_noncanonical_binding_path(
     binding_path: PersistedBindingPath,
 ) {
     let (runtime, id, initial) = seed(fixture);
-    let _preparing = begin(&runtime, &id, operation_id, &initial);
+    begin(&runtime, &id, operation_id, &initial);
     let mut manifest: serde_json::Value =
         serde_json::from_str(&pending_identity(&runtime, operation_id).3)
             .expect("stored preparing journal");
@@ -2508,7 +2508,7 @@ fn invalid_input_and_duplicate_begin_are_rejected() {
         )
         .is_err()
     );
-    let _preparing = begin(&runtime, &id, "journal-duplicate", &initial);
+    begin(&runtime, &id, "journal-duplicate", &initial);
     let duplicate = OptiScalerJournalAggregateBegin::new(
         "journal-duplicate",
         id,
@@ -2820,7 +2820,7 @@ fn recovery_rejects_prepared_catalog_binding_drift_without_changing_evidence() {
 #[test]
 fn recovery_rejects_generation_drift_without_changing_rows() {
     let (runtime, id, initial) = seed("recovery-generation-drift");
-    let _preparing = begin(&runtime, &id, "journal-recovery-generation-drift", &initial);
+    begin(&runtime, &id, "journal-recovery-generation-drift", &initial);
     let before_row = pending_tuple(&runtime, "journal-recovery-generation-drift");
     let before_reservation = reservation(&runtime, &id, "journal-recovery-generation-drift")
         .expect("reservation before recovery");
@@ -2854,7 +2854,7 @@ fn recovery_rejects_generation_drift_without_changing_rows() {
 #[test]
 fn recovery_cas_preserves_each_pending_state_and_returns_exact_json() {
     let (runtime, id, initial) = seed("recovery-cas-preparing");
-    let _preparing = begin(&runtime, &id, "journal-recovery-cas-preparing", &initial);
+    begin(&runtime, &id, "journal-recovery-cas-preparing", &initial);
     let proof = recover_optiscaler(&runtime, &id);
     let next = journal_with_materialization(
         proof.current_journal_json(),
@@ -2931,7 +2931,7 @@ fn recovery_cas_preserves_each_pending_state_and_returns_exact_json() {
 #[test]
 fn recovery_cas_rejects_cross_state_journal_progress() {
     let (runtime, id, initial) = seed("recovery-cross-preparing");
-    let _preparing = begin(&runtime, &id, "journal-recovery-cross-preparing", &initial);
+    begin(&runtime, &id, "journal-recovery-cross-preparing", &initial);
     let proof = recover_optiscaler(&runtime, &id);
     assert!(
         runtime
@@ -2993,7 +2993,7 @@ fn recovery_cas_rejects_cross_state_journal_progress() {
 #[test]
 fn recovery_cas_rejects_stale_row_reservation_generation_and_catalog_fences() {
     let (runtime, id, initial) = seed("recovery-stale-row");
-    let _preparing = begin(&runtime, &id, "journal-recovery-stale-row", &initial);
+    begin(&runtime, &id, "journal-recovery-stale-row", &initial);
     let proof = recover_optiscaler(&runtime, &id);
     replace_pending_json(&runtime, "journal-recovery-stale-row", &prepared_journal());
     assert!(
@@ -3007,7 +3007,7 @@ fn recovery_cas_rejects_stale_row_reservation_generation_and_catalog_fences() {
     );
 
     let (runtime, id, initial) = seed("recovery-stale-reservation");
-    let _preparing = begin(
+    begin(
         &runtime,
         &id,
         "journal-recovery-stale-reservation",
@@ -3034,7 +3034,7 @@ fn recovery_cas_rejects_stale_row_reservation_generation_and_catalog_fences() {
     );
 
     let (runtime, id, initial) = seed("recovery-stale-generation");
-    let _preparing = begin(&runtime, &id, "journal-recovery-stale-generation", &initial);
+    begin(&runtime, &id, "journal-recovery-stale-generation", &initial);
     let proof = recover_optiscaler(&runtime, &id);
     runtime
         .repositories()
@@ -3070,7 +3070,7 @@ fn recovery_cas_rejects_stale_row_reservation_generation_and_catalog_fences() {
 #[test]
 fn recovery_terminal_cleanup_deletes_pairs_atomically_and_never_restores_committed_state() {
     let (runtime, id, initial) = seed("recovery-terminal-preparing");
-    let _preparing = begin(
+    begin(
         &runtime,
         &id,
         "journal-recovery-terminal-preparing",
@@ -3154,7 +3154,7 @@ fn recovery_terminal_cleanup_deletes_pairs_atomically_and_never_restores_committ
 #[test]
 fn recovery_terminal_cleanup_rejects_stale_reservation_without_partial_delete() {
     let (runtime, id, initial) = seed("recovery-terminal-stale-reservation");
-    let _preparing = begin(
+    begin(
         &runtime,
         &id,
         "journal-recovery-terminal-stale-reservation",

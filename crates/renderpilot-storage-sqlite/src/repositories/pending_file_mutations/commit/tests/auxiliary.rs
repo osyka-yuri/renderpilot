@@ -3,7 +3,7 @@ use super::*;
 fn auxiliary_journal(
     parent_paths: &[&str],
     destination_path: &str,
-) -> (OptiScalerJournal, FileReceipt, FileReceipt) {
+) -> (OptiScalerJournal, FileReceipt) {
     let capability = capability();
     let destination_receipt = FileReceipt::owned("recovery-copy", hash()).expect("destination");
     let source_receipt = FileReceipt::owned("original-config", hash()).expect("source");
@@ -142,11 +142,10 @@ fn auxiliary_journal(
         .expect("control namespace"),
         operations,
     );
-    (journal, source_receipt, destination_receipt)
+    (journal, destination_receipt)
 }
 
 fn auxiliary_binding(
-    _source_receipt: FileReceipt,
     destination_path: &str,
     destination_receipt: FileReceipt,
 ) -> OptiScalerAggregateBinding {
@@ -498,27 +497,23 @@ fn owned_configuration_restore_fixture() -> (
 
 #[test]
 fn auxiliary_preservation_authorizes_one_or_multiple_missing_parents() {
-    let (journal, source, destination) = auxiliary_journal(
+    let (journal, destination) = auxiliary_journal(
         &["C:/RenderPilot/recovery"],
         "C:/RenderPilot/recovery/config.ini",
     );
     validate_binding_against_journal(
         &journal,
-        &auxiliary_binding(source, "C:/RenderPilot/recovery/config.ini", destination),
+        &auxiliary_binding("C:/RenderPilot/recovery/config.ini", destination),
     )
     .expect("one missing parent");
 
-    let (journal, source, destination) = auxiliary_journal(
+    let (journal, destination) = auxiliary_journal(
         &["C:/RenderPilot/recovery", "C:/RenderPilot/recovery/state"],
         "C:/RenderPilot/recovery/state/config.ini",
     );
     validate_binding_against_journal(
         &journal,
-        &auxiliary_binding(
-            source,
-            "C:/RenderPilot/recovery/state/config.ini",
-            destination,
-        ),
+        &auxiliary_binding("C:/RenderPilot/recovery/state/config.ini", destination),
     )
     .expect("multiple missing parents");
 }
@@ -745,26 +740,26 @@ fn rejected_five_effect_commit_keeps_each_reverse_rollback_edge_legal() {
 
 #[test]
 fn auxiliary_parent_closure_rejects_arbitrary_or_sibling_create_directories() {
-    let (journal, source, destination) = auxiliary_journal(
+    let (journal, destination) = auxiliary_journal(
         &["C:/RenderPilot/recovery", "C:/RenderPilot/other"],
         "C:/RenderPilot/recovery/config.ini",
     );
     assert!(
         validate_binding_against_journal(
             &journal,
-            &auxiliary_binding(source, "C:/RenderPilot/recovery/config.ini", destination),
+            &auxiliary_binding("C:/RenderPilot/recovery/config.ini", destination),
         )
         .is_err()
     );
 
-    let (journal, source, destination) = auxiliary_journal(
+    let (journal, destination) = auxiliary_journal(
         &["C:/RenderPilot/recovery-evil"],
         "C:/RenderPilot/recovery/config.ini",
     );
     assert!(
         validate_binding_against_journal(
             &journal,
-            &auxiliary_binding(source, "C:/RenderPilot/recovery/config.ini", destination),
+            &auxiliary_binding("C:/RenderPilot/recovery/config.ini", destination),
         )
         .is_err()
     );
@@ -772,7 +767,7 @@ fn auxiliary_parent_closure_rejects_arbitrary_or_sibling_create_directories() {
 
 #[test]
 fn auxiliary_parent_closure_rejects_non_create_effect_wrong_fold_and_wrong_order() {
-    let (mut journal, source, destination) = auxiliary_journal(
+    let (mut journal, destination) = auxiliary_journal(
         &["C:/RenderPilot/recovery"],
         "C:/RenderPilot/recovery/config.ini",
     );
@@ -802,12 +797,12 @@ fn auxiliary_parent_closure_rejects_non_create_effect_wrong_fold_and_wrong_order
     assert!(
         validate_binding_against_journal(
             &journal,
-            &auxiliary_binding(source, "C:/RenderPilot/recovery/config.ini", destination),
+            &auxiliary_binding("C:/RenderPilot/recovery/config.ini", destination),
         )
         .is_err()
     );
 
-    let (mut journal, source, destination) = auxiliary_journal(
+    let (mut journal, destination) = auxiliary_journal(
         &["C:/RenderPilot/recovery"],
         "C:/RenderPilot/recovery/config.ini",
     );
@@ -817,23 +812,19 @@ fn auxiliary_parent_closure_rejects_non_create_effect_wrong_fold_and_wrong_order
     assert!(
         validate_binding_against_journal(
             &journal,
-            &auxiliary_binding(source, "C:/RenderPilot/recovery/config.ini", destination),
+            &auxiliary_binding("C:/RenderPilot/recovery/config.ini", destination),
         )
         .is_err()
     );
 
-    let (journal, source, destination) = auxiliary_journal(
+    let (journal, destination) = auxiliary_journal(
         &["C:/RenderPilot/recovery/state", "C:/RenderPilot/recovery"],
         "C:/RenderPilot/recovery/state/config.ini",
     );
     assert!(
         validate_binding_against_journal(
             &journal,
-            &auxiliary_binding(
-                source,
-                "C:/RenderPilot/recovery/state/config.ini",
-                destination,
-            ),
+            &auxiliary_binding("C:/RenderPilot/recovery/state/config.ini", destination),
         )
         .is_err()
     );

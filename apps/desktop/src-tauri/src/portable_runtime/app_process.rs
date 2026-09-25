@@ -274,6 +274,10 @@ fn private_pipe() -> Result<(File, File)> {
 }
 
 struct AttributeList<'a> {
+    #[expect(
+        dead_code,
+        reason = "Backing storage for LPPROC_THREAD_ATTRIBUTE_LIST must remain live through Drop"
+    )]
     storage: Vec<u8>,
     list: windows_sys::Win32::System::Threading::LPPROC_THREAD_ATTRIBUTE_LIST,
     // Win32 retains the lpValue pointers. These borrows keep their backing
@@ -349,7 +353,6 @@ impl Drop for AttributeList<'_> {
         unsafe {
             DeleteProcThreadAttributeList(self.list);
         }
-        let _ = &self.storage;
     }
 }
 

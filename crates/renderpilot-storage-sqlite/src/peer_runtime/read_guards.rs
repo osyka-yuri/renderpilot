@@ -7,12 +7,12 @@
 
 use renderpilot_application::{AppError, AppResult};
 use renderpilot_domain::{
-    ExactOptiConfigProjection, GameProxyTopology, InstalledAddon, PathRef,
+    ExactOptiConfigProjection, GameProxyTopology, InstalledAddon, NormalizedPathRelation, PathRef,
     PeerCatalogPhysicalContract, PeerCatalogRollbackClaim, PeerEndpointIntent, PeerFileImage,
     PeerReadGuardEvidence, PeerReadGuardRequirement, PeerReusedClaimMembershipContract,
     PeerTransitionContext, PlannedGameProxyTopology, ProxyPeerRoute, RenoDxDlssProjection,
-    RenoDxReshadeIniAuthority, normalized_path_key, required_read_guards_with_catalog,
-    required_read_guards_with_renodx_reshade_ini,
+    RenoDxReshadeIniAuthority, normalized_path_key, normalized_path_relation,
+    required_read_guards_with_catalog, required_read_guards_with_renodx_reshade_ini,
     required_read_guards_with_renodx_reshade_ini_and_dlss,
     required_read_guards_with_renodx_reshade_ini_and_optiscaler_config, validate_read_guards,
 };
@@ -486,7 +486,7 @@ pub(super) fn strict_absolute_path(value: &str, context: &str) -> AppResult<Path
                 "{context} has a malformed drive path"
             )));
         }
-        validate_components(&normalized[3..], false, context)?;
+        validate_components(&normalized[3..], context)?;
     } else if let Some(unc) = normalized.strip_prefix("//") {
         let mut parts = unc.split('/');
         let (Some(server), Some(share)) = (parts.next(), parts.next()) else {
@@ -508,7 +508,7 @@ pub(super) fn strict_absolute_path(value: &str, context: &str) -> AppResult<Path
         }
         validate_component_values(unc.split('/'), context)?;
     } else if let Some(root_relative) = normalized.strip_prefix('/') {
-        validate_components(root_relative, true, context)?;
+        validate_components(root_relative, context)?;
     } else {
         return Err(AppError::storage_failed(format!(
             "{context} must be absolute"
@@ -526,7 +526,7 @@ pub(super) fn strict_absolute_path(value: &str, context: &str) -> AppResult<Path
         .map_err(|error| AppError::storage_failed(format!("{context} is invalid: {error}")))
 }
 
-fn validate_components(value: &str, _allow_root_empty: bool, context: &str) -> AppResult<()> {
+fn validate_components(value: &str, context: &str) -> AppResult<()> {
     if value.is_empty() {
         return Ok(());
     }
@@ -556,18 +556,7 @@ fn validate_component_values<'a>(
 }
 
 pub(super) fn is_strict_descendant(root: &str, path: &str) -> bool {
-    let root_key = normalized_path_key(root);
-    let path_key = normalized_path_key(path);
-    let mut root_parts = root_key.split('/').filter(|s| !s.is_empty());
-    let mut path_parts = path_key.split('/').filter(|s| !s.is_empty());
-
-    loop {
-        match (root_parts.next(), path_parts.next()) {
-            (Some(r), Some(p)) if r == p => {}
-            (None, Some(_)) => return true,
-            _ => return false,
-        }
-    }
+    normalized_path_relation(root, path) == NormalizedPathRelation::LeftAncestor
 }
 
 #[cfg(test)]

@@ -410,7 +410,7 @@ fn retry_recovery_cleans_pending_v2_without_host_or_network_work() {
     let guard = game_mutation_lock::try_lock(&game_id).expect("test lock");
     let target = game_root.path().join("renodx-dlssfix.addon64");
     let scope = MutationScope::new([game_root.path().to_path_buf()]).expect("scope");
-    let _pending = RetryableFileMutationV2::prepare(
+    RetryableFileMutationV2::prepare(
         &context,
         &guard,
         &scope,
@@ -450,7 +450,7 @@ fn retry_recovery_rejects_an_unrelated_pending_mutation() {
     let game_id = GameId::new("manual:dlss-retry-unrelated").expect("game id");
     let guard = game_mutation_lock::try_lock(&game_id).expect("test lock");
     let scope = MutationScope::new([game_root.path().to_path_buf()]).expect("scope");
-    let _pending = RetryableFileMutationV2::prepare(
+    RetryableFileMutationV2::prepare(
         &context,
         &guard,
         &scope,

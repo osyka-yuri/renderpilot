@@ -23,10 +23,10 @@ pub(super) use commit::{
     OptiScalerAggregateBinding, OptiScalerAuxiliaryPreservation, OptiScalerBoundPath,
     OptiScalerBoundTransition, OptiScalerOwnedPreservation, ReusedAcquisitionMode,
     parse_optiscaler_journal_for_recovery, validate_optiscaler_binding_within_transaction,
+    validate_optiscaler_directory_receipt_metadata, validate_optiscaler_file_receipt_metadata,
     validate_optiscaler_journal_for_begin, validate_optiscaler_journal_for_cas,
     validate_optiscaler_journal_for_committed_terminal, validate_optiscaler_journal_for_prepared,
-    validate_optiscaler_journal_for_rollback_terminal, validate_optiscaler_live_directory,
-    validate_optiscaler_live_file,
+    validate_optiscaler_journal_for_rollback_terminal,
 };
 pub(super) use model::PreparedMutationCommitBinding;
 pub use model::{

@@ -266,7 +266,6 @@ fn retire_snapshot_if_current(
         // Linux's authority socket excludes compliant publishers, but POSIX
         // unlink is still pathname based. Keep the active name so an external
         // replacement cannot be removed after the proof above.
-        let _ = path;
         drop(snapshot);
         Ok(CacheRetirement::Retained)
     }

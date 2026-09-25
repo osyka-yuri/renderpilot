@@ -22,7 +22,7 @@ mod tests;
 
 pub(super) use auxiliary::*;
 pub(in crate::repositories) use auxiliary::{
-    validate_optiscaler_live_directory, validate_optiscaler_live_file,
+    validate_optiscaler_directory_receipt_metadata, validate_optiscaler_file_receipt_metadata,
 };
 pub(super) use cleanup::*;
 pub(super) use fold::*;

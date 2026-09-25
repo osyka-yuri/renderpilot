@@ -1,5 +1,4 @@
 use std::{
-    fs::OpenOptions,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -12,7 +11,9 @@ use super::{
     random::hex_32,
     rpu::{VerifiedRpu, verify_rpu_expected},
     signature::sha256_hex,
-    win32::file::publish_no_replace,
+    win32::file::{
+        NoReplacePublication, create_pending_file, discard_exact_file, publish_no_replace,
+    },
 };
 
 /// Private proof that the supervisor, not a later filesystem scan, selected
@@ -128,16 +129,8 @@ fn persist_verified_rpu(
 
     let hash = verified.rpu_sha256.as_str();
     let attempt = attempts.join(format!("{hash}.{}.rpu", hex_32()?));
-    let mut file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&attempt)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    drop(file);
-
     let canonical_path = objects.join(format!("{hash}.rpu"));
-    let _publication = publish_no_replace(&attempt, &canonical_path)?;
+    publish_staged_attempt(&attempt, &canonical_path, bytes)?;
     // `Occupied` is a successful publication result only after the immutable
     // winner is reread and independently signature/version verified.
     let stored = std::fs::read(&canonical_path)?;
@@ -165,4 +158,61 @@ fn persist_verified_rpu(
         #[cfg(test)]
         skip_signature_check_for_test: false,
     })
+}
+
+fn publish_staged_attempt(attempt: &Path, canonical_path: &Path, bytes: &[u8]) -> Result<()> {
+    let mut file = create_pending_file(attempt)?;
+    if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+        return discard_after_failure(&file, error.into());
+    }
+
+    match publish_no_replace(attempt, canonical_path) {
+        Ok(NoReplacePublication::Published) => Ok(()),
+        Ok(NoReplacePublication::Occupied) => {
+            discard_exact_file(&file)?;
+            Ok(())
+        }
+        Err(error) => discard_after_failure(&file, error),
+    }
+}
+
+fn discard_after_failure(
+    file: &std::fs::File,
+    operation_error: PortableRuntimeError,
+) -> Result<()> {
+    match discard_exact_file(file) {
+        Ok(()) => Err(operation_error),
+        Err(cleanup_error) => Err(PortableRuntimeError::new(
+            "portable_stage_cleanup",
+            format!(
+                "staged publication failed ({operation_error}); exact candidate cleanup also failed ({cleanup_error})"
+            ),
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::publish_staged_attempt;
+
+    #[test]
+    fn occupied_staged_publication_discards_exact_losing_attempt() {
+        let directory = tempdir().expect("staging directory");
+        let attempt = directory.path().join("attempt.rpu");
+        let canonical = directory.path().join("winner.rpu");
+        fs::write(&canonical, b"verified winner").expect("seed winner");
+
+        publish_staged_attempt(&attempt, &canonical, b"losing candidate")
+            .expect("occupied publication");
+
+        assert!(!attempt.exists(), "losing attempt is discarded");
+        assert_eq!(
+            fs::read(canonical).expect("read winner"),
+            b"verified winner"
+        );
+    }
 }

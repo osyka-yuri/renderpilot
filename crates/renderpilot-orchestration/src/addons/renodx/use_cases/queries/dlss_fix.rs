@@ -115,7 +115,7 @@ mod tests {
         let guard = crate::game_mutation_lock::try_lock(game_id).expect("test lock");
         let scope =
             crate::file_mutation::MutationScope::new([game_root.to_path_buf()]).expect("scope");
-        let _pending = crate::file_mutation::RetryableFileMutationV2::prepare(
+        crate::file_mutation::RetryableFileMutationV2::prepare(
             context,
             &guard,
             &scope,

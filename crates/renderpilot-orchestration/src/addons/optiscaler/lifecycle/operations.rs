@@ -436,7 +436,6 @@ pub(in crate::addons::optiscaler) fn preflight_peer_host_transition(
         &from,
         &to,
         None,
-        None,
     )
     .map(|_| ())
 }

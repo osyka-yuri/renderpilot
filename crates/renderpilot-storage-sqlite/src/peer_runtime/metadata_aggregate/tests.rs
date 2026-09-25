@@ -572,7 +572,7 @@ fn invalid_routes_and_membership_guard_shapes_never_open_a_reservation() {
 
 #[test]
 fn wrong_final_guard_and_participant_drift_leave_prepared_state_unchanged() {
-    let (runtime, game_id, before, _topology, guard, _roots, permit) = membership_fixture(
+    let (runtime, game_id, before, _, _, _roots, permit) = membership_fixture(
         "wrong-final",
         "wrong-final-operation",
         MembershipGuardCase::Correct,
@@ -602,7 +602,6 @@ fn wrong_final_guard_and_participant_drift_leave_prepared_state_unchanged() {
             .state(),
         PeerAggregateReservationState::Prepared
     );
-    let _ = guard;
 
     for (suffix, drift_peer, drift_topology) in
         [("peer-drift", true, false), ("topology-drift", false, true)]
@@ -659,7 +658,7 @@ fn wrong_final_guard_and_participant_drift_leave_prepared_state_unchanged() {
 
 #[test]
 fn revision_drift_happens_before_peer_write_and_ordinary_first_fences_prepare() {
-    let (runtime, game_id, before, after, permit) =
+    let (runtime, game_id, before, _, permit) =
         refresh_fixture("revision-drift", "revision-drift-operation");
     runtime
         .repositories()
@@ -690,7 +689,6 @@ fn revision_drift_happens_before_peer_write_and_ordinary_first_fences_prepare() 
     assert!(
         read_reservation(runtime.repositories(), &game_id, "revision-drift-operation").is_some()
     );
-    let _ = after;
 
     for shared in [false, true] {
         let storage = SqliteStorage::in_memory().expect("storage");

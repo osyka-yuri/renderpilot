@@ -3,7 +3,7 @@ use renderpilot_domain::{
 };
 
 use super::error::RenoDxPeerEffectError;
-use super::model::{EndpointBundle, RenoDxPeerEffectGroup, RenoDxPeerOperationOrder};
+use super::model::{EndpointBundle, RenoDxPeerEffectGroup};
 use crate::peer_mutation_executor::VerifiedPeerFile;
 
 pub(super) fn ensure_bytes_match_image(
@@ -48,7 +48,7 @@ pub(super) fn bundle_overlaps(left: &EndpointBundle, right: &EndpointBundle) -> 
     overlaps
 }
 
-pub(super) fn group_rank(_order: RenoDxPeerOperationOrder, group: RenoDxPeerEffectGroup) -> u8 {
+pub(super) fn group_rank(group: RenoDxPeerEffectGroup) -> u8 {
     match group {
         RenoDxPeerEffectGroup::Addon => 0,
         RenoDxPeerEffectGroup::Host => 1,

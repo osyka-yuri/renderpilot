@@ -1,7 +1,6 @@
 fn rollback_relocate(
     prepared: &mut PreparedFileMutation<'_>,
     index: usize,
-    _record: &DomainOperationRecord,
     effect: &DomainRelocateEffect,
 ) -> Result<(), ServiceError> {
     let source = PathBuf::from(effect.source().path());
@@ -56,7 +55,7 @@ fn rollback_relocate(
         if let DomainOperationEffect::Relocate(value) = next.operations_mut()[index].effect_mut() {
             *value.state_mut() = DomainRelocateState::Preserved;
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     } else if moved
         && matches!(
             &current_state,
@@ -71,13 +70,13 @@ fn rollback_relocate(
         if let DomainOperationEffect::Relocate(value) = next.operations_mut()[index].effect_mut() {
             *value.state_mut() = DomainRelocateState::Preserved;
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     } else if untouched && matches!(&current_state, DomainRelocateState::ReverseIntent) {
         let mut next = prepared.journal.clone();
         if let DomainOperationEffect::Relocate(value) = next.operations_mut()[index].effect_mut() {
             *value.state_mut() = DomainRelocateState::Preserved;
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     }
     Ok(())
 }

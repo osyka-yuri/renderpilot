@@ -52,7 +52,7 @@ pub(super) fn project_dlss(
 
     let result =
         classification::classify(authority, target, persisted, input, catalog_claim, cascade)?;
-    lowering::lower(result, authority, catalog_claim, cascade, accumulator)
+    lowering::lower(result, authority, cascade, accumulator)
 }
 
 /// Reuses the complete persisted-binding validation for the phase-three

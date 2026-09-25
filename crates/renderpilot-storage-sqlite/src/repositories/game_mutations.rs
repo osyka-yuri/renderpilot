@@ -71,7 +71,7 @@ use persistence::{
     ensure_peer_game, ensure_peer_paths_within_install, ensure_state_game,
     ensure_state_paths_within_install, ensure_state_topology, ensure_topology_game,
     ensure_topology_paths_within_install, persisted_install_root,
-    validate_optiscaler_live_observations,
+    validate_optiscaler_receipt_metadata,
 };
 use projection::{
     collect_optiscaler_directories, collect_optiscaler_receipts, directory_path_map, insert_path,

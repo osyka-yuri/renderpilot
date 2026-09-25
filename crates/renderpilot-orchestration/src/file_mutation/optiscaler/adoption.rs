@@ -6,7 +6,7 @@ fn complete_partial_materialization(
             DomainMaterializationState::Planned => {
                 let mut next = prepared.journal.clone();
                 next.set_materialization(DomainMaterializationState::ControlCreateIntent);
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
             DomainMaterializationState::ControlCreateIntent => {
                 let capability = capability_from_hex(
@@ -66,7 +66,7 @@ fn complete_partial_materialization(
                 next.set_materialization(DomainMaterializationState::Workspaces {
                     next_workspace_id: 0,
                 });
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
             DomainMaterializationState::Workspaces { next_workspace_id } => {
                 let next_workspace_id = usize::try_from(next_workspace_id)
@@ -75,16 +75,16 @@ fn complete_partial_materialization(
                     std::cmp::Ordering::Equal => {
                         let mut next = prepared.journal.clone();
                         next.set_materialization(DomainMaterializationState::Ready);
-                        prepared.cas(next, false)?;
+                        prepared.cas(next)?;
                     }
                     std::cmp::Ordering::Less => {
                         let workspace_id = u32::try_from(next_workspace_id)
                             .map_err(|_| crate::failed("materialization ordinal overflow"))?;
                         let mut next = prepared.journal.clone();
-                        next.set_materialization(DomainMaterializationState::WorkspaceCreateIntent {
-                            workspace_id,
-                        });
-                        prepared.cas(next, false)?;
+                        next.set_materialization(
+                            DomainMaterializationState::WorkspaceCreateIntent { workspace_id },
+                        );
+                        prepared.cas(next)?;
                     }
                     std::cmp::Ordering::Greater => {
                         return Err(crate::failed(
@@ -148,7 +148,7 @@ fn complete_partial_materialization(
                         .checked_add(1)
                         .ok_or_else(|| crate::failed("materialization ordinal overflow"))?,
                 });
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
             DomainMaterializationState::Ready => return Ok(()),
         }
@@ -198,7 +198,7 @@ fn adopt_intent_authorized_artifacts(
                             ArtifactSlot::Stage,
                             &stage_observed,
                         );
-                        prepared.cas(next, false)?;
+                        prepared.cas(next)?;
                     }
                     DomainWriteState::CaptureIntent {
                         stage: expected_stage,
@@ -232,7 +232,7 @@ fn adopt_intent_authorized_artifacts(
                             ArtifactSlot::Custody,
                             &custody_observed,
                         );
-                        prepared.cas(next, false)?;
+                        prepared.cas(next)?;
                     }
                     _ => {
                         if artifact_stage == DiskObservation::Absent
@@ -278,7 +278,7 @@ fn adopt_intent_authorized_artifacts(
                     ArtifactSlot::Custody,
                     &custody_observed,
                 );
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
             DomainOperationEffect::CreateDirectory(effect)
                 if matches!(effect.state(), DomainCreateDirectoryState::StageIntent)
@@ -301,7 +301,7 @@ fn adopt_intent_authorized_artifacts(
                     ArtifactSlot::Stage,
                     &stage_observed,
                 );
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
             _ => {
                 for (which, observed) in [

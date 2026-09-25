@@ -9,7 +9,7 @@ use std::{
 use renderpilot_application::AppResult;
 use renderpilot_domain::Sha256Hash;
 
-use super::common::{read_and_hash, unavailable_or_error, unavailable_probe};
+use super::common::read_and_hash;
 use super::{
     FileIdentityProbeResult, FileObservationResult, StableFileSnapshot, StrongFileCacheKey,
 };
@@ -31,7 +31,7 @@ pub(super) fn observe_system_file(path: &Path) -> AppResult<FileObservationResul
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Ok(FileObservationResult::Missing);
         }
-        Err(error) => return Ok(unavailable_or_error(path, error)),
+        Err(_) => return Ok(FileObservationResult::Unavailable),
     };
     let Some(before) = windows_lease_state(&file) else {
         return Ok(FileObservationResult::Unavailable);
@@ -40,9 +40,9 @@ pub(super) fn observe_system_file(path: &Path) -> AppResult<FileObservationResul
     let before_key = journal
         .as_ref()
         .and_then(|journal| journal.file_material(&file, before.size));
-    let (bytes, sha256) = match read_and_hash(&mut file, path) {
+    let (bytes, sha256) = match read_and_hash(&mut file) {
         Ok(value) => value,
-        Err(error) => return Ok(unavailable_or_error(path, error)),
+        Err(_) => return Ok(FileObservationResult::Unavailable),
     };
     let Some(after) = windows_lease_state(&file) else {
         return Ok(FileObservationResult::Unavailable);
@@ -56,7 +56,7 @@ pub(super) fn observe_system_file(path: &Path) -> AppResult<FileObservationResul
         .open(path)
     {
         Ok(reopened) => reopened,
-        Err(error) => return Ok(unavailable_or_error(path, error)),
+        Err(_) => return Ok(FileObservationResult::Unavailable),
     };
     let Some(reopened_state) = windows_lease_state(&reopened) else {
         return Ok(FileObservationResult::Unavailable);
@@ -90,7 +90,7 @@ pub(super) fn probe_system_identity(path: &Path) -> AppResult<FileIdentityProbeR
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Ok(FileIdentityProbeResult::Missing);
         }
-        Err(error) => return Ok(unavailable_probe(path, error)),
+        Err(_) => return Ok(FileIdentityProbeResult::Unavailable),
     };
     let Some(before) = windows_lease_state(&file) else {
         return Ok(FileIdentityProbeResult::Unavailable);
@@ -111,7 +111,7 @@ pub(super) fn probe_system_identity(path: &Path) -> AppResult<FileIdentityProbeR
         .open(path)
     {
         Ok(reopened) => reopened,
-        Err(error) => return Ok(unavailable_probe(path, error)),
+        Err(_) => return Ok(FileIdentityProbeResult::Unavailable),
     };
     let Some(reopened_state) = windows_lease_state(&reopened) else {
         return Ok(FileIdentityProbeResult::Unavailable);

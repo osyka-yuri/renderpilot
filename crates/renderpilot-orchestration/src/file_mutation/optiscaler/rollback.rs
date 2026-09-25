@@ -42,7 +42,7 @@ fn rollback_operation(
                     | DomainRelocateState::ReverseIntent
             ) =>
         {
-            rollback_relocate(prepared, index, record, effect)
+            rollback_relocate(prepared, index, effect)
         }
         DomainOperationEffect::CreateDirectory(effect)
             if matches!(
@@ -64,7 +64,7 @@ fn rollback_operation(
                 DomainVerifyState::Planned | DomainVerifyState::Applied { .. }
             ) =>
         {
-            rollback_verify(prepared, index, record, effect)
+            rollback_verify(prepared, index, effect)
         }
         DomainOperationEffect::PostCommitRemoveDirectory(effect) => {
             post_commit::ensure_rollback_planned(effect)
@@ -82,7 +82,7 @@ fn rollback_prepared(mut prepared: PreparedFileMutation<'_>) -> Result<(), Servi
         rollback_operation(&mut prepared, index, &record)?;
     }
     loop {
-        prepared.cleanup_private_artifacts(false)?;
+        prepared.cleanup_private_artifacts()?;
         match prepared.journal.cleanup().clone() {
             JournalCleanup::Inactive => {
                 let mut next = prepared.journal.clone();
@@ -108,7 +108,7 @@ fn rollback_prepared(mut prepared: PreparedFileMutation<'_>) -> Result<(), Servi
                         .to_owned();
                     next.set_cleanup(JournalCleanup::ControlRemoveIntent { expected_identity });
                 }
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
             JournalCleanup::WorkspaceRemoveIntent {
                 workspace_id,
@@ -122,7 +122,7 @@ fn rollback_prepared(mut prepared: PreparedFileMutation<'_>) -> Result<(), Servi
                     &prepared.journal,
                     workspace_id,
                 )?);
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
             JournalCleanup::ControlRemoveIntent { expected_identity } => {
                 cleanup_transaction_namespace(
@@ -133,7 +133,7 @@ fn rollback_prepared(mut prepared: PreparedFileMutation<'_>) -> Result<(), Servi
                 )?;
                 let mut next = prepared.journal.clone();
                 next.set_cleanup(JournalCleanup::Complete);
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
             JournalCleanup::Complete => break,
             JournalCleanup::ArtifactRemoveIntent { .. } => {

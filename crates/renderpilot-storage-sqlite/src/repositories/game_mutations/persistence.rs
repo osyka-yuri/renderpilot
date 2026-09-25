@@ -49,42 +49,25 @@ pub(super) fn apply_optiscaler_transition(
     Ok(())
 }
 
-pub(super) fn validate_optiscaler_live_observations(
+pub(super) fn validate_optiscaler_receipt_metadata(
     state: &OptiScalerInstallState,
     topology: &GameProxyTopology,
 ) -> AppResult<()> {
     for receipt in &state.release_files {
-        pending_file_mutations::validate_optiscaler_live_file(
-            &receipt.path,
-            receipt.installed.digest(),
-            "OptiScaler release receipt",
-        )?;
+        pending_file_mutations::validate_optiscaler_file_receipt_metadata(&receipt.path)?;
     }
     for binding in &state.runtime_bindings {
-        pending_file_mutations::validate_optiscaler_live_file(
-            &binding.path,
-            binding.installed.digest(),
-            "OptiScaler runtime binding",
-        )?;
+        pending_file_mutations::validate_optiscaler_file_receipt_metadata(&binding.path)?;
     }
     for receipt in &state.directory_receipts {
-        pending_file_mutations::validate_optiscaler_live_directory(
+        pending_file_mutations::validate_optiscaler_directory_receipt_metadata(
             &receipt.path,
             &receipt.identity,
-            "OptiScaler directory receipt",
         )?;
     }
-    pending_file_mutations::validate_optiscaler_live_file(
-        &topology.outer.path,
-        topology.outer.receipt.digest(),
-        "proxy topology outer receipt",
-    )?;
+    pending_file_mutations::validate_optiscaler_file_receipt_metadata(&topology.outer.path)?;
     if let Some(downstream) = &topology.downstream {
-        pending_file_mutations::validate_optiscaler_live_file(
-            &downstream.path,
-            downstream.receipt.digest(),
-            "proxy topology downstream receipt",
-        )?;
+        pending_file_mutations::validate_optiscaler_file_receipt_metadata(&downstream.path)?;
     }
     Ok(())
 }

@@ -712,7 +712,7 @@ mod tests {
         (directory, root, role_directory)
     }
 
-    fn app_filename(_session: char, transaction: char, segment: u32) -> String {
+    fn app_filename(transaction: char, segment: u32) -> String {
         let transaction = transaction.to_string().repeat(64);
         let prefix = canonical_filename_prefix("2026-09-23_14-35-12Z", &transaction, 64)
             .expect("canonical filename prefix");
@@ -728,14 +728,13 @@ mod tests {
 
     fn write_app_record(
         role_directory: &super::super::win32::object::DiagnosticsRoleDirectory,
-        file_session: char,
         file_transaction: char,
         file_segment: u32,
         record_session: char,
         record_transaction: char,
         record_segment: u32,
     ) -> String {
-        let name = app_filename(file_session, file_transaction, file_segment);
+        let name = app_filename(file_transaction, file_segment);
         let canonical =
             canonical_diagnostic_name(role_directory, &name).expect("canonical fixture file name");
         let file = create_active_diagnostic(role_directory, &canonical)
@@ -828,7 +827,6 @@ mod tests {
             let session = char::from_digit(index, 16).expect("fixture session");
             verified.push(write_app_record(
                 &role_directory,
-                session,
                 'f',
                 index,
                 session,
@@ -837,11 +835,11 @@ mod tests {
             ));
         }
 
-        let empty = app_filename('e', 'd', 0);
-        let partial = app_filename('f', 'd', 0);
-        let bad_schema = app_filename('d', 'c', 0);
-        let wrong_transaction = write_app_record(&role_directory, 'a', 'b', 0, 'a', 'c', 0);
-        let wrong_segment = write_app_record(&role_directory, 'b', 'c', 9, 'b', 'c', 8);
+        let empty = app_filename('d', 0);
+        let partial = app_filename('e', 0);
+        let bad_schema = app_filename('c', 0);
+        let wrong_transaction = write_app_record(&role_directory, 'b', 0, 'a', 'c', 0);
+        let wrong_segment = write_app_record(&role_directory, 'c', 9, 'b', 'c', 8);
         let app_directory = directory.path().join("data/logs/portable/app");
         fs::write(app_directory.join(&empty), b"").expect("seed empty crash orphan");
         let partial_bytes = b"{\"schema\":\"renderpilot.diagnostics\"";
@@ -898,7 +896,7 @@ mod tests {
             fs::write(app_directory.join(&name), b"").expect("seed over-budget canonical leaf");
             budget_orphans.push(name);
         }
-        let startup_orphan = app_filename('a', 'b', 0);
+        let startup_orphan = app_filename('b', 0);
         let startup_bytes = b"{\"partial\":";
         fs::write(app_directory.join(&startup_orphan), startup_bytes).expect("seed startup orphan");
 
@@ -930,7 +928,7 @@ mod tests {
                 .all(|name| fs::read(app_directory.join(name)).unwrap().is_empty())
         );
 
-        let rollover_orphan = app_filename('b', 'e', 0);
+        let rollover_orphan = app_filename('e', 0);
         let rollover_bytes = b"{\"partial\":\"rollover";
         fs::write(app_directory.join(&rollover_orphan), rollover_bytes)
             .expect("seed rollover orphan");
@@ -947,7 +945,7 @@ mod tests {
             }
         }
         assert_ne!(rollover.active_name.as_str(), initial_name);
-        assert_eq!(rollover.active_name.as_str(), app_filename('a', 'c', 1));
+        assert_eq!(rollover.active_name.as_str(), app_filename('c', 1));
         assert_eq!(
             initial_name.get(..20),
             rollover.active_name.as_str().get(..20),
@@ -1037,7 +1035,6 @@ mod tests {
             let session = char::from_digit(index, 16).expect("fixture session");
             verified.push(write_app_record(
                 &role_directory,
-                session,
                 'f',
                 index,
                 session,
@@ -1046,7 +1043,7 @@ mod tests {
             ));
         }
         let app_directory = directory.path().join("data/logs/portable/app");
-        let invalid_type = app_filename('a', 'e', 0);
+        let invalid_type = app_filename('e', 0);
         fs::create_dir(app_directory.join(&invalid_type)).expect("seed invalid canonical type");
 
         assert!(retain_completed(&role_directory, PortableRole::App, None).is_err());
@@ -1068,7 +1065,6 @@ mod tests {
             let session = char::from_digit(index, 16).expect("fixture session");
             verified.push(write_app_record(
                 &role_directory,
-                session,
                 'f',
                 index,
                 session,

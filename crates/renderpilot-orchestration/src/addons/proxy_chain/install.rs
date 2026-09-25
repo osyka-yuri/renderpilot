@@ -4,13 +4,12 @@ use renderpilot_domain::{
 
 use crate::addons::optiscaler::identity::path_ref;
 use crate::file_mutation::optiscaler::PreparedFileMutation;
-use crate::{Context, ServiceError, failed};
+use crate::{ServiceError, failed};
 
 use super::model::{DownstreamInstallPlan, ProxyInstallPlan};
 use super::publication::{exact_receipt_from_live, maybe_exact_receipt_from_live, publish_outer};
 
 pub(super) fn execute_fresh_install(
-    _context: &Context,
     plan: &ProxyInstallPlan<'_>,
     outer_bytes: &[u8],
     mutation: &mut PreparedFileMutation<'_>,

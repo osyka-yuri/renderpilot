@@ -1,5 +1,6 @@
 use renderpilot_domain::managed_sidecar_path;
 
+use super::model::DlssAction;
 use crate::addons::luma::peer::{
     active_update::{error::LumaActiveUpdateError, model::DlssProjection},
     catalog_cascade::lower_catalog_cascade,
@@ -7,14 +8,10 @@ use crate::addons::luma::peer::{
     root_authority::LumaPeerRootAuthority,
 };
 use crate::catalog::cascade::CascadeResult;
-use crate::coordinated_files::CatalogPathClaim;
-
-use super::model::DlssAction;
 
 pub(super) fn lower(
     action: DlssAction,
     authority: &LumaPeerRootAuthority,
-    _catalog_claim: &CatalogPathClaim,
     cascade: &CascadeResult,
     accumulator: &mut LumaPeerEffectAccumulator,
 ) -> Result<DlssProjection, LumaActiveUpdateError> {

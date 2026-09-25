@@ -6,9 +6,7 @@ use super::model::{
     RenoDxActiveUpdatePhysical,
 };
 use super::validation::{self, ValidatedUpdate};
-use crate::addons::renodx::peer::effects::{
-    RenoDxPeerEffectAccumulator, RenoDxPeerEffectGroup, RenoDxPeerOperationOrder,
-};
+use crate::addons::renodx::peer::effects::{RenoDxPeerEffectAccumulator, RenoDxPeerEffectGroup};
 
 /// Composes one active RenoDX update from sealed evidence and prepared bytes.
 pub(crate) fn compose_active_update(
@@ -37,8 +35,7 @@ pub(crate) fn compose_active_update(
         config,
         ..
     } = validated;
-    let mut accumulator =
-        RenoDxPeerEffectAccumulator::new(RenoDxPeerOperationOrder::InstallOrUpdate);
+    let mut accumulator = RenoDxPeerEffectAccumulator::new();
     if !validation::same_image(addon_before, &addon_bytes)? {
         accumulator.replace(
             RenoDxPeerEffectGroup::Addon,

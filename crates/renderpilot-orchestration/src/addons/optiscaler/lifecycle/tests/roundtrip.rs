@@ -95,7 +95,6 @@ fn renodx_proxy_install_then_optiscaler_chain_converts_the_actual_peer_receipt()
         &proxy_ref,
         &downstream_ref,
         None,
-        None,
     )
     .expect("strict RenoDX peer conversion planning")
     .expect("RenoDX owns the proxy host");

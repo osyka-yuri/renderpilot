@@ -112,7 +112,6 @@ pub(in crate::addons::optiscaler) fn plan_peer_host_transition(
     from: &PathRef,
     to: &PathRef,
     allowed_destination_sha256: Option<&Sha256Hash>,
-    _allowed_sidecar_destination_sha256: Option<&Sha256Hash>,
 ) -> Result<Option<PeerHostTransitionPlan>, ServiceError> {
     let from_path = Path::new(from.as_str());
     let to_path = Path::new(to.as_str());

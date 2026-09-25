@@ -171,7 +171,7 @@ pub(crate) fn invalidate_game_authority_within_transaction(
     // Generic catalog invalidation always requires existing total authority.
     // The pending-mutation repository owns the one deliberate pre-catalog
     // exception and classifies its game/authority pair before calling here.
-    let _current = readiness_within_transaction(transaction, game_id)?;
+    readiness_within_transaction(transaction, game_id)?;
     delete_game_observations_within_transaction(transaction, game_id)?;
     let now_ms = sqlite_clock::now_ms(transaction)?;
     let updated = transaction

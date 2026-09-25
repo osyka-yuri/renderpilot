@@ -411,7 +411,7 @@ pub(super) fn render_new_document(entries: &[EngineIniEntry], encoding: IniEncod
     out
 }
 
-pub(super) fn encode_document(document: &IniDocument, _encoding: IniEncoding) -> Vec<u8> {
+pub(super) fn encode_document(document: &IniDocument) -> Vec<u8> {
     document.bytes.clone()
 }
 
@@ -502,12 +502,7 @@ pub(super) fn is_bom_only(bytes: &[u8], encoding: IniEncoding) -> bool {
     }
 }
 
-pub(super) fn header_body_is_empty(
-    bytes: &[u8],
-    header_start: usize,
-    header: &[u8],
-    encoding: IniEncoding,
-) -> bool {
+pub(super) fn header_body_is_empty(bytes: &[u8], header_start: usize) -> bool {
     let Ok((_, document)) = decode_document(bytes) else {
         return false;
     };
@@ -523,7 +518,6 @@ pub(super) fn header_body_is_empty(
         .iter()
         .position(|line| section_name(&line.text).is_some())
         .map_or(document.lines.len(), |offset| header_end + offset);
-    let _ = (header, encoding);
     document.lines[header_end..next_section]
         .iter()
         .all(|line| line.text.trim().is_empty())

@@ -3,11 +3,6 @@ use renderpilot_domain::{PathRef, PeerEndpointRole};
 use crate::peer_mutation_executor::{EndpointExpectation, EndpointPostcondition};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RenoDxPeerOperationOrder {
-    InstallOrUpdate,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RenoDxPeerEffectGroup {
     Addon,
     Host,

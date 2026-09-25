@@ -155,7 +155,7 @@ pub(crate) fn execute_install_plan(
     if plan.updating {
         relocation::execute_update(context, plan, outer_bytes, mutation, changed)
     } else {
-        install::execute_fresh_install(context, plan, outer_bytes, mutation, changed)
+        install::execute_fresh_install(plan, outer_bytes, mutation, changed)
     }
 }
 

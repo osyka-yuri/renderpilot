@@ -79,7 +79,6 @@ fn prepare_uninstall_locked(
                 &relocation.from,
                 &relocation.to,
                 allowed_host,
-                None,
             )
         })
         .transpose()?

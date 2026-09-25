@@ -193,7 +193,7 @@ pub fn apply_engine_ini(
     let sections = document.sections()?;
     let missing = validate_and_collect_missing(&sections, recipes)?;
     if missing.is_empty() {
-        let bytes = before.map_or_else(|| encode_document(&document, encoding), ToOwned::to_owned);
+        let bytes = before.map_or_else(|| encode_document(&document), ToOwned::to_owned);
         return Ok(EngineIniEdit {
             bytes,
             receipt: None,
@@ -840,7 +840,7 @@ pub fn release_engine_ini_report(
                 continue;
             }
         };
-        if !header_body_is_empty(&bytes, index, header, receipt.encoding) {
+        if !header_body_is_empty(&bytes, index) {
             complete = false;
             continue;
         }

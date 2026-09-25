@@ -368,7 +368,7 @@ fn uninstall_keeps_the_db_row_when_file_removal_fails() {
         .upsert_installed_addon(&record)
         .expect("seed");
 
-    let _error = uninstall(&context, &game_id).expect_err("file removal must fail");
+    uninstall(&context, &game_id).expect_err("file removal must fail");
 
     let still = records::record_of_kind(&context, &game_id, AddonKind::Luma)
         .expect("get")

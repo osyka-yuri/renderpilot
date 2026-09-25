@@ -127,7 +127,6 @@ impl PreparedFileMutation<'_> {
     /// written before the unlink so recovery never infers ownership by name.
     pub(in crate::file_mutation::optiscaler) fn cleanup_private_artifacts(
         &mut self,
-        committed: bool,
     ) -> Result<(), ServiceError> {
         let mut completed = Vec::new();
         let pending_intent = match self.journal.cleanup() {
@@ -169,7 +168,7 @@ impl PreparedFileMutation<'_> {
                 &DiskObservation::Absent,
             );
             next.set_cleanup(JournalCleanup::Inactive);
-            self.cas(next, committed)?;
+            self.cas(next)?;
         }
         if matches!(self.journal.cleanup(), JournalCleanup::Complete) {
             return Ok(());
@@ -207,7 +206,7 @@ impl PreparedFileMutation<'_> {
                     artifact: which,
                     expected: durable(&expected),
                 });
-                self.cas(next, committed)?;
+                self.cas(next)?;
                 remove_private_artifact(&artifact, &private_entry_observation(&expected)?)?;
                 let mut next = self.journal.clone();
                 set_artifact(
@@ -216,7 +215,7 @@ impl PreparedFileMutation<'_> {
                     &DiskObservation::Absent,
                 );
                 next.set_cleanup(JournalCleanup::Inactive);
-                self.cas(next, committed)?;
+                self.cas(next)?;
                 completed.push((op_id, which));
             }
         }

@@ -213,15 +213,6 @@ mod tests {
         let section_raw_ptr = ((headers_end as u32) + 0x1ff) & !0x1ff;
 
         let mut version_blob = Vec::new();
-        // VS_VERSIONINFO skeleton with FileVersion and StringFileInfo keys.
-        let file_version = (u32::from(version[0]) << 16) | u32::from(version[1]);
-        let product_version = (u32::from(version[2]) << 16) | u32::from(version[3]);
-        // Use the shared PE version-info builder path by writing a compact blob
-        // that `read_windows_*_from_bytes` already accepts in orchestration tests.
-        // Fallback: if the compact blob is rejected, the fail-closed tests above
-        // still cover security-relevant rejects; this path uses a full resource tree.
-        let _ = (file_version, product_version);
-
         // Delegate to a complete resource tree identical in shape to orchestration fixtures.
         version_blob.extend_from_slice(&full_version_info_blob(version));
 

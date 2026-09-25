@@ -14,7 +14,6 @@ use crate::addons::renodx::peer::InstallActiveSnapshot;
 use crate::addons::renodx::peer::config::{RenoDxConfigError, lower_config};
 use crate::addons::renodx::peer::effects::{
     RenoDxPeerEffectAccumulator, RenoDxPeerEffectError, RenoDxPeerEffectGroup,
-    RenoDxPeerOperationOrder,
 };
 use crate::addons::renodx::peer::host::{
     RenoDxHostClassification, RenoDxHostError, classify_host, lower_owned_host,
@@ -157,8 +156,7 @@ pub(crate) fn compose_active_install(
         ))?;
     validate_prepared_shape(&phase3, sealed_topology, &owned)?;
 
-    let mut accumulator =
-        RenoDxPeerEffectAccumulator::new(RenoDxPeerOperationOrder::InstallOrUpdate);
+    let mut accumulator = RenoDxPeerEffectAccumulator::new();
     lower_addon(&phase3, &owned, &mut accumulator)?;
 
     let (host_binding, planned_topology) = match owned.host_kind {

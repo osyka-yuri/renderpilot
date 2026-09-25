@@ -24,18 +24,16 @@ use self::validation::{
 };
 
 pub(crate) use error::RenoDxPeerEffectError;
-pub(crate) use model::{RenoDxPeerEffectGroup, RenoDxPeerOperationOrder};
+pub(crate) use model::RenoDxPeerEffectGroup;
 
 #[derive(Debug)]
 pub(crate) struct RenoDxPeerEffectAccumulator {
-    order: RenoDxPeerOperationOrder,
     bundles: Vec<EndpointBundle>,
 }
 
 impl RenoDxPeerEffectAccumulator {
-    pub(crate) fn new(order: RenoDxPeerOperationOrder) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            order,
             bundles: Vec::new(),
         }
     }
@@ -141,8 +139,8 @@ impl RenoDxPeerEffectAccumulator {
             return Err(RenoDxPeerEffectError::InvalidHostCardinality(host_count));
         }
         self.bundles.sort_by(|left, right| {
-            group_rank(self.order, left.group())
-                .cmp(&group_rank(self.order, right.group()))
+            group_rank(left.group())
+                .cmp(&group_rank(right.group()))
                 .then_with(|| {
                     renderpilot_domain::normalized_path_key(left.logical_path().as_str()).cmp(
                         &renderpilot_domain::normalized_path_key(right.logical_path().as_str()),
@@ -270,8 +268,7 @@ mod tests {
 
     #[test]
     fn final_program_has_addon_sidecar_host_and_typed_ini_order() {
-        let mut accumulator =
-            RenoDxPeerEffectAccumulator::new(RenoDxPeerOperationOrder::InstallOrUpdate);
+        let mut accumulator = RenoDxPeerEffectAccumulator::new();
         accumulator
             .create(
                 RenoDxPeerEffectGroup::Config,
@@ -345,8 +342,7 @@ mod tests {
 
     #[test]
     fn replace_rejects_before_bytes_that_do_not_match_the_sealed_file() {
-        let mut accumulator =
-            RenoDxPeerEffectAccumulator::new(RenoDxPeerOperationOrder::InstallOrUpdate);
+        let mut accumulator = RenoDxPeerEffectAccumulator::new();
         let target = path("C:/Game/renodx.addon64");
         let error = accumulator
             .replace(
@@ -362,8 +358,7 @@ mod tests {
 
     #[test]
     fn host_acquisition_rejects_a_retained_image_that_differs_from_bytes() {
-        let mut accumulator =
-            RenoDxPeerEffectAccumulator::new(RenoDxPeerOperationOrder::InstallOrUpdate);
+        let mut accumulator = RenoDxPeerEffectAccumulator::new();
         let error = accumulator
             .acquire_host(
                 path("C:/Game/ReShade64.dll"),
@@ -381,8 +376,7 @@ mod tests {
 
     #[test]
     fn duplicate_effect_is_rejected_instead_of_silently_coalesced() {
-        let mut accumulator =
-            RenoDxPeerEffectAccumulator::new(RenoDxPeerOperationOrder::InstallOrUpdate);
+        let mut accumulator = RenoDxPeerEffectAccumulator::new();
         let target = path("C:/Game/renodx.addon64");
         accumulator
             .create(

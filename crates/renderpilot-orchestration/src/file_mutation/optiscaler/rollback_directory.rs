@@ -132,7 +132,7 @@ fn rollback_directory(
         {
             *value.state_mut() = DomainCreateDirectoryState::Preserved;
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     } else if matches!(&current_state, DomainCreateDirectoryState::Applied { .. }) {
         let mut next = prepared.journal.clone();
         if let DomainOperationEffect::CreateDirectory(value) =
@@ -142,7 +142,7 @@ fn rollback_directory(
                 directory: durable(&expected),
             };
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     }
     let current = prepared.journal.operations()[index].clone();
     let current_state = match current.effect() {
@@ -164,14 +164,14 @@ fn rollback_directory(
                 discard: durable(&expected),
             };
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
         let mut next = prepared.journal.clone();
         if let DomainOperationEffect::CreateDirectory(value) =
             next.operations_mut()[index].effect_mut()
         {
             *value.state_mut() = DomainCreateDirectoryState::Preserved;
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     } else if matches!(
         &current_state,
         DomainCreateDirectoryState::PostimageDiscarded { .. }
@@ -182,7 +182,7 @@ fn rollback_directory(
         {
             *value.state_mut() = DomainCreateDirectoryState::Preserved;
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     }
     Ok(())
 }

@@ -622,9 +622,6 @@ fn wrong_path_and_unrelated_record_drift_fail_closed() {
 fn malformed_present_snapshot_is_rejected_before_lowering() {
     let directory = tempfile::tempdir().expect("directory");
     let root = root_seal(directory.path());
-    let topology = topology(directory.path());
-    let before = peer(directory.path(), true, Some(source("old")));
-    let after = peer(directory.path(), true, Some(source("new")));
     let path = directory.path().join("renodx-dlssfix.addon64");
     std::fs::create_dir(&path).expect("directory endpoint");
     assert!(
@@ -634,5 +631,4 @@ fn malformed_present_snapshot_is_rejected_before_lowering() {
         )
         .is_err()
     );
-    let _ = (before, after, topology);
 }

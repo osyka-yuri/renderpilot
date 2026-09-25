@@ -43,7 +43,7 @@ fn rollback_write(
             if let DomainOperationEffect::Write(value) = next.operations_mut()[index].effect_mut() {
                 *value.state_mut() = DomainWriteState::Preserved;
             }
-            prepared.cas(next, false)?;
+            prepared.cas(next)?;
             Ok(())
         }
 
@@ -201,7 +201,7 @@ fn execute_discard_rollback(
                 custody: durable(custody_observed),
             };
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     }
     if observe(path) == *expected {
         // An absent preimage has no custody to restore. The
@@ -232,12 +232,12 @@ fn finalize_discard_to_preserved(
             custody: durable(custody_observed),
         };
     }
-    prepared.cas(next, false)?;
+    prepared.cas(next)?;
     let mut next = prepared.journal.clone();
     if let DomainOperationEffect::Write(value) = next.operations_mut()[index].effect_mut() {
         *value.state_mut() = DomainWriteState::Preserved;
     }
-    prepared.cas(next, false)?;
+    prepared.cas(next)?;
     Ok(())
 }
 
@@ -264,7 +264,7 @@ fn execute_restore_rollback(
                 discard: durable(expected),
             };
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
     }
     let live_now = observe(path);
     if live_now == *expected || (same_file_identity(&live_now, before) && live_now != *before) {
@@ -290,12 +290,7 @@ fn execute_restore_rollback(
             else {
                 unreachable!();
             };
-            overwrite_file_with_stable_identity(
-                path,
-                &live_now,
-                stable_identity,
-                &bytes_before,
-            )?
+            overwrite_file_with_stable_identity(path, &live_now, stable_identity, &bytes_before)?
         };
         if restored != *before {
             return Err(crate::failed(
@@ -314,8 +309,7 @@ fn finalize_restore_cleanup(
     prepared: &mut PreparedFileMutation<'_>,
     index: usize,
 ) -> Result<(), ServiceError> {
-    let custody_expected =
-        artifact(&prepared.journal.operations()[index], ArtifactSlot::Custody);
+    let custody_expected = artifact(&prepared.journal.operations()[index], ArtifactSlot::Custody);
     if observe_private_artifact(prepared, index, ArtifactSlot::Custody)? == custody_expected {
         let custody = private_artifact(prepared, index, ArtifactSlot::Custody)?;
         remove_private_artifact(&custody, &private_entry_observation(&custody_expected)?)?;
@@ -333,6 +327,6 @@ fn finalize_restore_cleanup(
         ArtifactSlot::Custody,
         &DiskObservation::Absent,
     );
-    prepared.cas(next, false)?;
+    prepared.cas(next)?;
     Ok(())
 }

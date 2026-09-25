@@ -15,7 +15,7 @@ use super::{
     image_authority::{RawSupervisorImage, SelectedGenerationImage},
     process_admission::AdmissionLock,
     random::hex_32,
-    recovery::{recover_prior_transactions, recovery_action},
+    recovery::recover_prior_transactions,
     root_authority::{PortableRootAuthority, SupervisorRootBinding},
     rpu::{VerifiedRpu, embedded_rpu, verify_rpu_expected},
     selection::{SelectionRecord, current_selection, read_selection, selection_root},
@@ -112,7 +112,7 @@ fn run_supervisor_lifecycle(
         super::provenance::install(authority_root),
     )?;
     let epoch = observe(diagnostics, PortableFailureSite::Recovery, hex_32())?;
-    let _epoch = observe(
+    observe(
         diagnostics,
         PortableFailureSite::Recovery,
         establish_epoch(authority_root, &epoch),
@@ -182,7 +182,7 @@ fn run_supervisor_lifecycle(
                 Ok(SupervisorUpdateEvent::ApplyReady(staged)) => break Some(*staged),
                 Ok(SupervisorUpdateEvent::Continue) => continue,
                 Ok(SupervisorUpdateEvent::AppStatusClosed) => break None,
-                Err(_error) if updates.is_uncertain() => {
+                Err(_) if updates.is_uncertain() => {
                     observe(
                         diagnostics,
                         PortableFailureSite::UpdateService,
@@ -210,7 +210,6 @@ fn run_supervisor_lifecycle(
             info(diagnostics, PortableMilestone::GenerationSelected);
             continue;
         }
-        let _ = recovery_action(&activated.journal);
         info(diagnostics, PortableMilestone::ControlledExit);
         return Ok(());
     }

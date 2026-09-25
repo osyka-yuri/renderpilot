@@ -32,7 +32,7 @@ fn rollback_delete(
                 {
                     *value.state_mut() = DomainDeleteState::Preserved;
                 }
-                prepared.cas(next, false)?;
+                prepared.cas(next)?;
             }
         }
         DomainDeleteState::Captured {
@@ -53,7 +53,7 @@ fn rollback_delete(
                     custody: durable(&expected_custody),
                 };
             }
-            prepared.cas(next, false)?;
+            prepared.cas(next)?;
             let mut next = prepared.journal.clone();
             if let DomainOperationEffect::Delete(value) = next.operations_mut()[index].effect_mut()
             {
@@ -61,7 +61,7 @@ fn rollback_delete(
                     preimage: durable(&before),
                 };
             }
-            prepared.cas(next, false)?;
+            prepared.cas(next)?;
             move_from_private_artifact(&custody, &path, &before)?;
             let mut next = prepared.journal.clone();
             if let DomainOperationEffect::Delete(value) = next.operations_mut()[index].effect_mut()
@@ -73,7 +73,7 @@ fn rollback_delete(
                 ArtifactSlot::Custody,
                 &DiskObservation::Absent,
             );
-            prepared.cas(next, false)?;
+            prepared.cas(next)?;
         }
         DomainDeleteState::Applied {
             custody: applied_custody,
@@ -93,7 +93,7 @@ fn rollback_delete(
                     preimage: durable(&before),
                 };
             }
-            prepared.cas(next, false)?;
+            prepared.cas(next)?;
             move_from_private_artifact(&custody, &path, &before)?;
             let mut next = prepared.journal.clone();
             if let DomainOperationEffect::Delete(value) = next.operations_mut()[index].effect_mut()
@@ -105,7 +105,7 @@ fn rollback_delete(
                 ArtifactSlot::Custody,
                 &DiskObservation::Absent,
             );
-            prepared.cas(next, false)?;
+            prepared.cas(next)?;
         }
         DomainDeleteState::RestoreIntent { preimage } => {
             let expected_preimage = native(preimage);
@@ -130,7 +130,7 @@ fn rollback_delete(
                 ArtifactSlot::Custody,
                 &DiskObservation::Absent,
             );
-            prepared.cas(next, false)?;
+            prepared.cas(next)?;
         }
         DomainDeleteState::Planned => {
             let mut next = prepared.journal.clone();
@@ -138,7 +138,7 @@ fn rollback_delete(
             {
                 *value.state_mut() = DomainDeleteState::Preserved;
             }
-            prepared.cas(next, false)?;
+            prepared.cas(next)?;
         }
         DomainDeleteState::Preserved => {}
     }

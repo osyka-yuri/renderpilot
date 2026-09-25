@@ -1,7 +1,6 @@
 fn rollback_verify(
     prepared: &mut PreparedFileMutation<'_>,
     index: usize,
-    _record: &DomainOperationRecord,
     effect: &DomainVerifyEffect,
 ) -> Result<(), ServiceError> {
     if matches!(effect.state(), DomainVerifyState::Planned) {
@@ -9,7 +8,7 @@ fn rollback_verify(
         if let DomainOperationEffect::Verify(value) = next.operations_mut()[index].effect_mut() {
             *value.state_mut() = DomainVerifyState::Preserved;
         }
-        prepared.cas(next, false)?;
+        prepared.cas(next)?;
         return Ok(());
     }
     let path = Path::new(effect.endpoint().path());
@@ -24,6 +23,6 @@ fn rollback_verify(
     if let DomainOperationEffect::Verify(value) = next.operations_mut()[index].effect_mut() {
         *value.state_mut() = DomainVerifyState::Preserved;
     }
-    prepared.cas(next, false)?;
+    prepared.cas(next)?;
     Ok(())
 }

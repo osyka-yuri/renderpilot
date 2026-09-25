@@ -429,8 +429,8 @@ fn next_workspace_cleanup_state(
         .ok_or_else(|| crate::failed("prior workspace id is outside the journal"))?
         .identity()
         .ok_or_else(|| crate::failed("prior private workspace has no durable identity"))?;
-    let prior_id = u32::try_from(workspace_id - 1)
-        .map_err(|_| crate::failed("workspace ordinal overflow"))?;
+    let prior_id =
+        u32::try_from(workspace_id - 1).map_err(|_| crate::failed("workspace ordinal overflow"))?;
     Ok(JournalCleanup::WorkspaceRemoveIntent {
         workspace_id: prior_id,
         expected_identity: identity.to_owned(),
@@ -440,7 +440,7 @@ fn next_workspace_cleanup_state(
 fn cleanup_committed(prepared: &mut PreparedFileMutation<'_>) -> Result<(), ServiceError> {
     post_commit::ensure_cleanup_ready(&prepared.journal)?;
     loop {
-        prepared.cleanup_private_artifacts(true)?;
+        prepared.cleanup_private_artifacts()?;
         match prepared.journal.cleanup().clone() {
             JournalCleanup::Inactive => {
                 let mut next = prepared.journal.clone();
@@ -466,7 +466,7 @@ fn cleanup_committed(prepared: &mut PreparedFileMutation<'_>) -> Result<(), Serv
                         .to_owned();
                     next.set_cleanup(JournalCleanup::ControlRemoveIntent { expected_identity });
                 }
-                prepared.cas(next, true)?;
+                prepared.cas(next)?;
             }
             JournalCleanup::WorkspaceRemoveIntent {
                 workspace_id,
@@ -480,7 +480,7 @@ fn cleanup_committed(prepared: &mut PreparedFileMutation<'_>) -> Result<(), Serv
                     &prepared.journal,
                     workspace_id,
                 )?);
-                prepared.cas(next, true)?;
+                prepared.cas(next)?;
             }
             JournalCleanup::ControlRemoveIntent { expected_identity } => {
                 cleanup_transaction_namespace(
@@ -491,7 +491,7 @@ fn cleanup_committed(prepared: &mut PreparedFileMutation<'_>) -> Result<(), Serv
                 )?;
                 let mut next = prepared.journal.clone();
                 next.set_cleanup(JournalCleanup::Complete);
-                prepared.cas(next, true)?;
+                prepared.cas(next)?;
             }
             JournalCleanup::Complete => break,
             JournalCleanup::ArtifactRemoveIntent { .. } => {

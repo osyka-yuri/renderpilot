@@ -103,7 +103,6 @@ fn peer_transition_allows_created_host() {
         &fixture.from,
         &fixture.to,
         None,
-        None,
     )
     .expect("created host plan")
     .expect("owner");
@@ -141,7 +140,6 @@ fn peer_transition_allows_owned_absent_host() {
         &fixture.from,
         &fixture.to,
         None,
-        None,
     )
     .expect("owned absent plan")
     .expect("owner");
@@ -178,7 +176,6 @@ fn peer_transition_moves_owned_present_sidecar_through_relocate() {
         &fixture.from,
         &fixture.to,
         Some(&outer_sha256),
-        None,
     )
     .expect("owned present plan")
     .expect("owner");
@@ -513,7 +510,6 @@ fn peer_transition_blocks_generic_backing_and_ambiguous_claims() {
             &fixture.from,
             &fixture.to,
             None,
-            None,
         )
         .is_err()
     );
@@ -535,7 +531,6 @@ fn peer_transition_blocks_generic_backing_and_ambiguous_claims() {
             &fixture.game_id,
             &fixture.from,
             &fixture.to,
-            None,
             None,
         )
         .is_err()
@@ -570,7 +565,6 @@ fn peer_transition_blocks_drifted_sidecar_and_allows_reused_without_touching_it(
             &fixture.from,
             &fixture.to,
             None,
-            None,
         )
         .is_err()
     );
@@ -595,7 +589,6 @@ fn peer_transition_blocks_drifted_sidecar_and_allows_reused_without_touching_it(
         &fixture.game_id,
         &fixture.from,
         &fixture.to,
-        None,
         None,
     )
     .expect("reused plan")
@@ -630,9 +623,7 @@ fn peer_transition_reverse_accepts_exact_existing_destinations() {
     )
     .try_with_managed_files(vec![ManagedAddonFile::owned(
         fixture.to.clone(),
-        ManagedFileBaseline::Present {
-            sha256: baseline.clone(),
-        },
+        ManagedFileBaseline::Present { sha256: baseline },
         hash.clone(),
     )])
     .expect("reverse receipt");
@@ -644,7 +635,6 @@ fn peer_transition_reverse_accepts_exact_existing_destinations() {
         &fixture.to,
         &fixture.from,
         Some(&hash),
-        Some(&baseline),
     )
     .expect("reverse plan")
     .expect("owner");
@@ -716,7 +706,6 @@ fn luma_reverse_transition_projects_each_managed_custody_case_to_native_receipt(
             &fixture.to,
             &fixture.from,
             None,
-            None,
         )
         .expect("Luma reverse plan")
         .expect("Luma peer owner");
@@ -779,7 +768,6 @@ fn luma_reverse_transition_rejects_generic_created_source() {
             &fixture.game_id,
             &fixture.to,
             &fixture.from,
-            None,
             None,
         )
         .is_err()
@@ -844,7 +832,6 @@ fn recognized_peer_relocation_transforms_managed_host_receipt() {
         &game_id,
         &from_ref,
         &destination_ref,
-        None,
         None,
     )
     .expect("relocation")

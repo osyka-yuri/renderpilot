@@ -556,23 +556,15 @@ fn only_the_first_executable_patch_surfaces_the_integrity_warning() {
     let patched_hash = Sha256Hash::new("d".repeat(64)).expect("patched EXE hash should be valid");
     let target_hash = Sha256Hash::new("e".repeat(64)).expect("target EXE hash should be valid");
 
-    let first_patch = D3d12ExecutableAction::for_swap(
-        &d3d12_executable_context(
-            606,
-            606,
-            original_hash.clone(),
-            original_hash.clone(),
-            false,
-        ),
-        618,
-    )
-    .expect("first patch should be assessed");
+    let first_patch =
+        D3d12ExecutableAction::for_swap(&d3d12_executable_context(606, 606, false), 618)
+            .expect("first patch should be assessed");
     let first_plan = build_swap_operation_plan(&component, &artifact)
         .expect("first plan should build")
         .with_d3d12_executable_action(
             first_patch,
             "first-token".to_owned(),
-            original_hash.clone(),
+            original_hash,
             Some(target_hash.clone()),
         );
 
@@ -588,11 +580,9 @@ fn only_the_first_executable_patch_surfaces_the_integrity_warning() {
             .requires_confirmation()
     );
 
-    let repeated_patch = D3d12ExecutableAction::for_swap(
-        &d3d12_executable_context(606, 619, original_hash, patched_hash.clone(), true),
-        618,
-    )
-    .expect("repeated patch should be assessed");
+    let repeated_patch =
+        D3d12ExecutableAction::for_swap(&d3d12_executable_context(606, 619, true), 618)
+            .expect("repeated patch should be assessed");
     let repeated_plan = build_swap_operation_plan(&component, &artifact)
         .expect("repeated plan should build")
         .with_d3d12_executable_action(
@@ -625,8 +615,6 @@ fn only_the_first_executable_patch_surfaces_the_integrity_warning() {
 fn d3d12_executable_context(
     original_sdk: u32,
     current_sdk: u32,
-    _original_hash: Sha256Hash,
-    _current_hash: Sha256Hash,
     backup_exists: bool,
 ) -> D3d12ExecutableProfile {
     D3d12ExecutableProfile::new(

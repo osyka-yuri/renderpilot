@@ -94,6 +94,5 @@ pub(in crate::addons::optiscaler) fn plan_apply_peer_transition(
         &from,
         &to,
         allowed_destination,
-        None,
     )
 }

@@ -47,7 +47,7 @@ pub(super) fn apply(prepared: &mut PreparedFileMutation<'_>) -> Result<(), Servi
                         live: durable_live.clone(),
                     };
                 }
-                prepared.cas(next, true)?;
+                prepared.cas(next)?;
                 complete_remove_intent(prepared, index, directory, &durable_live)?;
             }
             DomainRemoveDirectoryState::RemoveIntent { directory, live } => {
@@ -193,7 +193,7 @@ fn complete_remove_intent(
         *value.state_mut() = DomainRemoveDirectoryState::Applied { directory };
         set_endpoint_expected(value.endpoint_mut(), &super::DiskObservation::Absent);
     }
-    prepared.cas(next, true)
+    prepared.cas(next)
 }
 
 fn remove_exact_empty_directory(path: &Path, expected_identity: &str) -> Result<(), ServiceError> {

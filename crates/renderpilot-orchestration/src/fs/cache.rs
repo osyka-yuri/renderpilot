@@ -125,9 +125,10 @@ where
             // classification. Linux must never replace that pathname after a
             // generation proof because an external winner could arrive before
             // a replacement rename.
-            current.owner.retain();
             #[cfg(target_os = "linux")]
             {
+                // Keep the exact observed file open until this return completes.
+                let _retained_owner = current.owner;
                 return Ok(CachePublication::PreservedUnclassified);
             }
 

@@ -117,15 +117,14 @@ fn validate_action_payload_transition(
                 _ => {}
             }
         }
-        (OperationEffect::Verify(left), OperationEffect::Verify(right)) => {
+        (OperationEffect::Verify(_), OperationEffect::Verify(right)) => {
             if let VerifyState::Applied { observed } = right.state()
                 && !observed.is_exact()
             {
                 return Err(invalid());
             }
-            let _ = left;
         }
-        (OperationEffect::Relocate(left), OperationEffect::Relocate(right)) => {
+        (OperationEffect::Relocate(_), OperationEffect::Relocate(right)) => {
             if let RelocateState::Applied {
                 source_after,
                 destination_after,
@@ -135,7 +134,6 @@ fn validate_action_payload_transition(
             {
                 return Err(invalid());
             }
-            let _ = left;
         }
         (OperationEffect::CreateDirectory(left), OperationEffect::CreateDirectory(right)) => {
             use CreateDirectoryState::*;

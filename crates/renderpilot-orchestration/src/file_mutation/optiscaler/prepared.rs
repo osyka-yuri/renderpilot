@@ -187,7 +187,7 @@ impl PreparedFileMutation<'_> {
         } else {
             return Err(crate::failed("write state applied to another action"));
         }
-        self.cas(next, false)
+        self.cas(next)
     }
     pub(super) fn set_write_state_with_artifact(
         &mut self,
@@ -207,7 +207,7 @@ impl PreparedFileMutation<'_> {
             return Err(crate::failed("write state applied to another action"));
         }
         set_artifact(&mut next.operations_mut()[index], which, value);
-        self.cas(next, false)
+        self.cas(next)
     }
     fn set_delete_state(
         &mut self,
@@ -224,7 +224,7 @@ impl PreparedFileMutation<'_> {
         } else {
             return Err(crate::failed("delete state applied to another action"));
         }
-        self.cas(next, false)
+        self.cas(next)
     }
     fn set_delete_state_with_artifact(
         &mut self,
@@ -244,7 +244,7 @@ impl PreparedFileMutation<'_> {
             return Err(crate::failed("delete state applied to another action"));
         }
         set_artifact(&mut next.operations_mut()[index], which, value);
-        self.cas(next, false)
+        self.cas(next)
     }
     fn set_directory_state(
         &mut self,
@@ -263,7 +263,7 @@ impl PreparedFileMutation<'_> {
         } else {
             return Err(crate::failed("directory state applied to another action"));
         }
-        self.cas(next, false)
+        self.cas(next)
     }
     pub(super) fn set_directory_state_with_artifact(
         &mut self,
@@ -285,7 +285,7 @@ impl PreparedFileMutation<'_> {
             return Err(crate::failed("directory state applied to another action"));
         }
         set_artifact(&mut next.operations_mut()[index], which, value);
-        self.cas(next, false)
+        self.cas(next)
     }
     pub(super) fn set_relocate_state(
         &mut self,
@@ -306,13 +306,9 @@ impl PreparedFileMutation<'_> {
         } else {
             return Err(crate::failed("relocation state applied to another action"));
         }
-        self.cas(next, false)
+        self.cas(next)
     }
-    pub(super) fn cas(
-        &mut self,
-        next: OptiScalerJournal,
-        _committed: bool,
-    ) -> Result<(), ServiceError> {
+    pub(super) fn cas(&mut self, next: OptiScalerJournal) -> Result<(), ServiceError> {
         next.validate()
             .map_err(|error| crate::failed(error.to_string()))?;
         let json = serde_json::to_string(&next).map_err(|error| {
