@@ -41,7 +41,7 @@ zstd = { workspace = true }
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Memory", "Win32_System_SystemServices", "Win32_System_Threading", "Wdk_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "std"] }
 
 [dev-dependencies]
 renderpilot-detection = { workspace = true, features = ["test-instrumentation"] }

@@ -28,7 +28,7 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "std"] }
 
 [dev-dependencies]
 renderpilot-detection = { workspace = true }
