@@ -1,6 +1,6 @@
 # Quality and release
 
-The reusable quality workflow is the source of truth for main-branch and release gates. CI runs the Rust matrix on Ubuntu and Windows, the desktop suite on Ubuntu, and the Libraries V2 producer contract on Ubuntu. The release workflow invokes the same gates with the Rust matrix restricted to Windows before packaging.
+The reusable quality workflow is the source of truth for main-branch and release gates. CI runs the Rust matrix on Ubuntu and Windows, the desktop suite on Windows, and the Libraries V2 producer contract on Ubuntu. The release workflow invokes the same gates with the Rust matrix restricted to Windows before packaging.
 
 ## Local quality gates
 
