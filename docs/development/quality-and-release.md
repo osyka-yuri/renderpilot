@@ -4,11 +4,11 @@ The reusable quality workflow is the source of truth for main-branch and release
 
 ## Local quality gates
 
-CI uses cargo-nextest 0.9.143 exactly. To match CI locally, install the pinned
+CI uses cargo-nextest 0.9.146 exactly. To match CI locally, install the pinned
 version once:
 
 ```powershell
-cargo install cargo-nextest --locked --version 0.9.143
+cargo install cargo-nextest --locked --version 0.9.146
 ```
 
 Run the complete Rust checks from the repository root:

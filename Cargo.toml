@@ -39,7 +39,7 @@ jiff = { version = "0.2", default-features = false, features = ["std"] }
 json-patch = "4.2.0"
 libloading = "0.9"
 log = "0.4"
-minisign-verify = "0.2.5"
+minisign-verify = "0.3.0"
 percent-encoding = "2.3"
 quick-xml = "0.42"
 reqwest = { version = "0.13", default-features = false }

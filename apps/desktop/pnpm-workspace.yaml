@@ -3,4 +3,4 @@ allowBuilds:
 configDependencies:
   '@pnpm/pacquet': 0.11.12
 patchedDependencies:
-  bits-ui@2.19.2: patches/bits-ui@2.19.2.patch
+  bits-ui@2.19.3: patches/bits-ui@2.19.3.patch
