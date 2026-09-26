@@ -63,6 +63,44 @@ fn installs_a_verified_steam_match() {
 }
 
 #[test]
+fn unsupported_settings_precedes_title_category_and_generic_fallback() {
+    let mut exact = title(
+        "future-config-title",
+        "future-config-title",
+        Architecture::X64,
+        Status::Working,
+        vec![rule(MatchKind::SteamAppid, "1091500", 100)],
+    );
+    exact.category = RenoDxCategory::External {
+        url: "https://example.test/addon".to_owned(),
+        message: message("renodx.external.test"),
+    };
+    exact.has_unsupported_settings = true;
+    let mut manifest = manifest(vec![exact]);
+    manifest.generics.push(RenoDxGeneric {
+        engine: Engine::Unity,
+        status: Status::Working,
+        slug: Some("unityengine".to_owned()),
+        url64: Some("https://example.test/renodx-unityengine.addon64".to_owned()),
+        url32: Some("https://example.test/renodx-unityengine.addon32".to_owned()),
+        message: message("renodx.generic.unity"),
+        profile_id: Some("unity".to_owned()),
+        generic_fallback: true,
+        guidance: Vec::new(),
+        processing_path: Default::default(),
+    });
+    let mut game = facts();
+    game.engine = Some(Engine::Unity);
+
+    assert_matches!(
+        resolve(&manifest, &game),
+        RenoDxResolution::UnsupportedSettings
+    );
+    assert!(has_unsupported_settings(&manifest, &game));
+    assert!(resolve_external_install(&manifest, &game).is_none());
+}
+
+#[test]
 fn download_url_overrides_slug_derived_url() {
     // A title with a download_url (third-party host) must resolve to that URL,
     // not the clshortfuse URL derived from the slug.
@@ -745,23 +783,6 @@ fn compatible_external_title_offers_file_install() {
     let plan = resolve_external_install(&m, &facts()).expect("external install plan");
     assert_eq!(plan.slug, "extslug");
     assert_eq!(plan.proxy_dll_name, "dxgi.dll");
-}
-
-#[test]
-fn file_installable_for_directx_inconclusive_and_vulkan_but_not_opengl() {
-    let mut facts = facts();
-    // A confirmed Direct3D renderer is file-installable (proxy).
-    facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::D3D12], Some(Architecture::X64));
-    assert!(file_installable(&facts));
-    // An inconclusive read still allows it (defaults to a proxy).
-    facts.graphics = ExeGraphicsInfo::new(Vec::new(), None);
-    assert!(file_installable(&facts));
-    // A confirmed Vulkan renderer is file-installable via the global layer.
-    facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::Vulkan], Some(Architecture::X64));
-    assert!(file_installable(&facts));
-    // A confirmed OpenGL renderer is not.
-    facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
-    assert!(!file_installable(&facts));
 }
 
 #[test]

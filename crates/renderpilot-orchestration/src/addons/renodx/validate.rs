@@ -202,7 +202,12 @@ fn validate_title(title: &RenoDxTitle) -> Result<(), ServiceError> {
                 title.id
             )));
         };
-        validate_config(config, &title.id, profile_id)?;
+        validate_config(
+            config,
+            &title.id,
+            profile_id,
+            title.has_unsupported_settings,
+        )?;
     }
     if let Some(launch) = &title.launch
         && (launch.arguments.is_empty() || launch.arguments.iter().any(|arg| arg.trim().is_empty()))
@@ -219,8 +224,9 @@ fn validate_config(
     config: &RenoDxConfig,
     title_id: &str,
     profile_id: &str,
+    allow_empty_config: bool,
 ) -> Result<(), ServiceError> {
-    if config.settings.is_empty() {
+    if config.settings.is_empty() && !allow_empty_config {
         return Err(errors::failed(format!(
             "title `{title_id}` RenoDX config must contain at least one setting"
         )));
@@ -266,6 +272,7 @@ fn config_key_supported_by_profile(key: super::types::RenoDxConfigKey, profile: 
                 | RenoDxConfigKey::UpgradeR11G11B10Float
                 | RenoDxConfigKey::UpgradeR16G16B16A16Typeless
                 | RenoDxConfigKey::UpgradeCopyDestinations
+                | RenoDxConfigKey::ForcePipelineCloning
         ),
         "unreal_legacy" => !matches!(
             key,
@@ -274,6 +281,7 @@ fn config_key_supported_by_profile(key: super::types::RenoDxConfigKey, profile: 
                 | RenoDxConfigKey::TonemapOffset
                 | RenoDxConfigKey::BlitCopyHack
                 | RenoDxConfigKey::UseSwapchainProxy
+                | RenoDxConfigKey::ForcePipelineCloning
         ),
         "unity" => !matches!(
             key,
@@ -596,6 +604,20 @@ mod tests {
     }
 
     #[test]
+    fn force_pipeline_cloning_is_supported_by_unity_and_ue_extended_only() {
+        let key = RenoDxConfigKey::ForcePipelineCloning;
+        assert!(config_key_supported_by_profile(key, "unity"));
+        assert!(config_key_supported_by_profile(key, "ue_extended"));
+        assert!(!config_key_supported_by_profile(key, "unreal_legacy"));
+        let managed = key.managed_key();
+        assert_eq!(managed.value_range(), (0, 1));
+        assert!(managed.accepts_value(0));
+        assert!(managed.accepts_value(1));
+        assert!(!managed.accepts_value(-1));
+        assert!(!managed.accepts_value(2));
+    }
+
+    #[test]
     fn typed_config_keys_match_domain_canonical_contract() {
         let keys = [
             RenoDxConfigKey::UpgradeB8G8R8A8Typeless,
@@ -614,6 +636,7 @@ mod tests {
             RenoDxConfigKey::TonemapOffset,
             RenoDxConfigKey::BlitCopyHack,
             RenoDxConfigKey::UseSwapchainProxy,
+            RenoDxConfigKey::ForcePipelineCloning,
             RenoDxConfigKey::ColorGradeContrast,
             RenoDxConfigKey::ColorGradeSaturation,
             RenoDxConfigKey::ColorGradeBlowout,

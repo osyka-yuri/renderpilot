@@ -57,7 +57,8 @@ export type ActionDisabledReason =
   | 'stable_unavailable'
   | 'read_only'
   | 'unsupported'
-  | 'validation_required';
+  | 'validation_required'
+  | 'unsupported_settings';
 
 /** Shared typed Unreal Engine.ini automation state. */
 export type EngineConfigStatus =

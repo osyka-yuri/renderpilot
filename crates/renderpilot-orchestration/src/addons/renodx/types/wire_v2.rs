@@ -25,6 +25,45 @@ pub(crate) struct WireManifestV2 {
     page_guidance: Vec<WireGuidance>,
 }
 
+impl WireManifestV2 {
+    pub(crate) fn validate_raw_renodx_config(&self) -> Result<(), String> {
+        for game in &self.games {
+            let Some(config) = &game.renodx_config else {
+                continue;
+            };
+            if config.settings.is_empty() {
+                return Err(format!(
+                    "title `{}` RenoDX config must contain at least one setting",
+                    game.id
+                ));
+            }
+            let mut keys = std::collections::HashSet::new();
+            for setting in &config.settings {
+                let key = setting.key.as_str();
+                if key.trim().is_empty() {
+                    return Err(format!(
+                        "title `{}` RenoDX config contains an empty key",
+                        game.id
+                    ));
+                }
+                if key == "Set_Path" {
+                    return Err(format!(
+                        "title `{}` RenoDX config cannot set reserved key `Set_Path`",
+                        game.id
+                    ));
+                }
+                if !keys.insert(key) {
+                    return Err(format!(
+                        "title `{}` RenoDX config contains duplicate key `{key}`",
+                        game.id
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum WireProfileId {
@@ -163,8 +202,31 @@ struct WireRenoDxConfigSetting {
     value: i32,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
 enum WireRenoDxConfigKey {
+    Known(WireKnownRenoDxConfigKey),
+    Unknown(String),
+}
+
+impl WireRenoDxConfigKey {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Known(key) => key.as_str(),
+            Self::Unknown(key) => key,
+        }
+    }
+
+    fn into_known(self) -> Option<RenoDxConfigKey> {
+        match self {
+            Self::Known(key) => Some(key.into()),
+            Self::Unknown(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+enum WireKnownRenoDxConfigKey {
     #[serde(rename = "Upgrade_B8G8R8A8_TYPELESS")]
     UpgradeB8G8R8A8Typeless,
     #[serde(rename = "Upgrade_B8G8R8A8_UNORM")]
@@ -197,6 +259,8 @@ enum WireRenoDxConfigKey {
     BlitCopyHack,
     #[serde(rename = "Use_Swapchain_Proxy")]
     UseSwapchainProxy,
+    #[serde(rename = "Force_Pipeline_Cloning")]
+    ForcePipelineCloning,
     #[serde(rename = "ColorGradeContrast")]
     ColorGradeContrast,
     #[serde(rename = "ColorGradeSaturation")]
@@ -205,28 +269,39 @@ enum WireRenoDxConfigKey {
     ColorGradeBlowout,
 }
 
-impl From<WireRenoDxConfigKey> for RenoDxConfigKey {
-    fn from(value: WireRenoDxConfigKey) -> Self {
+impl WireKnownRenoDxConfigKey {
+    fn as_str(self) -> &'static str {
+        RenoDxConfigKey::from(self).as_str()
+    }
+}
+
+impl From<WireKnownRenoDxConfigKey> for RenoDxConfigKey {
+    fn from(value: WireKnownRenoDxConfigKey) -> Self {
         match value {
-            WireRenoDxConfigKey::UpgradeB8G8R8A8Typeless => Self::UpgradeB8G8R8A8Typeless,
-            WireRenoDxConfigKey::UpgradeB8G8R8A8Unorm => Self::UpgradeB8G8R8A8Unorm,
-            WireRenoDxConfigKey::UpgradeR8G8B8A8Typeless => Self::UpgradeR8G8B8A8Typeless,
-            WireRenoDxConfigKey::UpgradeR8G8B8A8Unorm => Self::UpgradeR8G8B8A8Unorm,
-            WireRenoDxConfigKey::UpgradeR10G10B10A2Unorm => Self::UpgradeR10G10B10A2Unorm,
-            WireRenoDxConfigKey::UpgradeR10G10B10A2Typeless => Self::UpgradeR10G10B10A2Typeless,
-            WireRenoDxConfigKey::UpgradeR11G11B10Float => Self::UpgradeR11G11B10Float,
-            WireRenoDxConfigKey::UpgradeR16G16B16A16Typeless => Self::UpgradeR16G16B16A16Typeless,
-            WireRenoDxConfigKey::UpgradeCopyDestinations => Self::UpgradeCopyDestinations,
-            WireRenoDxConfigKey::ForceBorderless => Self::ForceBorderless,
-            WireRenoDxConfigKey::UpgradeUseScrgb => Self::UpgradeUseScrgb,
-            WireRenoDxConfigKey::SwapchainEncoding => Self::SwapchainEncoding,
-            WireRenoDxConfigKey::ScalingOffset => Self::ScalingOffset,
-            WireRenoDxConfigKey::TonemapOffset => Self::TonemapOffset,
-            WireRenoDxConfigKey::BlitCopyHack => Self::BlitCopyHack,
-            WireRenoDxConfigKey::UseSwapchainProxy => Self::UseSwapchainProxy,
-            WireRenoDxConfigKey::ColorGradeContrast => Self::ColorGradeContrast,
-            WireRenoDxConfigKey::ColorGradeSaturation => Self::ColorGradeSaturation,
-            WireRenoDxConfigKey::ColorGradeBlowout => Self::ColorGradeBlowout,
+            WireKnownRenoDxConfigKey::UpgradeB8G8R8A8Typeless => Self::UpgradeB8G8R8A8Typeless,
+            WireKnownRenoDxConfigKey::UpgradeB8G8R8A8Unorm => Self::UpgradeB8G8R8A8Unorm,
+            WireKnownRenoDxConfigKey::UpgradeR8G8B8A8Typeless => Self::UpgradeR8G8B8A8Typeless,
+            WireKnownRenoDxConfigKey::UpgradeR8G8B8A8Unorm => Self::UpgradeR8G8B8A8Unorm,
+            WireKnownRenoDxConfigKey::UpgradeR10G10B10A2Unorm => Self::UpgradeR10G10B10A2Unorm,
+            WireKnownRenoDxConfigKey::UpgradeR10G10B10A2Typeless => {
+                Self::UpgradeR10G10B10A2Typeless
+            }
+            WireKnownRenoDxConfigKey::UpgradeR11G11B10Float => Self::UpgradeR11G11B10Float,
+            WireKnownRenoDxConfigKey::UpgradeR16G16B16A16Typeless => {
+                Self::UpgradeR16G16B16A16Typeless
+            }
+            WireKnownRenoDxConfigKey::UpgradeCopyDestinations => Self::UpgradeCopyDestinations,
+            WireKnownRenoDxConfigKey::ForceBorderless => Self::ForceBorderless,
+            WireKnownRenoDxConfigKey::UpgradeUseScrgb => Self::UpgradeUseScrgb,
+            WireKnownRenoDxConfigKey::SwapchainEncoding => Self::SwapchainEncoding,
+            WireKnownRenoDxConfigKey::ScalingOffset => Self::ScalingOffset,
+            WireKnownRenoDxConfigKey::TonemapOffset => Self::TonemapOffset,
+            WireKnownRenoDxConfigKey::BlitCopyHack => Self::BlitCopyHack,
+            WireKnownRenoDxConfigKey::UseSwapchainProxy => Self::UseSwapchainProxy,
+            WireKnownRenoDxConfigKey::ForcePipelineCloning => Self::ForcePipelineCloning,
+            WireKnownRenoDxConfigKey::ColorGradeContrast => Self::ColorGradeContrast,
+            WireKnownRenoDxConfigKey::ColorGradeSaturation => Self::ColorGradeSaturation,
+            WireKnownRenoDxConfigKey::ColorGradeBlowout => Self::ColorGradeBlowout,
         }
     }
 }
@@ -406,6 +481,25 @@ impl RenoDxManifest {
             .map(|game| {
                 let guidance = game.guidance.into_iter().map(Into::into).collect();
                 title_guidance.insert(game.id.clone(), guidance);
+                let mut has_unsupported_settings = false;
+                let renodx_config = game.renodx_config.map(|config| RenoDxConfig {
+                    settings: config
+                        .settings
+                        .into_iter()
+                        .filter_map(|setting| {
+                            let key = setting.key.into_known();
+                            if let Some(key) = key {
+                                Some(RenoDxConfigSetting {
+                                    key,
+                                    value: setting.value,
+                                })
+                            } else {
+                                has_unsupported_settings = true;
+                                None
+                            }
+                        })
+                        .collect(),
+                });
                 RenoDxTitle {
                     id: game.id,
                     name: game.name,
@@ -425,16 +519,8 @@ impl RenoDxManifest {
                     download_url: game.addon.source,
                     profile_id: game.profile_id.map(|profile| profile.as_str().to_owned()),
                     processing_path: game.processing_path.map(Into::into),
-                    renodx_config: game.renodx_config.map(|config| RenoDxConfig {
-                        settings: config
-                            .settings
-                            .into_iter()
-                            .map(|setting| RenoDxConfigSetting {
-                                key: setting.key.into(),
-                                value: setting.value,
-                            })
-                            .collect(),
-                    }),
+                    renodx_config,
+                    has_unsupported_settings,
                     inherit_page_guidance: game.inherit_page_guidance,
                     launch: game.requirements.map(|r| RenoDxLaunchRequirement {
                         arguments: r.launch.arguments,

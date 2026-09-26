@@ -29,6 +29,14 @@ pub(super) fn state_changed_retry_update() -> ServiceError {
     invalid("RenoDX install state changed during update preparation; retry the update".to_owned())
 }
 
+/// A matched title uses RenoDX settings this version cannot apply.
+pub(super) fn unsupported_settings() -> ServiceError {
+    invalid(
+        "this version of RenderPilot does not support some RenoDX settings for this game"
+            .to_owned(),
+    )
+}
+
 /// The manifest has no ReShade source for the requested channel. Delegates to the
 /// shared constructor ([`crate::addons::reshade::source::channel_unavailable`]) so
 /// the message stays identical across tools.

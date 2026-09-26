@@ -12,7 +12,8 @@ mod plan;
 mod types;
 
 pub use plan::{
-    file_installable, generic_file_install_plan, matched_slug, resolve, resolve_external_install,
+    generic_file_install_plan, has_unsupported_settings, matched_slug, resolve,
+    resolve_external_install,
 };
 pub use types::{RenoDxResolution, ResolvedInstall};
 

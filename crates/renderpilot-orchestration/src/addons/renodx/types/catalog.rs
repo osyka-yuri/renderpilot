@@ -151,6 +151,8 @@ pub struct RenoDxTitle {
     pub processing_path: Option<RenoDxProcessingPath>,
     /// Strict, reviewed add-on settings to apply to ReShade.ini.
     pub renodx_config: Option<RenoDxConfig>,
+    /// An otherwise valid v2 title uses an add-on setting this client cannot apply.
+    pub has_unsupported_settings: bool,
     /// Whether page-wide guidance is composed into this title's guidance.
     pub inherit_page_guidance: bool,
     /// Launch arguments associated with this title.
@@ -382,6 +384,9 @@ pub enum RenoDxConfigKey {
     /// Swap-chain proxy mode.
     #[serde(rename = "Use_Swapchain_Proxy")]
     UseSwapchainProxy,
+    /// Force pipeline cloning.
+    #[serde(rename = "Force_Pipeline_Cloning")]
+    ForcePipelineCloning,
     /// Color-grade contrast preset value.
     #[serde(rename = "ColorGradeContrast")]
     ColorGradeContrast,
@@ -415,6 +420,7 @@ impl RenoDxConfigKey {
             Self::TonemapOffset => RenoDxManagedConfigKey::TonemapOffset,
             Self::BlitCopyHack => RenoDxManagedConfigKey::BlitCopyHack,
             Self::UseSwapchainProxy => RenoDxManagedConfigKey::UseSwapchainProxy,
+            Self::ForcePipelineCloning => RenoDxManagedConfigKey::ForcePipelineCloning,
             Self::ColorGradeContrast => RenoDxManagedConfigKey::ColorGradeContrast,
             Self::ColorGradeSaturation => RenoDxManagedConfigKey::ColorGradeSaturation,
             Self::ColorGradeBlowout => RenoDxManagedConfigKey::ColorGradeBlowout,

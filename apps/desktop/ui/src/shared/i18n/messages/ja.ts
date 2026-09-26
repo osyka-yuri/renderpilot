@@ -706,6 +706,8 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.renodx.uninstallError': 'RenoDX の削除に失敗しました',
   'gameDetails.renodx.switchError': 'ReShade チャンネルの切り替えに失敗しました',
   'gameDetails.renodx.unsupported': 'このゲームに利用できる RenoDX プロファイルはありません。',
+  'gameDetails.renodx.unsupportedSettings':
+    'このバージョンの RenderPilot は、このゲームの一部の RenoDX 設定に対応していません。',
   'gameDetails.renodx.incompatible': 'RenoDX をインストールできません：{reason}。',
   'gameDetails.renodx.installTornWarning':
     '以前の RenoDX 操作が正常に完了しませんでした。インストールを再実行してファイルを整合させてください。',

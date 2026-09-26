@@ -50,6 +50,8 @@ pub enum RenoDxManagedConfigKey {
     BlitCopyHack,
     /// Swap-chain proxy mode.
     UseSwapchainProxy,
+    /// Force pipeline cloning.
+    ForcePipelineCloning,
     /// Color-grade contrast preset value.
     ColorGradeContrast,
     /// Color-grade saturation preset value.
@@ -78,6 +80,7 @@ impl RenoDxManagedConfigKey {
         Self::TonemapOffset,
         Self::BlitCopyHack,
         Self::UseSwapchainProxy,
+        Self::ForcePipelineCloning,
         Self::ColorGradeContrast,
         Self::ColorGradeSaturation,
         Self::ColorGradeBlowout,
@@ -104,6 +107,7 @@ impl RenoDxManagedConfigKey {
             "Tonemap_Offset" => Self::TonemapOffset,
             "Blit_Copy_Hack" => Self::BlitCopyHack,
             "Use_Swapchain_Proxy" => Self::UseSwapchainProxy,
+            "Force_Pipeline_Cloning" => Self::ForcePipelineCloning,
             "ColorGradeContrast" => Self::ColorGradeContrast,
             "ColorGradeSaturation" => Self::ColorGradeSaturation,
             "ColorGradeBlowout" => Self::ColorGradeBlowout,
@@ -132,6 +136,7 @@ impl RenoDxManagedConfigKey {
             Self::TonemapOffset => "Tonemap_Offset",
             Self::BlitCopyHack => "Blit_Copy_Hack",
             Self::UseSwapchainProxy => "Use_Swapchain_Proxy",
+            Self::ForcePipelineCloning => "Force_Pipeline_Cloning",
             Self::ColorGradeContrast => "ColorGradeContrast",
             Self::ColorGradeSaturation => "ColorGradeSaturation",
             Self::ColorGradeBlowout => "ColorGradeBlowout",
@@ -145,7 +150,8 @@ impl RenoDxManagedConfigKey {
             Self::SetPath
             | Self::ForceBorderless
             | Self::UpgradeUseScrgb
-            | Self::SwapchainEncoding => (0, 1),
+            | Self::SwapchainEncoding
+            | Self::ForcePipelineCloning => (0, 1),
             Self::UpgradeCopyDestinations | Self::UseSwapchainProxy => (0, 2),
             Self::UpgradeB8G8R8A8Typeless
             | Self::UpgradeB8G8R8A8Unorm
@@ -511,7 +517,7 @@ mod tests {
 
     #[test]
     fn canonical_managed_keys_round_trip_and_enforce_boundaries() {
-        assert_eq!(RenoDxManagedConfigKey::ALL.len(), 20);
+        assert_eq!(RenoDxManagedConfigKey::ALL.len(), 21);
         for key in RenoDxManagedConfigKey::ALL {
             assert_eq!(RenoDxManagedConfigKey::parse(key.as_str()), Some(*key));
             let (minimum, maximum) = key.value_range();

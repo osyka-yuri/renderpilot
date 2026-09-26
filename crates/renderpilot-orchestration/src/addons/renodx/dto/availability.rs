@@ -142,6 +142,8 @@ pub enum AvailabilityOutcome {
     },
     /// The game already has native HDR; RenoDX is not offered.
     NativeHdr,
+    /// The exact title uses RenoDX settings unsupported by this client.
+    UnsupportedSettings,
     /// A game matched but cannot be installed for it.
     Incompatible {
         /// Why it cannot be installed.

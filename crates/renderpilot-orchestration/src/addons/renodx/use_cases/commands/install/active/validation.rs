@@ -67,6 +67,7 @@ pub(super) fn catalog_plan(
         RenoDxResolution::NativeHdr => Err(errors::invalid(
             "this game has native HDR; RenoDX is not needed".to_owned(),
         )),
+        RenoDxResolution::UnsupportedSettings => Err(errors::unsupported_settings()),
         RenoDxResolution::Incompatible { reason } => Err(errors::invalid(format!(
             "RenoDX is not compatible with this game: {reason:?}"
         ))),

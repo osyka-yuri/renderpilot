@@ -113,6 +113,13 @@
   onRepair={handleRepair}
 >
   {#snippet topWarnings()}
+    {#if store.hasUnsupportedSettings}
+      <AddonStateMessage
+        tone="warning"
+        icon="warning"
+        message={t('gameDetails.renodx.unsupportedSettings')}
+      />
+    {/if}
     {#if store.installTorn}
       <AddonStateMessage
         tone="warning"

@@ -222,6 +222,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
 
   const isExternal = $derived(outcome?.kind === 'external');
   const isNativeHdr = $derived(outcome?.kind === 'native_hdr');
+  const hasUnsupportedSettings = $derived(outcome?.kind === 'unsupported_settings');
   const externalUrl = $derived(outcome?.kind === 'external' ? outcome.url : null);
   const externalMessage = $derived(outcome?.kind === 'external' ? outcome.message : null);
   const externalFileInstall = $derived(outcome?.kind === 'external' ? outcome.file_install : null);
@@ -358,6 +359,9 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       },
       get isNativeHdr() {
         return isNativeHdr;
+      },
+      get hasUnsupportedSettings() {
+        return hasUnsupportedSettings;
       },
       get externalUrl() {
         return externalUrl;

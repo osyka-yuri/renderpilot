@@ -31,6 +31,9 @@ fn resolve_title(
     rule: &MatchRule,
     facts: &MatchFacts,
 ) -> RenoDxResolution {
+    if title.has_unsupported_settings {
+        return RenoDxResolution::UnsupportedSettings;
+    }
     match &title.category {
         RenoDxCategory::Blacklist { message } => RenoDxResolution::Blacklisted {
             message: message.clone(),
@@ -121,20 +124,20 @@ pub fn resolve_external_install(
     facts: &MatchFacts,
 ) -> Option<ResolvedInstall> {
     let (title, rule) = select_title(&manifest.titles, facts)?;
+    if title.has_unsupported_settings {
+        return None;
+    }
     if !matches!(title.category, RenoDxCategory::External { .. }) {
         return None;
     }
     build_install_plan(manifest, title, rule, facts).ok()
 }
 
-/// Whether RenoDX can be installed for this game from a user-supplied add-on file.
-/// True for a DirectX or inconclusive renderer (a per-game proxy) and for a confirmed
-/// Vulkan renderer (the shared Vulkan layer); only a confirmed OpenGL renderer is
-/// refused. Backs the manual-install escape hatch for games with no automatic or
-/// curated-external path.
+/// Whether the selected exact title has settings this version cannot process.
+/// This takes precedence over category matching and engine-generic fallback.
 #[must_use]
-pub fn file_installable(facts: &MatchFacts) -> bool {
-    host_decision(primary_api(&facts.graphics)).is_some()
+pub fn has_unsupported_settings(manifest: &RenoDxManifest, facts: &MatchFacts) -> bool {
+    select_title(&manifest.titles, facts).is_some_and(|(title, _)| title.has_unsupported_settings)
 }
 
 /// The catalogue add-on slug for this game, if a title matches — so a manual install

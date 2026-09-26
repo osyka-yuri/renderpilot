@@ -7,7 +7,7 @@ use crate::addons::game_analysis::{GameAnalysis, analyze_game, install_target_di
 use crate::addons::renodx::errors;
 use crate::addons::renodx::game_context::{analyze_and_resolve, executable_override, require_game};
 use crate::addons::renodx::matcher::{
-    ResolvedInstall, generic_file_install_plan, resolve_external_install,
+    ResolvedInstall, generic_file_install_plan, has_unsupported_settings, resolve_external_install,
 };
 use crate::addons::renodx::peer::InstallCommandVariant;
 
@@ -43,6 +43,9 @@ pub(super) fn resolve(
         ActiveInstallSource::InstallFromFile { architecture } => {
             let analysis = analyze_game(&game, override_path.as_deref());
             ensure_game_architecture(&analysis, architecture)?;
+            if has_unsupported_settings(request.manifest, &analysis.facts) {
+                return Err(errors::unsupported_settings());
+            }
             let plan = resolve_external_install(request.manifest, &analysis.facts)
                 .or_else(|| generic_file_install_plan(&analysis.facts, architecture))
                 .ok_or_else(|| {
@@ -87,5 +90,125 @@ pub(super) fn architecture_label(architecture: Architecture) -> &'static str {
     match architecture {
         Architecture::X64 => "64-bit",
         Architecture::X86 => "32-bit",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use renderpilot_application::{GameRepository, InstalledAddonRepository};
+    use renderpilot_domain::{
+        FileReceipt, GameId, GameIdentity, GameInstallation, GameProxyTopology, GameRuntime,
+        Launcher, PathRef, Platform, ProxyImplementation, ProxyLink, ProxyRootPrestate, Sha256Hash,
+    };
+    use tempfile::tempdir;
+
+    use super::*;
+    use crate::addons::renodx::test_support::{manifest, rule, title};
+    use crate::addons::renodx::types::{MatchKind, Status};
+    use crate::addons::renodx::use_cases::commands::install::active::model::{
+        ActiveInstallSource, ResolveActiveInstallRequest,
+    };
+    use crate::addons::reshade::types::ReshadeChannel;
+
+    fn topology(game_id: &GameId, root: &std::path::Path) -> GameProxyTopology {
+        let root_slot =
+            PathRef::new(root.join("ReShade64.dll").to_string_lossy()).expect("root slot");
+        GameProxyTopology {
+            id: "optiscaler:test".to_owned(),
+            game_id: game_id.clone(),
+            root_slot: root_slot.clone(),
+            outer: ProxyLink {
+                implementation: ProxyImplementation::OptiScaler,
+                path: root_slot,
+                receipt: FileReceipt::owned(
+                    "outer",
+                    Sha256Hash::new("a".repeat(64)).expect("digest"),
+                )
+                .expect("receipt"),
+            },
+            downstream: None,
+            downstream_origin: None,
+            root_prestate: ProxyRootPrestate::Absent,
+        }
+    }
+
+    #[test]
+    fn active_catalog_and_file_install_plans_reject_unsupported_settings_before_fallback() {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context =
+            crate::Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("steam:install-unsupported-settings-active").expect("game id");
+        let identity = GameIdentity::new(
+            game_id.clone(),
+            "RenoDX Compatibility Test",
+            Launcher::Steam,
+        )
+        .expect("identity")
+        .with_external_id("install-unsupported-settings-active")
+        .expect("external id");
+        let game = GameInstallation::new(
+            identity,
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(game_dir.path().to_string_lossy()).expect("game path"),
+        );
+        context.storage().upsert_game(&game).expect("game");
+
+        let mut exact = title(
+            "future-config-title",
+            "future-config-title",
+            Architecture::X64,
+            Status::Working,
+            vec![rule(
+                MatchKind::SteamAppid,
+                "install-unsupported-settings-active",
+                100,
+            )],
+        );
+        exact.has_unsupported_settings = true;
+        let mut manifest = manifest(vec![exact]);
+        manifest
+            .generics
+            .push(crate::addons::renodx::types::RenoDxGeneric {
+                engine: crate::addons::renodx::types::Engine::Unity,
+                status: Status::Working,
+                slug: Some("unityengine".to_owned()),
+                url64: Some("https://example.test/renodx-unityengine.addon64".to_owned()),
+                url32: Some("https://example.test/renodx-unityengine.addon32".to_owned()),
+                message: crate::addons::CatalogMessage::new("renodx.generic.unity", "Unity"),
+                profile_id: Some("unity".to_owned()),
+                generic_fallback: true,
+                processing_path: Default::default(),
+                guidance: Vec::new(),
+            });
+
+        for source in [
+            ActiveInstallSource::Catalog,
+            ActiveInstallSource::InstallFromFile {
+                architecture: Architecture::X64,
+            },
+        ] {
+            let request = ResolveActiveInstallRequest {
+                context: &context,
+                manifest: &manifest,
+                game_id: &game_id,
+                requested_channel: ReshadeChannel::Stable,
+                selected_topology: topology(&game_id, game_dir.path()),
+                source,
+            };
+            assert!(matches!(
+                resolve(&request),
+                Err(crate::ServiceError::InvalidInput(_))
+            ));
+        }
+
+        assert!(
+            context
+                .storage()
+                .get_installed_addon(&game_id)
+                .expect("record")
+                .is_none()
+        );
     }
 }

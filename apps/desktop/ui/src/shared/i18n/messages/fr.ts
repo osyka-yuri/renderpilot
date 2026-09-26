@@ -751,6 +751,8 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'gameDetails.renodx.uninstallError': 'Échec de la suppression de RenoDX',
   'gameDetails.renodx.switchError': 'Échec du changement de canal ReShade',
   'gameDetails.renodx.unsupported': 'Aucun profil RenoDX n’est disponible pour ce jeu.',
+  'gameDetails.renodx.unsupportedSettings':
+    'Cette version de RenderPilot ne prend pas en charge certains réglages RenoDX pour ce jeu.',
   'gameDetails.renodx.incompatible': 'Impossible d’installer RenoDX : {reason}.',
   'gameDetails.renodx.installTornWarning':
     'Une opération RenoDX précédente ne s’est pas terminée correctement. Relancez l’installation pour réconcilier ses fichiers.',

@@ -54,6 +54,9 @@ pub(super) fn resolve_catalog_install_snapshot(
                 "this game has native HDR; RenoDX is not needed".to_owned(),
             ));
         }
+        RenoDxResolution::UnsupportedSettings => {
+            return Err(errors::unsupported_settings());
+        }
         RenoDxResolution::Incompatible { reason } => {
             return Err(errors::invalid(format!(
                 "RenoDX is not compatible with this game: {reason:?}"
@@ -112,6 +115,10 @@ pub(super) fn resolve_file_install_snapshot(
         )));
     }
 
+    if crate::addons::renodx::matcher::has_unsupported_settings(manifest, &analysis.facts) {
+        return Err(errors::unsupported_settings());
+    }
+
     let plan = resolve_external_install(manifest, &analysis.facts)
         .or_else(|| generic_file_install_plan(&analysis.facts, file_arch))
         .ok_or_else(|| {
@@ -157,6 +164,8 @@ pub(super) fn ensure_catalog_install_snapshot_matches(
         || snapshot.plan.host_kind != current.plan.host_kind
         || snapshot.plan.proxy_dll_name != current.plan.proxy_dll_name
         || snapshot.plan.processing_path != current.plan.processing_path
+        || snapshot.plan.profile_id != current.plan.profile_id
+        || snapshot.plan.renodx_config != current.plan.renodx_config
         || snapshot.channel != current.channel
         || snapshot.writes_host != current.writes_host
         || !same_path(&snapshot.target_dir, &current.target_dir)

@@ -168,6 +168,12 @@
     <RenoDxExternalView {gameId} {store} busy={combinedBusy} />
   {:else if view === 'native-hdr'}
     <AddonStateMessage icon="hdr" message={t('gameDetails.renodx.nativeHdr')} />
+  {:else if view === 'unsupported-settings'}
+    <AddonStateMessage
+      tone="warning"
+      icon="warning"
+      message={t('gameDetails.renodx.unsupportedSettings')}
+    />
   {:else if view === 'blacklisted'}
     <AddonStateMessage tone="warning" icon="warning" message={blacklistText} />
   {:else if view === 'unsupported'}

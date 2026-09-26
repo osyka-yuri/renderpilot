@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use renderpilot_application::GameRepository;
+use renderpilot_application::{GameRepository, InstalledAddonRepository};
 use renderpilot_domain::{
     AddonKind, GameId, GameIdentity, GameInstallation, GameRuntime, InstalledAddon, Launcher,
     PathRef, Platform, TrackedSource, TrackedSourceRole,
@@ -14,6 +14,81 @@ use super::snapshot::{UpdateSnapshot, ensure_update_snapshot_matches};
 use crate::addons::renodx::types::RenoDxProcessingPath;
 use crate::addons::reshade::types::ReshadeChannel;
 use crate::{Context, ServiceError};
+
+#[test]
+fn update_snapshot_rejects_unsupported_settings_without_touching_ini_or_record() {
+    let db_dir = tempdir().expect("db dir");
+    let game_dir = tempdir().expect("game dir");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("steam:update-unsupported-settings").expect("game id");
+    let identity = GameIdentity::new(game_id.clone(), "RenoDX Update Test", Launcher::Steam)
+        .expect("identity")
+        .with_external_id("update-unsupported-settings")
+        .expect("external id");
+    let game = GameInstallation::new(
+        identity,
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(game_dir.path().to_string_lossy()).expect("game path"),
+    );
+    context.storage().upsert_game(&game).expect("game");
+
+    let addon_path = game_dir.path().join("renodx.addon64");
+    let record = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new(addon_path.to_string_lossy()).expect("addon path"),
+    );
+    fs::write(&addon_path, b"installed payload").expect("addon payload");
+    context
+        .storage()
+        .upsert_installed_addon(&record)
+        .expect("record");
+    let persisted_record = context
+        .storage()
+        .get_installed_addon(&game_id)
+        .expect("persisted record")
+        .expect("record exists");
+    let ini_path = game_dir.path().join("ReShade.ini");
+    fs::write(&ini_path, b"ini sentinel").expect("INI");
+
+    let mut title = crate::addons::renodx::test_support::title(
+        "future-config-title",
+        "future-config-title",
+        renderpilot_domain::Architecture::X64,
+        crate::addons::renodx::types::Status::Working,
+        vec![crate::addons::renodx::test_support::rule(
+            crate::addons::renodx::types::MatchKind::SteamAppid,
+            "update-unsupported-settings",
+            100,
+        )],
+    );
+    title.has_unsupported_settings = true;
+    let manifest = crate::addons::renodx::test_support::manifest(vec![title]);
+    let sources = crate::addons::renodx::test_support::reshade_sources();
+
+    let result = super::snapshot::resolve_update_snapshot(&context, &manifest, &sources, &game_id);
+    assert!(matches!(result, Err(ServiceError::InvalidInput(_))));
+    assert_eq!(fs::read(&ini_path).expect("INI remains"), b"ini sentinel");
+    assert_eq!(
+        fs::read(&addon_path).expect("addon remains"),
+        b"installed payload"
+    );
+    assert_eq!(
+        context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("record remains"),
+        Some(persisted_record)
+    );
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(&game_id)
+            .expect("receipts")
+            .is_empty()
+    );
+}
 
 fn record() -> InstalledAddon {
     InstalledAddon::new(

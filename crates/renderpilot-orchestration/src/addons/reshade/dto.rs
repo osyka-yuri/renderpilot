@@ -100,6 +100,8 @@ pub enum ActionDisabledReason {
     Unsupported,
     /// More validation is needed first.
     ValidationRequired,
+    /// The required add-on settings are not supported by this version.
+    UnsupportedSettings,
 }
 
 /// Backend-authored action descriptor. Absence means the UI must not render the action.

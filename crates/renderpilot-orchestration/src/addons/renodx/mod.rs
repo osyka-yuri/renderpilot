@@ -82,7 +82,10 @@ pub fn parse_manifest_v2(bytes: &[u8]) -> Result<RenoDxManifest, ServiceError> {
             format!("parsing rejected: {error}"),
         )
     })?;
-    let manifest = RenoDxManifest::from_wire_v2(wire);
+    wire.validate_raw_renodx_config().map_err(|error| {
+        ServiceError::manifest_contract_rejected(crate::ManifestContract::RenoDxV2, error)
+    })?;
+    let mut manifest = RenoDxManifest::from_wire_v2(wire);
     ensure_wire_schema_version(&manifest, 2, "RenoDX v2").map_err(|error| {
         ServiceError::manifest_contract_rejected(
             crate::ManifestContract::RenoDxV2,
@@ -95,6 +98,14 @@ pub fn parse_manifest_v2(bytes: &[u8]) -> Result<RenoDxManifest, ServiceError> {
             error.to_string(),
         )
     })?;
+    // Keep known settings in the temporary normalized form through validation
+    // so bad known values and profile combinations still reject the v2 catalog.
+    // A title with unsupported settings must never expose a partial config to callers.
+    for title in &mut manifest.titles {
+        if title.has_unsupported_settings {
+            title.renodx_config = None;
+        }
+    }
     Ok(manifest)
 }
 
@@ -439,6 +450,129 @@ mod tests {
         overflowing_revision["engine_profiles"][0]["guidance"][0]["engine_ini"]["revision"] =
             serde_json::json!(u64::from(u32::MAX) + 1);
         assert!(rejected(&overflowing_revision));
+    }
+
+    #[test]
+    fn v2_unknown_config_key_marks_its_title_without_exposing_partial_config() {
+        let mut value: serde_json::Value = serde_json::from_str(SAMPLE_V2).expect("sample JSON");
+        let game = value["games"][0].clone();
+        value["games"][0]["renodx_config"] = serde_json::json!({
+            "settings": [
+                { "key": "Upgrade_R11G11B10_FLOAT", "value": 2 },
+                { "key": "Future_RenoDX_Setting", "value": 1 }
+            ]
+        });
+        let mut other = game;
+        other["id"] = serde_json::json!("known-title");
+        other["name"] = serde_json::json!("Known title remains available");
+        other["match"][0]["value"] = serde_json::json!("424242");
+        value["games"].as_array_mut().expect("games").push(other);
+
+        let manifest =
+            parse_manifest_v2(&serde_json::to_vec(&value).expect("serialize mutated manifest"))
+                .expect("unknown setting is title-local");
+
+        let unknown = &manifest.titles[0];
+        assert_eq!(unknown.id, "black-myth-wukong");
+        assert_eq!(unknown.name, "Black Myth: Wukong");
+        assert!(unknown.has_unsupported_settings);
+        assert!(unknown.renodx_config.is_none());
+
+        let other = &manifest.titles[1];
+        assert_eq!(other.name, "Known title remains available");
+        assert!(!other.has_unsupported_settings);
+    }
+
+    #[test]
+    fn v2_unknown_only_config_is_accepted_without_exposing_partial_config() {
+        let mut value: serde_json::Value = serde_json::from_str(SAMPLE_V2).expect("sample JSON");
+        value["games"][0]["renodx_config"] = serde_json::json!({
+            "settings": [{ "key": "Future_RenoDX_Setting", "value": 1 }]
+        });
+
+        let manifest =
+            parse_manifest_v2(&serde_json::to_vec(&value).expect("serialize mutated manifest"))
+                .expect("unknown-only setting is title-local");
+        let title = &manifest.titles[0];
+        assert!(title.has_unsupported_settings);
+        assert!(title.renodx_config.is_none());
+    }
+
+    #[test]
+    fn v2_unknown_setting_does_not_hide_invalid_known_contract_data() {
+        fn rejected(value: &serde_json::Value) -> bool {
+            parse_manifest_v2(&serde_json::to_vec(&value).expect("serialize mutation")).is_err()
+        }
+        fn with_settings(settings: &serde_json::Value) -> serde_json::Value {
+            let mut value: serde_json::Value =
+                serde_json::from_str(SAMPLE_V2).expect("sample JSON");
+            value["games"][0]["renodx_config"] = serde_json::json!({ "settings": settings });
+            value
+        }
+
+        assert!(rejected(&with_settings(&serde_json::json!([]))));
+        assert!(rejected(&with_settings(&serde_json::json!([
+            { "key": "Future_RenoDX_Setting", "value": 1 },
+            { "key": "Future_RenoDX_Setting", "value": 2 }
+        ]))));
+        assert!(rejected(&with_settings(&serde_json::json!([
+            { "key": "Set_Path", "value": 1 }
+        ]))));
+        assert!(rejected(&with_settings(&serde_json::json!([
+            { "key": "Upgrade_R11G11B10_FLOAT", "value": 4 },
+            { "key": "Future_RenoDX_Setting", "value": 1 }
+        ]))));
+        assert!(rejected(&with_settings(&serde_json::json!([
+            { "key": "ForceBorderless", "value": 1 },
+            { "key": "Future_RenoDX_Setting", "value": 1 }
+        ]))));
+        assert!(rejected(&with_settings(&serde_json::json!([
+            { "key": "Future_RenoDX_Setting", "value": "1" }
+        ]))));
+        assert!(rejected(&with_settings(&serde_json::json!([
+            { "key": 42, "value": 1 }
+        ]))));
+        assert!(rejected(&with_settings(&serde_json::json!([
+            { "key": " \t", "value": 1 }
+        ]))));
+        assert!(rejected(&with_settings(&serde_json::json!([
+            { "key": "Future_RenoDX_Setting", "value": 1, "extra": true }
+        ]))));
+
+        let mut unknown_profile: serde_json::Value =
+            serde_json::from_str(SAMPLE_V2).expect("sample JSON");
+        unknown_profile["games"][0]["profile_id"] = serde_json::json!("future_profile");
+        unknown_profile["games"][0]["renodx_config"] = serde_json::json!({
+            "settings": [{ "key": "Future_RenoDX_Setting", "value": 1 }]
+        });
+        assert!(rejected(&unknown_profile));
+    }
+
+    #[test]
+    fn parses_the_current_renderpilot_libraries_renodx_manifest() {
+        let path = std::env::var_os("RENODX_V2_MANIFEST_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../../renderpilot-libraries/addons/v2/renodx.json")
+            });
+        if !path.is_file() {
+            return;
+        }
+        let bytes = std::fs::read(&path).expect("read current RenoDX producer manifest");
+        let manifest = parse_manifest_v2(&bytes).expect("current producer manifest parses");
+        let title = manifest
+            .titles
+            .iter()
+            .find(|title| title.id == "gamble-with-your-friends")
+            .expect("producer Force_Pipeline_Cloning title");
+        assert_eq!(title.profile_id.as_deref(), Some("unity"));
+        assert!(!title.has_unsupported_settings);
+        assert!(title.renodx_config.as_ref().is_some_and(|config| {
+            config.settings.iter().any(|setting| {
+                setting.key.as_str() == "Force_Pipeline_Cloning" && setting.value == 1
+            })
+        }));
     }
 
     #[test]

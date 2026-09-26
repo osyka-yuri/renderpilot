@@ -3,7 +3,7 @@ import type { BaseCardView } from '@entities/addon';
 
 import type { RenoDxStore } from './create-renodx-store.svelte';
 
-export type RenoDxCardView = BaseCardView | 'external' | 'native-hdr';
+export type RenoDxCardView = BaseCardView | 'external' | 'native-hdr' | 'unsupported-settings';
 
 /** The subset of store state `getCardView` reads, so it's testable without a full store. */
 export type CardViewSource = Pick<
@@ -15,6 +15,7 @@ export type CardViewSource = Pick<
   | 'isBlockedByOtherAddon'
   | 'isExternal'
   | 'isNativeHdr'
+  | 'hasUnsupportedSettings'
   | 'isBlacklisted'
   | 'isUnsupported'
   | 'isIncompatible'
@@ -30,6 +31,9 @@ export type CardViewSource = Pick<
  */
 export function getCardView(store: CardViewSource): RenoDxCardView {
   return sharedGetCardView(store, () => {
+    if (store.hasUnsupportedSettings) {
+      return 'unsupported-settings';
+    }
     if (store.isExternal) {
       return 'external';
     }

@@ -62,16 +62,42 @@ fn manual_install_is_not_offered_for_unmatched_games() {
 }
 
 #[test]
-fn manual_install_can_be_offered_for_matched_incompatible_directx_games() {
+fn manual_install_uses_proxy_for_directx_or_inconclusive_and_layer_for_vulkan() {
+    let manifest = manifest(Vec::new());
+    let resolution = RenoDxResolution::Incompatible {
+        reason: IncompatibilityReason::ArchUnknown,
+    };
+    let mut facts = directx_facts();
+
+    for (apis, expected_host) in [
+        (
+            vec![GraphicsApi::D3D12],
+            crate::addons::reshade::proxy::HostKind::Proxy,
+        ),
+        (Vec::new(), crate::addons::reshade::proxy::HostKind::Proxy),
+        (
+            vec![GraphicsApi::Vulkan],
+            crate::addons::reshade::proxy::HostKind::Vulkan,
+        ),
+    ] {
+        facts.graphics = ExeGraphicsInfo::new(apis, Some(Architecture::X64));
+        let offer = manual_file_install(&manifest, &facts, &resolution).expect("manual offer");
+        assert_eq!(offer.host_kind, expected_host);
+    }
+
+    facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
+    assert!(manual_file_install(&manifest, &facts, &resolution).is_none());
+}
+
+#[test]
+fn manual_install_is_not_offered_for_unsupported_settings() {
     let report = manual_file_install(
         &manifest(Vec::new()),
         &directx_facts(),
-        &RenoDxResolution::Incompatible {
-            reason: IncompatibilityReason::ArchUnknown,
-        },
+        &RenoDxResolution::UnsupportedSettings,
     );
 
-    assert!(report.is_some());
+    assert!(report.is_none());
 }
 
 #[test]

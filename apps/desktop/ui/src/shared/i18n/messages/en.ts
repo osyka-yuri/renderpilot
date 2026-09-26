@@ -749,6 +749,8 @@ export const en = defineSourceCatalog({
   'gameDetails.renodx.uninstallError': 'RenoDX removal failed',
   'gameDetails.renodx.switchError': 'ReShade channel switch failed',
   'gameDetails.renodx.unsupported': 'No RenoDX profile is available for this game.',
+  'gameDetails.renodx.unsupportedSettings':
+    'This version of RenderPilot does not support some RenoDX settings for this game.',
   'gameDetails.renodx.incompatible': 'RenoDX cannot be installed: {reason}.',
   'gameDetails.renodx.installTornWarning':
     'A previous RenoDX operation did not finish cleanly. Retry installation to reconcile its files.',

@@ -74,6 +74,9 @@ pub(super) fn resolve_update_snapshot(
                 file_install: Some(plan),
                 ..
             } => (plan.processing_path, plan.renodx_config),
+            crate::addons::renodx::matcher::RenoDxResolution::UnsupportedSettings => {
+                return Err(errors::unsupported_settings());
+            }
             _ => (RenoDxProcessingPath::Unmanaged, None),
         };
     if crate::addons::renodx::dlss_fix_binding::resolve(&record).main_payload_collides() {

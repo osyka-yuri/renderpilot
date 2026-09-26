@@ -254,6 +254,8 @@ export type AvailabilityOutcome =
     }
   /** The game already has native HDR; RenoDX is not offered. */
   | { kind: 'native_hdr' }
+  /** This title's configuration contains settings this version of RenderPilot does not support. */
+  | { kind: 'unsupported_settings' }
   | Exclude<CommonAvailabilityOutcome, { kind: 'installable' | 'unmanaged_present' }>;
 
 /**

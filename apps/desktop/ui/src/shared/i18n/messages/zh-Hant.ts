@@ -636,6 +636,7 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.renodx.uninstallError': 'RenoDX 移除失敗',
   'gameDetails.renodx.switchError': 'ReShade 通道切換失敗',
   'gameDetails.renodx.unsupported': '本遊戲沒有可用的 RenoDX 設定。',
+  'gameDetails.renodx.unsupportedSettings': '此版本的 RenderPilot 不支援該遊戲的部分 RenoDX 設定。',
   'gameDetails.renodx.incompatible': '無法安裝 RenoDX：{reason}。',
   'gameDetails.renodx.installTornWarning':
     '之前的 RenoDX 操作未正常完成。請重新安裝以協調相關檔案。',

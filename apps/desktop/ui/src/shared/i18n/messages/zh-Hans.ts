@@ -637,6 +637,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.renodx.uninstallError': 'RenoDX 卸载失败',
   'gameDetails.renodx.switchError': 'ReShade 通道切换失败',
   'gameDetails.renodx.unsupported': '本游戏没有可用的 RenoDX 配置。',
+  'gameDetails.renodx.unsupportedSettings': '此版本的 RenderPilot 不支持该游戏的部分 RenoDX 设置。',
   'gameDetails.renodx.incompatible': '无法安装 RenoDX：{reason}。',
   'gameDetails.renodx.installTornWarning':
     '之前的 RenoDX 操作未正常完成。请重新安装以协调相关文件。',

@@ -11,7 +11,7 @@ use crate::addons::engine_config::{EngineIniRecipe, EngineIniRecipeSet};
 use crate::addons::matching::MatchFacts;
 use crate::addons::renodx::dto::availability::*;
 use crate::addons::renodx::game_context::analyze_and_resolve;
-use crate::addons::renodx::matcher::{RenoDxResolution, file_installable, matched_slug};
+use crate::addons::renodx::matcher::{RenoDxResolution, matched_slug};
 use crate::addons::renodx::source;
 use crate::addons::renodx::tracking;
 use crate::addons::renodx::types::RenoDxManifest;
@@ -88,8 +88,21 @@ fn build_report(
         record.as_ref(),
         guidance_for_resolution(&resolution),
     )?;
-    let host_report =
+    let mut host_report =
         host_report::reshade_report(&analysis, &resolution, record.as_ref(), reshade_sources);
+    if blocked.is_none() && matches!(&resolution, RenoDxResolution::UnsupportedSettings) {
+        use crate::addons::reshade::dto::{ActionDescriptor, ActionDisabledReason};
+        for action in [
+            &mut host_report.actions.update,
+            &mut host_report.actions.repair,
+        ] {
+            if action.is_some() {
+                *action = Some(ActionDescriptor::disabled(
+                    ActionDisabledReason::UnsupportedSettings,
+                ));
+            }
+        }
+    }
 
     let state = record.as_ref().map_or(
         RenoDxInstallState::NotInstalled,
@@ -141,6 +154,7 @@ fn build_report(
                 }),
             },
             RenoDxResolution::NativeHdr => AvailabilityOutcome::NativeHdr,
+            RenoDxResolution::UnsupportedSettings => AvailabilityOutcome::UnsupportedSettings,
             RenoDxResolution::Incompatible { reason } => {
                 AvailabilityOutcome::Incompatible { reason }
             }
@@ -216,20 +230,19 @@ fn engine_config_report(
 }
 
 /// The manual file-install escape hatch for the availability preview: offered only
-/// when a matched title cannot use the automatic path but the renderer can still
-/// load RenoDX. An unmatched, blacklisted, native-HDR, automatic, or external title
-/// gets `None` — the manual path would be misleading, redundant, or deliberately
-/// withheld.
+/// when a matched title is incompatible with the catalogue install path but the
+/// renderer can still load RenoDX. Unsupported-settings, unmatched, blacklisted,
+/// native-HDR, automatic, or external titles get `None`.
 fn manual_file_install(
     manifest: &RenoDxManifest,
     facts: &MatchFacts,
     resolution: &RenoDxResolution,
 ) -> Option<ManualFileInstall> {
     let offered = matches!(resolution, RenoDxResolution::Incompatible { .. });
-    let host_kind = host_decision(primary_api(&facts.graphics))?;
-    if !offered || !file_installable(facts) {
+    if !offered {
         return None;
     }
+    let host_kind = host_decision(primary_api(&facts.graphics))?;
     Some(ManualFileInstall {
         host_kind,
         expected_addon_name: matched_slug(manifest, facts)

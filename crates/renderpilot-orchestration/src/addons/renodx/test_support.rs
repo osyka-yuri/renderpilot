@@ -37,6 +37,7 @@ pub(crate) fn title(
         profile_id: None,
         processing_path: None,
         renodx_config: None,
+        has_unsupported_settings: false,
         inherit_page_guidance: true,
         launch: None,
     }

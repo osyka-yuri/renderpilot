@@ -91,7 +91,27 @@ async fn check_record(
     if let Some(config) = config_update_status(context, manifest, record) {
         report.overall = crate::addons::update::combine(report.overall, config);
     }
+    if record_has_unsupported_settings(context, manifest, record) {
+        report.overall = UpdateStatus::Unknown;
+    }
     report
+}
+
+fn record_has_unsupported_settings(
+    context: &Context,
+    manifest: &RenoDxManifest,
+    record: &InstalledAddon,
+) -> bool {
+    let Ok(game) = crate::addons::renodx::game_context::require_game(context, record.game_id())
+    else {
+        return false;
+    };
+    let analysis = analyze_game(
+        &game,
+        crate::addons::renodx::game_context::executable_override(context, record.game_id())
+            .as_deref(),
+    );
+    crate::addons::renodx::matcher::has_unsupported_settings(manifest, &analysis.facts)
 }
 
 /// ReShade.ini policy availability is derived only from the desired catalogue
