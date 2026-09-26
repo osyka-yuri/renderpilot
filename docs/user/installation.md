@@ -4,7 +4,19 @@ RenderPilot is distributed for Windows x64 as an installer and a portable build.
 
 ## Installer
 
-The NSIS installer is the recommended option. Download the `RenderPilot-setup.exe` asset from the latest release, run it, and choose whether to install for the current user or for all users when Windows offers that choice. The installed app requests an administrator token when Windows creates its process; this is required for protected game folders and graphics settings. If you cancel, deny, or Windows blocks that consent, RenderPilot does not start or make any changes. Start it again after administrator access is available.
+The NSIS installer is the recommended option. Download the `RenderPilot-setup.exe` asset from the [latest release](https://github.com/osyka-yuri/renderpilot/releases/latest), run it, and choose whether to install for the current user or for all users when Windows offers that choice.
+
+RenderPilot is also available through Windows Package Manager:
+
+```pwsh
+# Current user
+winget install --id osyka-yuri.RenderPilot --exact --scope user
+
+# All users
+winget install --id osyka-yuri.RenderPilot --exact --scope machine
+```
+
+Because the installer supports both installation scopes, it requires administrator approval even for a current-user installation. The installed app requests an administrator token when Windows creates its process; this is required for protected game folders and graphics settings. If you cancel, deny, or Windows blocks that consent, RenderPilot does not start or make any changes. Start it again after administrator access is available.
 
 RenderPilot uses Microsoft Edge WebView2 for its interface. The configured minimum runtime is 136.0.3240.44. Current Windows installations normally service WebView2 automatically; if the window cannot start, install or repair the Evergreen WebView2 Runtime from Microsoft, then reopen RenderPilot.
 

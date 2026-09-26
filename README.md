@@ -10,6 +10,7 @@
   </p>
   <p>
     <a href="https://github.com/osyka-yuri/renderpilot/releases/latest"><img src="https://img.shields.io/github/v/release/osyka-yuri/renderpilot?display_name=tag&sort=semver&style=flat-square&color=0078d4" alt="Latest RenderPilot release"></a>
+    <a href="https://github.com/microsoft/winget-pkgs/tree/master/manifests/o/osyka-yuri/RenderPilot"><img src="https://img.shields.io/winget/v/osyka-yuri.RenderPilot?style=flat-square&color=0078d4" alt="WinGet version"></a>
     <img src="https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows11&logoColor=white" alt="Windows x64">
     <a href="https://github.com/osyka-yuri/renderpilot/attestations"><img src="https://img.shields.io/badge/Build%20provenance-attested-0078d4?style=flat-square&logo=github&logoColor=white" alt="GitHub artifact attestations"></a>
     <a href="LICENSE.txt"><img src="https://img.shields.io/badge/License-GPLv3-0078d4?style=flat-square" alt="GPLv3 license"></a>
