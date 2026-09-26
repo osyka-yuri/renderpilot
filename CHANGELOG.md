@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.14.0] - 2026-09-26
+
+### Added
+
+- **NVIDIA game profiles**: The NVIDIA tab now shows which profile is in use. You can create a profile if the selected executable has none. Moving and deleting are available only for profiles created by RenderPilot and require confirmation.
+- **Local diagnostics**: Installed builds now save diagnostic logs to help investigate errors, while portable builds record more app activity.
+
+### Changed
+
+- **Safer NVIDIA settings**: Before another change, RenderPilot checks whether that setting still has the value it last applied. If it was changed outside the app, the new operation stops with a conflict instead of silently overwriting the newer value. Interrupted changes can be recovered.
+- **GitHub downloads**: If GitHub CLI is already signed in, or `GH_TOKEN` or `GITHUB_TOKEN` is already set, RenderPilot can use that access for update checks and downloads from GitHub. It does not ask for or save a token and retries without it if GitHub rejects the request.
+- **Clearer add-on status**: Unverified compatibility is labeled consistently, and RenoDX's shared engine profiles have shorter badges with full guidance in a tooltip.
+- **Consistent controls and layout**: Check and refresh buttons now show progress consistently without shifting their labels. Long executable names stay within the selector, with full file names and relative paths available in a tooltip.
+
+### Fixed
+
+- **RenoDX catalog compatibility**: A new game-specific setting no longer causes RenderPilot to reject the entire RenoDX catalog. Other games remain available; only a game that needs a setting this version cannot apply is blocked, with an explanation.
+- **RenoDX DLSS-Fix availability**: DLSS-Fix options appear without waiting for an online update check and remain visible while updates are checked.
+- **Opening an already running app**: Launching the installed version again now shows and focuses its existing window instead of opening a second one.
+
+### Compatibility
+
+- **Local catalog update**: On first launch, RenderPilot backs up and upgrades the catalog without changing NVIDIA settings already applied in the driver. Previously saved Restore original values for individual games do not carry over. Reset to driver default remains available, and the next change saves a new original value. Returning to an earlier RenderPilot version requires restoring the catalog backup.
+
 ## [1.13.1] - 2026-09-22
 
 ### Added
