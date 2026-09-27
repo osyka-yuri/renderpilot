@@ -18,10 +18,6 @@ use super::{
 };
 use crate::commands::{CommandError, error::CommandErrorKind};
 
-#[expect(
-    dead_code,
-    reason = "generated contract also contains UPDATER_PUBLIC_KEY, unused by the installed updater"
-)]
 mod updater_contract {
     include!(concat!(env!("OUT_DIR"), "/updater_contract.rs"));
 }

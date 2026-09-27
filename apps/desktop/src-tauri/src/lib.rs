@@ -77,18 +77,6 @@ pub fn run_portable_supervisor() -> std::process::ExitCode {
     }
 }
 
-/// Verifies one updater artifact with the exact effective build-time key.
-///
-/// This tooling API is excluded from both distributed application variants.
-#[cfg(all(windows, feature = "updater-artifact-verify"))]
-#[doc(hidden)]
-pub fn verify_updater_artifact(
-    artifact: &std::path::Path,
-    signature: &std::path::Path,
-) -> Result<(), String> {
-    updater_signature::verify_files(artifact, signature)
-}
-
 /// Builds and runs the Tauri application.
 fn run_desktop_shell(context: tauri::Context<Wry>) -> tauri::Result<()> {
     let built = create_desktop_builder().build(context);

@@ -14,6 +14,85 @@ function Invoke-RenderPilotCheckedCommand {
     }
 }
 
+function Invoke-RenderPilotTimedStep {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Description,
+        [Parameter(Mandatory)] [scriptblock] $Command
+    )
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        & $Command
+    }
+    finally {
+        $stopwatch.Stop()
+        Write-Host ("[TIMING] {0}: {1:n2}s" -f $Description, $stopwatch.Elapsed.TotalSeconds)
+    }
+}
+
+function Resolve-RenderPilotRequiredFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Name,
+        [AllowNull()] [AllowEmptyString()] [string] $Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Required release input '$Name' was not specified."
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Required release input '$Name' was not found: $Path"
+    }
+    return (Resolve-Path -LiteralPath $Path).Path
+}
+
+function Resolve-RenderPilotRequiredDirectory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Name,
+        [AllowNull()] [AllowEmptyString()] [string] $Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Required release directory '$Name' was not specified."
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        throw "Required release directory '$Name' was not found: $Path"
+    }
+    return (Resolve-Path -LiteralPath $Path).Path
+}
+
+function Build-RenderPilotUpdaterVerifier {
+    [CmdletBinding()]
+    param()
+
+    $cargoOutput = & cargo build --locked --package renderpilot-updater-signature --bin renderpilot-updater-verifier --message-format=json
+    if ($LASTEXITCODE -ne 0) {
+        throw "Building updater artifact verifier failed with exit code $LASTEXITCODE."
+    }
+
+    $verifierBinary = $null
+    foreach ($line in $cargoOutput) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        try {
+            $artifact = $line | ConvertFrom-Json
+            if ($artifact.reason -eq "compiler-artifact" -and $artifact.target.name -eq "renderpilot-updater-verifier" -and -not [string]::IsNullOrWhiteSpace($artifact.executable)) {
+                $verifierBinary = $artifact.executable
+            }
+        }
+        catch {
+            # Ignore non-JSON status lines from compiler output
+        }
+    }
+
+    if ($null -eq $verifierBinary -or -not (Test-Path -LiteralPath $verifierBinary -PathType Leaf)) {
+        throw "Failed to locate updater artifact verifier binary from cargo build output."
+    }
+
+    return $verifierBinary
+}
+
 function Get-RenderPilotSha256 {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $Path)

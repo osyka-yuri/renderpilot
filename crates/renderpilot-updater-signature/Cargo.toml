@@ -1,0 +1,26 @@
+[package]
+name = "renderpilot-updater-signature"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Shared Minisign updater signature verification and authoritative contract for RenderPilot."
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[dependencies]
+base64 = { workspace = true }
+minisign-verify = { workspace = true }
+
+[[bin]]
+name = "renderpilot-updater-verifier"
+path = "src/bin/renderpilot_updater_verifier.rs"

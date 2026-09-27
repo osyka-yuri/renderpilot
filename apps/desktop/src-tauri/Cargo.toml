@@ -39,9 +39,8 @@ tauri-plugin-shell = "2.3.6"
 tauri-plugin-process = "2.3.1"
 
 [target.'cfg(windows)'.dependencies]
-base64 = { workspace = true, optional = true }
-minisign-verify = { workspace = true, optional = true }
 renderpilot-storage-sqlite = { workspace = true, optional = true }
+renderpilot-updater-signature = { workspace = true, optional = true }
 webview2-com-sys = { workspace = true }
 windows-core = { workspace = true }
 windows-sys = { workspace = true, features = [
@@ -66,15 +65,13 @@ tauri-plugin-single-instance = "=2.4.5"
 [features]
 # Enables portable mode: data is stored in <exe_dir>/data instead of %LOCALAPPDATA%.
 portable = [
-    "dep:base64",
-    "dep:minisign-verify",
     "dep:renderpilot-storage-sqlite",
+    "dep:renderpilot-updater-signature",
     "dep:reqwest",
     "dep:rusqlite",
     "dep:semver",
     "dep:zip",
 ]
-updater-artifact-verify = ["portable"]
 
 [dev-dependencies]
 json-patch = { workspace = true }
@@ -96,7 +93,3 @@ path = "src/main.rs"
 name = "portable-supervisor"
 path = "src/bin/portable_supervisor.rs"
 required-features = ["portable"]
-
-[[example]]
-name = "verify_updater_signature"
-required-features = ["updater-artifact-verify"]

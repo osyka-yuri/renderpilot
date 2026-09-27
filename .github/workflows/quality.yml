@@ -104,6 +104,11 @@ jobs:
         shell: pwsh
         run: ./apps/desktop/scripts/release-github-client.test.ps1
 
+      - name: Test release asset preparation policy
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./apps/desktop/scripts/prepare-release-assets.test.ps1
+
       - name: Run tests with nextest
         run: cargo nextest run --cargo-profile ci --profile ci --workspace --all-features --locked
         # Cargo 1.97 promotes MSVC linker diagnostics through build.warnings;

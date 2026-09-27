@@ -8,15 +8,15 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "release-helpers.ps1")
-. (Join-Path $PSScriptRoot "windows-manifest-common.ps1")
-
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     throw "Portable release artifacts require PowerShell 7 (pwsh), not Windows PowerShell 5.1."
 }
 if (-not $IsWindows) {
     throw "Portable release artifacts require Windows."
 }
+
+. (Join-Path $PSScriptRoot "release-helpers.ps1")
+. (Join-Path $PSScriptRoot "windows-manifest-common.ps1")
 
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path

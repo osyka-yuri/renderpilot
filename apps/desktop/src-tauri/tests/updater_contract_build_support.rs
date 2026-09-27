@@ -6,7 +6,7 @@ mod tauri_config;
 mod updater_contract;
 
 #[test]
-fn overlay_key_is_the_only_key_rendered_into_the_runtime_contract() {
+fn overlay_endpoints_are_rendered_into_the_runtime_contract() {
     let base = r#"{
         "productName": "RenderPilot",
         "plugins": {
@@ -31,8 +31,7 @@ fn overlay_key_is_the_only_key_rendered_into_the_runtime_contract() {
     assert_eq!(config["version"], "1.9.0-test.2");
     assert_eq!(
         updater_contract::render(&config).expect("render contract"),
-        "pub(crate) const UPDATER_PUBLIC_KEY: &str = \"smoke-key\";\n\
-         pub(crate) const UPDATER_ENDPOINTS: &[&str] = &[\"https://example.test/overlay/latest.json\"];\n"
+        "pub(crate) const UPDATER_ENDPOINTS: &[&str] = &[\"https://example.test/overlay/latest.json\"];\n"
     );
 }
 

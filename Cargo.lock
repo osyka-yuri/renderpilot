@@ -3342,15 +3342,14 @@ dependencies = [
 name = "renderpilot-desktop"
 version = "1.14.1"
 dependencies = [
- "base64 0.23.1",
  "getrandom 0.4.3",
  "jiff",
  "json-patch 4.2.0",
  "log",
- "minisign-verify 0.3.0",
  "renderpilot-api",
  "renderpilot-orchestration",
  "renderpilot-storage-sqlite",
+ "renderpilot-updater-signature",
  "reqwest",
  "rusqlite",
  "semver",
@@ -3471,6 +3470,15 @@ dependencies = [
  "sha2 0.11.0",
  "tempfile",
  "tracing",
+]
+
+[[package]]
+name = "renderpilot-updater-signature"
+version = "1.14.1"
+dependencies = [
+ "base64 0.23.1",
+ "minisign-verify 0.3.0",
+ "serde_json",
 ]
 
 [[package]]

@@ -20,12 +20,14 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "release-helpers.ps1")
-Import-Module (Join-Path $PSScriptRoot "release-github-client.psm1") -Force
 
 if ($PSVersionTable.PSVersion.Major -lt 7 -or -not $IsWindows) {
     throw "Publishing RenderPilot release assets requires PowerShell 7 on Windows."
 }
+
+. (Join-Path $PSScriptRoot "release-helpers.ps1")
+Import-Module (Join-Path $PSScriptRoot "release-github-client.psm1") -Force
+
 $gitHubToken = Get-RenderPilotGitHubToken
 if ([string]::IsNullOrWhiteSpace($gitHubToken)) {
     throw "Publishing RenderPilot release assets requires GH_TOKEN, GITHUB_TOKEN, or an authenticated GitHub CLI."
@@ -34,15 +36,16 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 }
 
-$repositoryPath = (Resolve-Path -LiteralPath $RepositoryRoot).Path
-$artifactPath = (Resolve-Path -LiteralPath $ArtifactDirectory).Path
-$releaseManifestScript = Join-Path $repositoryPath "apps\desktop\scripts\release-manifest.mjs"
+$repositoryPath = Resolve-RenderPilotRequiredDirectory "RepositoryRoot" $RepositoryRoot
+$artifactPath = Resolve-RenderPilotRequiredDirectory "ArtifactDirectory" $ArtifactDirectory
+$releaseManifestScript = Resolve-RenderPilotRequiredFile "ReleaseManifestScript" (Join-Path $repositoryPath "apps\desktop\scripts\release-manifest.mjs")
 
-foreach ($required in @($ChangelogPath, $PortableRaw, $PortableRawSignature, $PortableRpu, $PortableRpuSignature, $PortableZip, $releaseManifestScript)) {
-    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-        throw "Required release input was not found: $required"
-    }
-}
+$ChangelogPath = Resolve-RenderPilotRequiredFile "ChangelogPath" $ChangelogPath
+$PortableRaw = Resolve-RenderPilotRequiredFile "PortableRaw" $PortableRaw
+$PortableRawSignature = Resolve-RenderPilotRequiredFile "PortableRawSignature" $PortableRawSignature
+$PortableRpu = Resolve-RenderPilotRequiredFile "PortableRpu" $PortableRpu
+$PortableRpuSignature = Resolve-RenderPilotRequiredFile "PortableRpuSignature" $PortableRpuSignature
+$PortableZip = Resolve-RenderPilotRequiredFile "PortableZip" $PortableZip
 
 function Invoke-GitHubAssetUpload {
     param(
@@ -283,13 +286,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "Selecting current-run tauri-action artifacts failed with exit code $LASTEXITCODE."
 }
 $tauriArtifacts = $selectionJson | ConvertFrom-Json
-$versionedInstaller = (Resolve-Path -LiteralPath $tauriArtifacts.installerPath).Path
-$installerSignature = (Resolve-Path -LiteralPath $tauriArtifacts.installerSignaturePath).Path
-foreach ($required in @($versionedInstaller, $installerSignature)) {
-    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-        throw "Current-run tauri-action artifact was not found: $required"
-    }
+if ($null -eq $tauriArtifacts.PSObject.Properties['installerPath'] -or [string]::IsNullOrWhiteSpace($tauriArtifacts.installerPath)) {
+    throw "select-tauri-artifacts did not return an installerPath."
 }
+if ($null -eq $tauriArtifacts.PSObject.Properties['installerSignaturePath'] -or [string]::IsNullOrWhiteSpace($tauriArtifacts.installerSignaturePath)) {
+    throw "select-tauri-artifacts did not return an installerSignaturePath."
+}
+$versionedInstaller = Resolve-RenderPilotRequiredFile "Tauri installer" $tauriArtifacts.installerPath
+$installerSignature = Resolve-RenderPilotRequiredFile "Tauri installer signature" $tauriArtifacts.installerSignaturePath
 
 $installerAlias = Join-Path $artifactPath "RenderPilot-setup.exe"
 $outputManifest = Join-Path $artifactPath "latest.json"
@@ -311,8 +315,11 @@ $artifactPaths = @(
     $outputManifest
 )
 $artifactNames = @($artifactPaths | ForEach-Object { [IO.Path]::GetFileName($_) })
-if (($artifactNames | Select-Object -Unique).Count -ne $artifactNames.Count) {
-    throw "The release asset set contains duplicate filenames."
+$seenNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($name in $artifactNames) {
+    if (-not $seenNames.Add($name)) {
+        throw "The release asset set contains duplicate filename: $name"
+    }
 }
 
 if (-not $alreadyPrepared) {
@@ -326,8 +333,8 @@ if (-not $alreadyPrepared) {
         -PublishedAt $PublishedAt `
         -ChangelogPath $ChangelogPath `
         -TauriArtifactPathsJson $TauriArtifactPathsJson `
-        -RepositoryRoot $RepositoryRoot `
-        -ArtifactDirectory $ArtifactDirectory `
+        -RepositoryRoot $repositoryPath `
+        -ArtifactDirectory $artifactPath `
         -PortableRaw $PortableRaw `
         -PortableRawSignature $PortableRawSignature `
         -PortableRpu $PortableRpu `

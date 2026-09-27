@@ -10,6 +10,7 @@ members = [
     "crates/renderpilot-cli",
     "crates/renderpilot-orchestration",
     "crates/renderpilot-api",
+    "crates/renderpilot-updater-signature",
 ]
 resolver = "2"
 
@@ -28,6 +29,7 @@ renderpilot-nvapi = { path = "crates/renderpilot-nvapi" }
 renderpilot-orchestration = { path = "crates/renderpilot-orchestration" }
 renderpilot-platform-windows = { path = "crates/renderpilot-platform-windows" }
 renderpilot-storage-sqlite = { path = "crates/renderpilot-storage-sqlite" }
+renderpilot-updater-signature = { path = "crates/renderpilot-updater-signature" }
 
 base64 = { version = "0.23", default-features = false, features = ["std"] }
 futures-util = { version = "0.3", default-features = false }
