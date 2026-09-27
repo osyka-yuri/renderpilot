@@ -95,7 +95,10 @@ pub(super) fn created_profile_matches(
         && by_path.settings.is_empty()
 }
 
-pub(super) fn witness_for_path<'a>(
+/// Require the selected path in `app_name` for RenderPilot-owned profile
+/// lifecycle recovery. Setting recovery uses the returned lookup witness even
+/// when NVIDIA records only a basename.
+pub(super) fn exact_owned_lifecycle_witness_for_path<'a>(
     profile: &'a ObservedProfile,
     path: &str,
 ) -> Option<&'a ApplicationIdentity> {
@@ -105,8 +108,22 @@ pub(super) fn witness_for_path<'a>(
         .filter(|application| path_equal(&application.app_name, path))
 }
 
-pub(super) fn witness_json_for_path(profile: &ObservedProfile, path: &str) -> Option<String> {
-    witness_for_path(profile, path).and_then(|witness| serde_json::to_string(witness).ok())
+pub(super) fn exact_owned_lifecycle_witness_json_for_path(
+    profile: &ObservedProfile,
+    path: &str,
+) -> Option<String> {
+    exact_owned_lifecycle_witness_for_path(profile, path)
+        .and_then(|witness| serde_json::to_string(witness).ok())
+}
+
+/// Serialize the application record returned by the selected full-path lookup.
+/// A basename `app_name` is valid; comparison still uses the complete record.
+pub(super) fn effective_setting_witness_json(profile: &ObservedProfile) -> Option<String> {
+    let witness = profile.matched_application.as_ref()?;
+    if witness.app_name.is_empty() {
+        return None;
+    }
+    serde_json::to_string(witness).ok()
 }
 
 pub(super) fn path_lookup<'a>(

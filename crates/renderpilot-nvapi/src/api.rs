@@ -53,11 +53,12 @@ fn read_wide(value: &[u16]) -> String {
     String::from_utf16_lossy(&value[..length])
 }
 
-/// Stable, serializable application identity returned by DRS for a checked
-/// fully-qualified executable path. Mutation APIs consume this exact witness.
+/// Serializable DRS application record. A full-path lookup returns this record
+/// as a witness; its `app_name` is not necessarily the queried path.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ApplicationIdentity {
-    /// Full executable path passed to and returned by DRS.
+    /// Application name returned by DRS. A full-path lookup may return a
+    /// basename for an NVIDIA profile; this is not necessarily the query path.
     pub app_name: String,
     /// NVIDIA's user-facing application label.
     pub user_friendly_name: String,

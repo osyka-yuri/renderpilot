@@ -136,24 +136,11 @@ pub fn write_setting_value(
         WriteOp::RestoreOriginal => unreachable!("resolved above"),
     };
     let application = profile.matched_application();
-    let application_json = application
-        .as_ref()
-        .map(serde_json::to_string)
-        .transpose()
-        .map_err(|error| {
-            ServiceError::command_failed(format!(
-                "could not encode NVIDIA application witness: {error}"
-            ))
-        })?;
+    let application_json = setting_application_witness_json(application.as_ref())?;
     let executable_path = ctx.effective_exe_path.as_deref();
     if let Some(game_id) = target.game_id() {
         let path = executable_path
             .ok_or_else(|| ServiceError::command_failed("no executable detected for game"))?;
-        if !application_matches_selected_path(application.as_ref(), path) {
-            return Err(ServiceError::command_failed(
-                "NVIDIA profile lookup did not match the selected full-path executable",
-            ));
-        }
         let owned = context.storage().get_nvapi_owned_profile(game_id)?;
         let is_owned = owned
             .as_ref()
@@ -172,7 +159,9 @@ pub fn write_setting_value(
             ));
         }
         let app_json = application_json.as_deref().ok_or_else(|| {
-            ServiceError::command_failed("full-path NVIDIA lookup returned no application witness")
+            ServiceError::command_failed(
+                "full-path NVIDIA profile lookup returned no application witness",
+            )
         })?;
         let before_composition = if is_owned {
             let composition = profile_composition(&profile)?;
@@ -340,8 +329,9 @@ mod tests {
 
     use super::{
         ClaimRestoreCompositionObservation, ClaimRestoreExpectation, ClaimRestoreObservation,
-        ReconciledWrite, application_matches_selected_path, application_witness_matches,
-        classify_reconciled_write, restore_original_op, validate_claim_restore_observation,
+        ReconciledWrite, application_witness_matches, classify_reconciled_write,
+        restore_original_op, setting_application_witness_json, stable_profile_identity_matches,
+        validate_claim_restore_observation,
     };
     use crate::nvapi::ops::WriteOp;
     use renderpilot_storage_sqlite::NvapiSettingState;
@@ -368,9 +358,9 @@ mod tests {
     }
 
     #[test]
-    fn game_setting_write_requires_an_exact_selected_executable_match() {
+    fn setting_witness_serializes_full_basename_and_path_application_identity() {
         let application = renderpilot_nvapi::ApplicationIdentity {
-            app_name: "C:\\Games\\One\\game.exe".to_owned(),
+            app_name: "game.exe".to_owned(),
             user_friendly_name: "Game".to_owned(),
             launcher: String::new(),
             file_in_folder: String::new(),
@@ -379,29 +369,45 @@ mod tests {
             is_predefined: false,
         };
 
-        assert!(application_matches_selected_path(
-            Some(&application),
-            "c:/games/one/game.exe"
+        let witness = setting_application_witness_json(Some(&application))
+            .expect("encode witness")
+            .expect("witness is present");
+        assert_eq!(
+            witness,
+            serde_json::to_string(&application).expect("full identity")
+        );
+        assert!(application_witness_matches(Some(&witness), Some(&witness)));
+        let mut changed = application.clone();
+        changed.user_friendly_name = "Another profile application".to_owned();
+        let changed_witness = setting_application_witness_json(Some(&changed))
+            .expect("encode changed witness")
+            .expect("changed witness is present");
+        assert!(!application_witness_matches(
+            Some(&witness),
+            Some(&changed_witness)
         ));
-        assert!(!application_matches_selected_path(
-            Some(&application),
-            "C:/Games/Other/game.exe"
-        ));
-        assert!(!application_matches_selected_path(
-            Some(&application),
-            "game.exe"
-        ));
-        assert!(!application_matches_selected_path(
-            None,
-            "C:/Games/One/game.exe"
-        ));
-
-        let mut folder_match = application;
-        folder_match.app_name = "C:/Games/One".to_owned();
-        assert!(!application_matches_selected_path(
-            Some(&folder_match),
-            "C:/Games/One/game.exe"
-        ));
+        let mut full_path = application.clone();
+        full_path.app_name = r"C:\Games\One\game.exe".to_owned();
+        let full_path_witness = setting_application_witness_json(Some(&full_path))
+            .expect("encode full-path witness")
+            .expect("full-path witness is present");
+        assert_eq!(
+            serde_json::from_str::<renderpilot_nvapi::ApplicationIdentity>(&full_path_witness)
+                .expect("escaped full path remains a complete witness"),
+            full_path
+        );
+        assert!(
+            setting_application_witness_json(None)
+                .expect("missing witness is not a serialization error")
+                .is_none()
+        );
+        let mut empty = application;
+        empty.app_name.clear();
+        assert!(
+            setting_application_witness_json(Some(&empty))
+                .expect("empty name is not a serialization error")
+                .is_none()
+        );
     }
 
     #[test]
@@ -426,12 +432,174 @@ mod tests {
     }
 
     #[test]
+    fn stable_identity_predicate_blocks_before_and_after_classification_on_status_drift() {
+        let name = "NVIDIA Shared Profile";
+        assert!(stable_profile_identity_matches(
+            name,
+            Some(false),
+            name,
+            false
+        ));
+        assert!(stable_profile_identity_matches(
+            name,
+            Some(true),
+            name,
+            true
+        ));
+        for observed in [false, true] {
+            let identity_matches =
+                stable_profile_identity_matches(name, Some(!observed), name, observed);
+            assert!(!identity_matches);
+            for state in [(false, None), (true, Some(7))] {
+                assert_eq!(
+                    classify_reconciled_write(
+                        identity_matches,
+                        true,
+                        state,
+                        (false, None),
+                        (true, Some(7)),
+                    ),
+                    ReconciledWrite::Conflict,
+                );
+            }
+        }
+        assert!(!stable_profile_identity_matches(name, None, name, false));
+        assert!(!stable_profile_identity_matches(
+            name,
+            Some(false),
+            "Different profile",
+            false
+        ));
+    }
+
+    #[test]
+    fn claim_restore_accepts_the_same_basename_witness_for_the_selected_path() {
+        let application = renderpilot_nvapi::ApplicationIdentity {
+            app_name: "game.exe".to_owned(),
+            user_friendly_name: "Shared game profile".to_owned(),
+            launcher: String::new(),
+            file_in_folder: String::new(),
+            flags: 0,
+            command_line: String::new(),
+            is_predefined: false,
+        };
+        let witness = serde_json::to_string(&application).expect("witness JSON");
+        for profile_is_predefined in [false, true] {
+            let result = validate_claim_restore_observation(
+                &ClaimRestoreExpectation {
+                    target_id: "NVIDIA Shared Profile",
+                    profile_is_predefined,
+                    application_witness_json: &witness,
+                    state: NvapiSettingState {
+                        present: false,
+                        value: None,
+                    },
+                    setting_id: 10,
+                },
+                &ClaimRestoreObservation {
+                    profile_name: "NVIDIA Shared Profile",
+                    is_predefined: profile_is_predefined,
+                    application_witness_json: Some(&witness),
+                    state: NvapiSettingState {
+                        present: false,
+                        value: None,
+                    },
+                    composition: ClaimRestoreCompositionObservation {
+                        owner_receipt: None,
+                        before_restore: None,
+                        after_restore: None,
+                    },
+                },
+            );
+            assert_eq!(result, Ok(()));
+        }
+    }
+
+    #[test]
+    fn claim_restore_rejects_predefined_status_drift_with_the_same_basename_witness() {
+        let application = renderpilot_nvapi::ApplicationIdentity {
+            app_name: "game.exe".to_owned(),
+            user_friendly_name: "Shared game profile".to_owned(),
+            launcher: String::new(),
+            file_in_folder: String::new(),
+            flags: 0,
+            command_line: String::new(),
+            is_predefined: false,
+        };
+        let witness = serde_json::to_string(&application).expect("witness JSON");
+        for recorded_status in [false, true] {
+            let result = validate_claim_restore_observation(
+                &ClaimRestoreExpectation {
+                    target_id: "NVIDIA Shared Profile",
+                    profile_is_predefined: recorded_status,
+                    application_witness_json: &witness,
+                    state: NvapiSettingState {
+                        present: false,
+                        value: None,
+                    },
+                    setting_id: 10,
+                },
+                &ClaimRestoreObservation {
+                    profile_name: "NVIDIA Shared Profile",
+                    is_predefined: !recorded_status,
+                    application_witness_json: Some(&witness),
+                    state: NvapiSettingState {
+                        present: false,
+                        value: None,
+                    },
+                    composition: ClaimRestoreCompositionObservation {
+                        owner_receipt: None,
+                        before_restore: None,
+                        after_restore: None,
+                    },
+                },
+            );
+            assert_eq!(result, Err("profile identity changed"));
+        }
+    }
+
+    #[test]
+    fn claim_restore_requires_a_complete_application_witness() {
+        let incomplete_witness = r#"{"app_name":"game.exe"}"#;
+        let result = validate_claim_restore_observation(
+            &ClaimRestoreExpectation {
+                target_id: "NVIDIA Shared Profile",
+                profile_is_predefined: true,
+                application_witness_json: incomplete_witness,
+                state: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                setting_id: 10,
+            },
+            &ClaimRestoreObservation {
+                profile_name: "NVIDIA Shared Profile",
+                is_predefined: true,
+                application_witness_json: Some(incomplete_witness),
+                state: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                composition: ClaimRestoreCompositionObservation {
+                    owner_receipt: None,
+                    before_restore: None,
+                    after_restore: None,
+                },
+            },
+        );
+        assert_eq!(
+            result,
+            Err("effective-profile application witness is invalid")
+        );
+    }
+
+    #[test]
     fn claim_restore_rejects_rebound_profile_even_when_value_matches() {
         let witness = r#"{"app_name":"C:/Games/One/game.exe"}"#;
         let result = validate_claim_restore_observation(
             &ClaimRestoreExpectation {
                 target_id: "RenderPilot - One [id]",
-                executable_path: "C:/Games/One/game.exe",
+                profile_is_predefined: false,
                 application_witness_json: witness,
                 state: NvapiSettingState {
                     present: true,
@@ -491,7 +659,7 @@ mod tests {
         let result = validate_claim_restore_observation(
             &ClaimRestoreExpectation {
                 target_id: "RenderPilot - One [id]",
-                executable_path: "C:/Games/One/game.exe",
+                profile_is_predefined: false,
                 application_witness_json: &witness,
                 state: NvapiSettingState {
                     present: false,
@@ -523,7 +691,7 @@ mod tests {
         let drift_result = validate_claim_restore_observation(
             &ClaimRestoreExpectation {
                 target_id: "RenderPilot - One [id]",
-                executable_path: "C:/Games/One/game.exe",
+                profile_is_predefined: false,
                 application_witness_json: &witness,
                 state: NvapiSettingState {
                     present: false,
@@ -607,14 +775,22 @@ fn profile_composition(
     }))
 }
 
-fn application_matches_selected_path(
+fn setting_application_witness_json(
     application: Option<&renderpilot_nvapi::ApplicationIdentity>,
-    selected_path: &str,
-) -> bool {
-    application.is_some_and(|application| {
-        renderpilot_domain::normalized_path_key(&application.app_name)
-            == renderpilot_domain::normalized_path_key(selected_path)
-    })
+) -> Result<Option<String>, ServiceError> {
+    let Some(application) = application else {
+        return Ok(None);
+    };
+    if application.app_name.is_empty() {
+        return Ok(None);
+    }
+    serde_json::to_string(application)
+        .map(Some)
+        .map_err(|error| {
+            ServiceError::command_failed(format!(
+                "could not encode NVIDIA application witness: {error}"
+            ))
+        })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -659,6 +835,9 @@ fn reconcile_setting_write(
     let identity = profile.identity().map_err(|error| {
         map_nvapi_write_error(error, "profile identity during reconciliation failed")
     })?;
+    let recorded_profile_status = context
+        .storage()
+        .get_nvapi_target_profile_is_predefined(profile_name)?;
     let observed = read_setting_presence(setting, &profile)?;
     let owner = if game_id.is_some() {
         context
@@ -680,25 +859,13 @@ fn reconcile_setting_write(
             })
             .transpose()?
             .flatten();
-        let observed_witness_json = observed_witness
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()
-            .map_err(|error| ServiceError::command_failed(error.to_string()))?;
-        let path_matches = ctx.effective_exe_path.as_deref().is_some_and(|path| {
-            observed_witness.as_ref().is_some_and(|witness| {
-                renderpilot_domain::normalized_path_key(&witness.app_name)
-                    == renderpilot_domain::normalized_path_key(path)
-            })
+        let observed_witness_json = setting_application_witness_json(observed_witness.as_ref())?;
+        application_binding_matches = application_witness_matches(
+            expected_witness.as_deref(),
+            observed_witness_json.as_deref(),
+        ) && owner.as_ref().is_none_or(|owner| {
+            Some(owner.application_witness_json.as_str()) == observed_witness_json.as_deref()
         });
-        application_binding_matches = path_matches
-            && application_witness_matches(
-                expected_witness.as_deref(),
-                observed_witness_json.as_deref(),
-            )
-            && owner.as_ref().is_none_or(|owner| {
-                Some(owner.application_witness_json.as_str()) == observed_witness_json.as_deref()
-            });
         if owner.as_ref().is_some_and(|owner| owner.game_id != game_id) {
             mark_setting_conflict(
                 context,
@@ -709,7 +876,12 @@ fn reconcile_setting_write(
         }
     }
     let outcome = classify_reconciled_write(
-        identity.name == profile_name,
+        stable_profile_identity_matches(
+            profile_name,
+            recorded_profile_status,
+            &identity.name,
+            identity.is_predefined,
+        ),
         application_binding_matches,
         observed,
         (before_present, before_value),
@@ -721,6 +893,8 @@ fn reconcile_setting_write(
             op_id,
             &serde_json::json!({
                 "profile_name": identity.name,
+                "profile_is_predefined": identity.is_predefined,
+                "recorded_profile_is_predefined": recorded_profile_status,
                 "application_binding_matches": application_binding_matches,
                 "present": observed.0,
                 "value": observed.1,
@@ -792,7 +966,16 @@ fn reconcile_setting_write(
 }
 
 fn application_witness_matches(expected: Option<&str>, observed: Option<&str>) -> bool {
-    expected.is_some() && expected == observed
+    expected.is_some_and(|witness| !witness.is_empty()) && expected == observed
+}
+
+fn stable_profile_identity_matches(
+    expected_name: &str,
+    recorded_is_predefined: Option<bool>,
+    observed_name: &str,
+    observed_is_predefined: bool,
+) -> bool {
+    expected_name == observed_name && recorded_is_predefined == Some(observed_is_predefined)
 }
 
 fn classify_reconciled_write(
@@ -815,7 +998,7 @@ fn classify_reconciled_write(
 
 struct ClaimRestoreExpectation<'a> {
     target_id: &'a str,
-    executable_path: &'a str,
+    profile_is_predefined: bool,
     application_witness_json: &'a str,
     state: NvapiSettingState,
     setting_id: u32,
@@ -839,27 +1022,29 @@ fn validate_claim_restore_observation(
     expected: &ClaimRestoreExpectation<'_>,
     observed: &ClaimRestoreObservation<'_>,
 ) -> Result<(), &'static str> {
-    if observed.profile_name != expected.target_id
-        || (observed.composition.owner_receipt.is_some() && observed.is_predefined)
+    if !stable_profile_identity_matches(
+        expected.target_id,
+        Some(expected.profile_is_predefined),
+        observed.profile_name,
+        observed.is_predefined,
+    ) || (observed.composition.owner_receipt.is_some() && observed.is_predefined)
     {
         return Err("profile identity changed");
     }
+    let observed_witness_json = observed
+        .application_witness_json
+        .ok_or("effective-profile application witness is missing")?;
     if !application_witness_matches(
         Some(expected.application_witness_json),
-        observed.application_witness_json,
+        Some(observed_witness_json),
     ) {
-        return Err("full-path application witness changed");
+        return Err("effective-profile application witness changed");
     }
-    let witness: renderpilot_nvapi::ApplicationIdentity = serde_json::from_str(
-        observed
-            .application_witness_json
-            .ok_or("full-path application witness is missing")?,
-    )
-    .map_err(|_| "full-path application witness is invalid")?;
-    if renderpilot_domain::normalized_path_key(&witness.app_name)
-        != renderpilot_domain::normalized_path_key(expected.executable_path)
-    {
-        return Err("full-path application binding changed");
+    let witness: renderpilot_nvapi::ApplicationIdentity =
+        serde_json::from_str(observed_witness_json)
+            .map_err(|_| "effective-profile application witness is invalid")?;
+    if witness.app_name.is_empty() {
+        return Err("effective-profile application witness is invalid");
     }
     if observed.state != expected.state {
         return Err("restored setting presence or value changed");
@@ -1029,11 +1214,36 @@ fn restore_nvapi_claims(
         let identity = profile.identity().map_err(|error| {
             ServiceError::command_failed(format!("could not verify NVIDIA claim target: {error}"))
         })?;
+        let recorded_profile_status = context
+            .storage()
+            .get_nvapi_target_profile_is_predefined(&claim.target_id)?
+            .ok_or_else(|| {
+                ServiceError::command_failed(format!(
+                    "NVIDIA claim profile identity receipt is missing for {}; the claim was kept for review",
+                    claim.executable_path
+                ))
+            })?;
+        if !stable_profile_identity_matches(
+            &claim.target_id,
+            Some(recorded_profile_status),
+            &identity.name,
+            identity.is_predefined,
+        ) {
+            return Err(ServiceError::command_failed(format!(
+                "NVIDIA claim profile identity changed for {}; the claim was kept for review",
+                claim.executable_path
+            )));
+        }
         let witness = profile.matched_application().ok_or_else(|| {
-            ServiceError::command_failed("NVIDIA claim target has no full-path application witness")
+            ServiceError::command_failed(
+                "NVIDIA full-path profile lookup returned no application witness",
+            )
         })?;
-        let witness_json = serde_json::to_string(&witness)
-            .map_err(|error| ServiceError::command_failed(error.to_string()))?;
+        let witness_json = setting_application_witness_json(Some(&witness))?.ok_or_else(|| {
+            ServiceError::command_failed(
+                "NVIDIA full-path profile lookup returned an empty application witness",
+            )
+        })?;
         let recorded_witness = context
             .storage()
             .get_nvapi_application_witness(&claim.target_id, &claim.executable_path)?;
@@ -1144,16 +1354,8 @@ fn restore_nvapi_claims(
         let verified_identity = verified
             .identity()
             .map_err(|error| ServiceError::command_failed(error.to_string()))?;
-        let verified_witness = verified
-            .matched_application()
-            .map(|witness| {
-                serde_json::to_string(&witness).map_err(|error| {
-                    ServiceError::command_failed(format!(
-                        "could not encode verified application witness: {error}"
-                    ))
-                })
-            })
-            .transpose()?;
+        let verified_witness =
+            setting_application_witness_json(verified.matched_application().as_ref())?;
         let verified_composition = if owner.is_some() {
             Some(profile_composition(&verified)?)
         } else {
@@ -1162,7 +1364,7 @@ fn restore_nvapi_claims(
         let observation_error = validate_claim_restore_observation(
             &ClaimRestoreExpectation {
                 target_id: &claim.target_id,
-                executable_path: &claim.executable_path,
+                profile_is_predefined: recorded_profile_status,
                 application_witness_json: &witness_json,
                 state: NvapiSettingState {
                     present: claim.original_present,

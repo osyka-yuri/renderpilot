@@ -9,15 +9,26 @@ use renderpilot_storage_sqlite::{
     NvapiVerifiedProfileReceipt,
 };
 
-use super::receipts::{composition_json, profile_receipts, witness_json_for_path};
+use super::receipts::{
+    composition_json, effective_setting_witness_json, exact_owned_lifecycle_witness_for_path,
+    exact_owned_lifecycle_witness_json_for_path, profile_receipts,
+};
 use super::*;
 
 const PROFILE: &str = "RenderPilot Recovery Fixture";
 const SETTING_ID: u32 = 0x10B3_292C;
 fn profile_identity_json(application_count: u32, setting_count: u32) -> String {
+    profile_identity_json_with_status(application_count, setting_count, false)
+}
+
+fn profile_identity_json_with_status(
+    application_count: u32,
+    setting_count: u32,
+    is_predefined: bool,
+) -> String {
     serde_json::to_string(&ProfileIdentity {
         name: PROFILE.to_owned(),
-        is_predefined: false,
+        is_predefined,
         application_count,
         setting_count,
     })
@@ -269,7 +280,8 @@ fn restart_recovery_deletes_owned_profile_when_nvidia_exposes_another_profile() 
     let before = serde_json::json!({
         "binding_path": path,
         "composition": composition_json(&owned).expect("composition"),
-        "application_witness": witness_json_for_path(&owned, path).expect("witness"),
+        "application_witness": exact_owned_lifecycle_witness_json_for_path(&owned, path)
+            .expect("witness"),
     });
     storage
         .begin_nvapi_operation(
@@ -314,7 +326,8 @@ fn restart_recovery_keeps_delete_intent_when_enum_observation_fails() {
     let before = serde_json::json!({
         "binding_path": path,
         "composition": composition_json(&owned).expect("composition"),
-        "application_witness": witness_json_for_path(&owned, path).expect("witness"),
+        "application_witness": exact_owned_lifecycle_witness_json_for_path(&owned, path)
+            .expect("witness"),
     });
     let op_id = "delete-uncertain-observation";
     storage
@@ -358,7 +371,8 @@ fn restart_recovery_finalizes_move_and_restores_selector_intent() {
     let before = serde_json::json!({
         "old_path": old_path,
         "composition": composition_json(&old_profile).expect("composition"),
-        "application_witness": witness_json_for_path(&old_profile, old_path).expect("witness"),
+        "application_witness": exact_owned_lifecycle_witness_json_for_path(&old_profile, old_path)
+            .expect("witness"),
     });
     let after = serde_json::json!({
         "new_path": new_path,
@@ -422,7 +436,8 @@ fn restart_move_cancels_exact_before_state_with_witness_from_path_lookup() {
     let before = serde_json::json!({
         "old_path": old_path,
         "composition": composition_json(&by_old_path).expect("composition"),
-        "application_witness": witness_json_for_path(&by_old_path, old_path).expect("witness"),
+        "application_witness": exact_owned_lifecycle_witness_json_for_path(&by_old_path, old_path)
+            .expect("witness"),
     });
     let after = serde_json::json!({
         "new_path": new_path,
@@ -493,7 +508,11 @@ fn restart_move_requires_old_path_absence_and_retains_uncertain_observations() {
         let before = serde_json::json!({
             "old_path": old_path,
             "composition": composition_json(&old_profile).expect("composition"),
-            "application_witness": witness_json_for_path(&old_profile, &old_path).expect("witness"),
+            "application_witness": exact_owned_lifecycle_witness_json_for_path(
+                &old_profile,
+                &old_path,
+            )
+            .expect("witness"),
         });
         let after = serde_json::json!({
             "new_path": new_path,
@@ -571,7 +590,8 @@ fn restart_move_requires_the_full_path_lookup_witness_to_match_the_destination()
     let before = serde_json::json!({
         "old_path": old_path,
         "composition": composition_json(&old_profile).expect("composition"),
-        "application_witness": witness_json_for_path(&old_profile, old_path).expect("witness"),
+        "application_witness": exact_owned_lifecycle_witness_json_for_path(&old_profile, old_path)
+            .expect("witness"),
     });
     let after = serde_json::json!({
         "new_path": new_path,
@@ -628,7 +648,8 @@ fn restart_recovery_keeps_move_intent_when_destination_lookup_is_ambiguous() {
     let before = serde_json::json!({
         "old_path": old_path,
         "composition": composition_json(&old_profile).expect("composition"),
-        "application_witness": witness_json_for_path(&old_profile, old_path).expect("witness"),
+        "application_witness": exact_owned_lifecycle_witness_json_for_path(&old_profile, old_path)
+            .expect("witness"),
     });
     let after = serde_json::json!({
         "new_path": new_path,
@@ -677,15 +698,60 @@ fn prepare_external_setting_claim(
     after: (bool, Option<u32>),
     op_id: &str,
 ) {
-    let witness = serde_json::to_string(&app(app_path)).expect("witness json");
-    let identity_json = profile_identity_json(application_count, u32::from(before.0));
+    prepare_external_setting_claim_with_witness(
+        storage,
+        ExternalSettingClaimFixture {
+            game_id,
+            app_path,
+            witness_app_name: app_path,
+            profile_is_predefined: false,
+            application_count,
+            before,
+            after,
+            op_id,
+        },
+    );
+}
+
+#[derive(Clone, Copy)]
+struct ExternalSettingClaimFixture<'a> {
+    game_id: &'a str,
+    app_path: &'a str,
+    witness_app_name: &'a str,
+    profile_is_predefined: bool,
+    application_count: u32,
+    before: (bool, Option<u32>),
+    after: (bool, Option<u32>),
+    op_id: &'a str,
+}
+
+fn prepare_external_setting_claim_with_witness(
+    storage: &SqliteStorage,
+    fixture: ExternalSettingClaimFixture<'_>,
+) {
+    let ExternalSettingClaimFixture {
+        game_id,
+        app_path,
+        witness_app_name,
+        profile_is_predefined,
+        application_count,
+        before,
+        after,
+        op_id,
+    } = fixture;
+    let witness = serde_json::to_string(&app(witness_app_name)).expect("witness json");
+    let identity_json = profile_identity_json_with_status(
+        application_count,
+        u32::from(before.0),
+        profile_is_predefined,
+    );
     storage
         .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
             op_id,
             game_id,
             profile_name: PROFILE,
             target_kind: "external",
-            profile_is_predefined: false,
+            profile_is_predefined,
             profile_identity_json: &identity_json,
             executable_path: app_path,
             application_witness_json: &witness,
@@ -750,7 +816,7 @@ fn shared_setting_observation(path_a: &str, value: u32) -> Observation {
 }
 
 #[test]
-fn restart_setting_requires_the_full_path_lookup_witness_to_match_the_executable() {
+fn restart_setting_rejects_a_changed_lookup_witness_even_when_value_matches() {
     let (storage, games) = storage_with_games(&["setting-witness-mismatch"]);
     let game_id = &games[0];
     let path = "C:/Games/setting-witness-mismatch/Game.exe";
@@ -784,6 +850,183 @@ fn restart_setting_requires_the_full_path_lookup_witness_to_match_the_executable
         .expect("read pending operations");
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].phase, "conflict");
+}
+
+#[test]
+fn restart_setting_rejects_a_missing_recorded_witness() {
+    let (storage, games) = storage_with_games(&["setting-missing-receipt", "witness-other-path"]);
+    let path = "C:/Games/setting-missing-receipt/Game.exe";
+    let other_path = "C:/Games/witness-other-path/Game.exe";
+    prepare_external_setting_claim(
+        &storage,
+        &games[1],
+        other_path,
+        1,
+        (false, None),
+        (true, Some(3)),
+        "witness-other-path",
+    );
+    finish_external_setting_claim(
+        &storage,
+        &games[1],
+        1,
+        (true, Some(3)),
+        "witness-other-path",
+    );
+    assert_eq!(
+        storage
+            .get_nvapi_target_profile_is_predefined(PROFILE)
+            .expect("target identity receipt"),
+        Some(false)
+    );
+    assert!(
+        storage
+            .get_nvapi_application_witness(PROFILE, path)
+            .expect("selected path witness")
+            .is_none()
+    );
+    storage
+        .begin_nvapi_operation(
+            "setting-missing-receipt",
+            Some(&games[0]),
+            Some(PROFILE),
+            "setting",
+            &serde_json::json!({
+                "setting_id": SETTING_ID,
+                "executable_path": path,
+                "present": false,
+                "value": null
+            })
+            .to_string(),
+            &serde_json::json!({"setting_id": SETTING_ID, "present": true, "value": 12})
+                .to_string(),
+        )
+        .expect("pending setting without an application receipt");
+    let profile = observed_profile(
+        PROFILE,
+        vec![app(path)],
+        Some((SETTING_ID, true, Some(12))),
+        false,
+    );
+
+    recover_with(&storage, &observation_for_path(path, profile))
+        .expect("missing witness must be marked as a conflict");
+
+    let pending = storage
+        .list_pending_nvapi_operations()
+        .expect("pending operations");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].phase, "conflict");
+}
+
+#[test]
+fn restart_recovery_finalizes_saved_setting_with_basename_lookup_witness() {
+    for profile_is_predefined in [false, true] {
+        let (storage, games) = storage_with_games(&["setting-basename-witness"]);
+        let game_id = &games[0];
+        let path = "C:/Games/setting-basename-witness/Game.exe";
+        prepare_external_setting_claim_with_witness(
+            &storage,
+            ExternalSettingClaimFixture {
+                game_id,
+                app_path: path,
+                witness_app_name: "Game.exe",
+                profile_is_predefined,
+                application_count: 1,
+                before: (false, None),
+                after: (true, Some(12)),
+                op_id: "setting-basename-after-save",
+            },
+        );
+        let mut profile = observed_profile(
+            PROFILE,
+            vec![app(path)],
+            Some((SETTING_ID, true, Some(12))),
+            profile_is_predefined,
+        );
+        profile.matched_application = Some(app("Game.exe"));
+
+        recover_with(&storage, &observation_for_path(path, profile))
+            .expect("finalize saved setting from same full-path lookup");
+
+        assert!(
+            storage
+                .list_pending_nvapi_operations()
+                .expect("pending operations")
+                .is_empty()
+        );
+        let claims = storage
+            .list_nvapi_setting_claims_for_game(game_id)
+            .expect("setting claim");
+        assert_eq!(claims.len(), 1);
+        assert_eq!(
+            (claims[0].expected_present, claims[0].expected_value),
+            (true, Some(12))
+        );
+    }
+}
+
+#[test]
+fn restart_setting_rejects_profile_status_drift_before_or_after_save() {
+    for (game_name, state) in [
+        ("setting-status-before", (false, None)),
+        ("setting-status-after", (true, Some(12))),
+    ] {
+        let (storage, games) = storage_with_games(&[game_name]);
+        let path = format!("C:/Games/{game_name}/Game.exe");
+        prepare_external_setting_claim_with_witness(
+            &storage,
+            ExternalSettingClaimFixture {
+                game_id: &games[0],
+                app_path: &path,
+                witness_app_name: "Game.exe",
+                profile_is_predefined: false,
+                application_count: 1,
+                before: (false, None),
+                after: (true, Some(12)),
+                op_id: game_name,
+            },
+        );
+        let mut profile = observed_profile(
+            PROFILE,
+            vec![app(&path)],
+            Some((SETTING_ID, state.0, state.1)),
+            true,
+        );
+        profile.matched_application = Some(app("Game.exe"));
+
+        recover_with(&storage, &observation_for_path(&path, profile))
+            .expect("status drift must be marked as a conflict");
+
+        let pending = storage
+            .list_pending_nvapi_operations()
+            .expect("pending operations");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].phase, "conflict");
+    }
+}
+
+#[test]
+fn setting_and_owned_lifecycle_witness_policies_remain_distinct() {
+    let path = "C:/Games/basename/Game.exe";
+    let mut profile = observed_profile(PROFILE, vec![app(path)], None, false);
+    profile.matched_application = Some(app("Game.exe"));
+
+    assert_eq!(
+        effective_setting_witness_json(&profile),
+        Some(serde_json::to_string(&app("Game.exe")).expect("basename witness"))
+    );
+    assert!(exact_owned_lifecycle_witness_for_path(&profile, path).is_none());
+
+    profile.matched_application = Some(app(path));
+    assert_eq!(
+        exact_owned_lifecycle_witness_for_path(&profile, path),
+        profile.matched_application.as_ref()
+    );
+    assert_eq!(
+        effective_setting_witness_json(&profile),
+        Some(serde_json::to_string(&app(path)).expect("exact-path witness"))
+    );
 }
 
 #[test]
@@ -898,8 +1141,8 @@ fn restart_recovery_finalizes_global_write_from_fresh_base_profile_observation()
         .prepare_nvapi_global_setting_operation(NvapiGlobalSettingPreparation {
             op_id: "global-after-save",
             profile_name: PROFILE,
-            profile_is_predefined: false,
-            profile_identity_json: &profile_identity_json(0, 0),
+            profile_is_predefined: true,
+            profile_identity_json: &profile_identity_json_with_status(0, 0, true),
             setting_id: SETTING_ID,
             original: NvapiSettingState {
                 present: before.0,
@@ -915,12 +1158,7 @@ fn restart_recovery_finalizes_global_write_from_fresh_base_profile_observation()
             },
         })
         .expect("persist global intent");
-    let base = observed_profile(
-        PROFILE,
-        Vec::new(),
-        Some((SETTING_ID, true, Some(9))),
-        false,
-    );
+    let base = observed_profile(PROFILE, Vec::new(), Some((SETTING_ID, true, Some(9))), true);
     let observation = Observation {
         named_profile: Lookup::Found(base.clone()),
         path_profiles: HashMap::new(),
@@ -941,4 +1179,54 @@ fn restart_recovery_finalizes_global_write_from_fresh_base_profile_observation()
             .expect("pending rows")
             .is_empty()
     );
+}
+
+#[test]
+fn restart_global_setting_rejects_predefined_status_drift() {
+    for (op_id, state) in [
+        ("global-status-before", (false, None)),
+        ("global-status-after", (true, Some(9))),
+    ] {
+        let (storage, _) = storage_with_games(&[]);
+        storage
+            .prepare_nvapi_global_setting_operation(NvapiGlobalSettingPreparation {
+                op_id,
+                profile_name: PROFILE,
+                profile_is_predefined: false,
+                profile_identity_json: &profile_identity_json(0, 0),
+                setting_id: SETTING_ID,
+                original: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                before: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                after: NvapiSettingState {
+                    present: true,
+                    value: Some(9),
+                },
+            })
+            .expect("persist global intent");
+        let base = observed_profile(
+            PROFILE,
+            Vec::new(),
+            Some((SETTING_ID, state.0, state.1)),
+            true,
+        );
+        let observation = Observation {
+            named_profile: Lookup::Found(base.clone()),
+            path_profiles: HashMap::new(),
+            base_profile: Lookup::Found(base),
+        };
+
+        recover_with(&storage, &observation).expect("status drift must be marked as a conflict");
+
+        let pending = storage
+            .list_pending_nvapi_operations()
+            .expect("pending operations");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].phase, "conflict");
+    }
 }

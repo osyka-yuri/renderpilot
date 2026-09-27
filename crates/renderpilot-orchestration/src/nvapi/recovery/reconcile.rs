@@ -7,9 +7,10 @@ use renderpilot_storage_sqlite::{
 use serde_json::Value;
 
 use super::receipts::{
-    composition_json, composition_matches_except_setting, created_profile_matches, found_path,
-    parse_snapshot, path_equal, path_lookup, profile_receipts, setting_state,
-    settings_match_before, string, unsigned, witness_for_path, witness_json_for_path,
+    composition_json, composition_matches_except_setting, created_profile_matches,
+    effective_setting_witness_json, exact_owned_lifecycle_witness_for_path,
+    exact_owned_lifecycle_witness_json_for_path, found_path, parse_snapshot, path_equal,
+    path_lookup, profile_receipts, setting_state, settings_match_before, string, unsigned,
 };
 use super::{Lookup, Observation, ObservedProfile};
 pub(super) fn reconcile_row(
@@ -61,7 +62,7 @@ fn reconcile_create(
         (Lookup::Found(named), Lookup::Found(by_path))
             if created_profile_matches(named, by_path, profile_name, path) =>
         {
-            let witness = witness_for_path(by_path, path);
+            let witness = exact_owned_lifecycle_witness_for_path(by_path, path);
             let Some(witness) = witness else {
                 return mark_conflict(
                     storage,
@@ -121,7 +122,8 @@ fn reconcile_delete(
     if named.identity.name == profile_name
         && !named.identity.is_predefined
         && by_path.identity.name == profile_name
-        && witness_json_for_path(by_path, path).as_deref() == Some(expected_witness)
+        && exact_owned_lifecycle_witness_json_for_path(by_path, path).as_deref()
+            == Some(expected_witness)
         && composition_json(named).as_deref() == Some(expected_composition)
     {
         storage.cancel_nvapi_operation(&row.op_id)
@@ -191,7 +193,8 @@ fn reconcile_move(
         path_lookup(observation, old_path),
         Lookup::Found(by_old_path)
             if by_old_path.identity == named.identity
-                && witness_json_for_path(by_old_path, old_path).as_deref() == Some(old_witness)
+                && exact_owned_lifecycle_witness_json_for_path(by_old_path, old_path).as_deref()
+                    == Some(old_witness)
     );
     let old_is_exact = named.applications.len() == 1
         && path_equal(&named.applications[0].app_name, old_path)
@@ -206,7 +209,7 @@ fn reconcile_move(
         && settings_match_before(named, before)
         && matches!(path_lookup(observation, new_path), Lookup::Found(profile)
             if profile.identity.name == profile_name
-                && witness_for_path(profile, new_path).is_some());
+                && exact_owned_lifecycle_witness_for_path(profile, new_path).is_some());
     if new_is_exact {
         match path_lookup(observation, old_path) {
             Lookup::Missing => {}
@@ -237,7 +240,7 @@ fn reconcile_move(
                 "moved profile lost its exact destination application witness",
             );
         };
-        let Some(witness) = witness_for_path(by_path, new_path) else {
+        let Some(witness) = exact_owned_lifecycle_witness_for_path(by_path, new_path) else {
             return mark_conflict(
                 storage,
                 row,
@@ -277,6 +280,11 @@ fn reconcile_setting(
     ) else {
         return mark_conflict(storage, row, "setting receipt is incomplete");
     };
+    let Some(recorded_profile_status) =
+        storage.get_nvapi_target_profile_is_predefined(target_id)?
+    else {
+        return mark_conflict(storage, row, "setting profile identity receipt is missing");
+    };
     let (profile, observed) = if row.game_id.is_none() {
         let Lookup::Found(profile) = &observation.base_profile else {
             return classify_unresolved(storage, row, observation, "global setting");
@@ -288,7 +296,10 @@ fn reconcile_setting(
                 "global setting observation omitted its explicit value",
             );
         };
-        if observed_id != setting_id || profile.identity.name != target_id {
+        if observed_id != setting_id
+            || profile.identity.name != target_id
+            || profile.identity.is_predefined != recorded_profile_status
+        {
             return mark_conflict(
                 storage,
                 row,
@@ -315,16 +326,19 @@ fn reconcile_setting(
             );
         };
         let recorded_witness = storage.get_nvapi_application_witness(target_id, path)?;
+        let observed_witness = effective_setting_witness_json(profile);
         if observed_id != setting_id
             || profile.identity.name != target_id
-            || recorded_witness.as_deref().is_none_or(|recorded| {
-                witness_json_for_path(profile, path).as_deref() != Some(recorded)
-            })
+            || profile.identity.is_predefined != recorded_profile_status
+            || !matches!(
+                (recorded_witness.as_deref(), observed_witness.as_deref()),
+                (Some(recorded), Some(observed)) if !recorded.is_empty() && recorded == observed
+            )
         {
             return mark_conflict(
                 storage,
                 row,
-                "game profile or full-path witness changed during pending setting recovery",
+                "game profile identity or full-path lookup witness changed during pending setting recovery",
             );
         }
         (profile, (present, value))

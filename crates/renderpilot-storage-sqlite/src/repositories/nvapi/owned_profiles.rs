@@ -11,6 +11,33 @@ use crate::{
     error::{storage_context, storage_error},
 };
 impl SqliteStorage {
+    /// Durable `is_predefined` value recorded for this DRS target. Returns
+    /// `None` if its identity receipt is absent; this does not query the driver.
+    pub fn get_nvapi_target_profile_is_predefined(
+        &self,
+        target_id: &str,
+    ) -> AppResult<Option<bool>> {
+        self.with_connection(|connection| {
+            let recorded: Option<i32> = connection
+                .query_row(
+                    "SELECT profile_is_predefined FROM nvapi_drs_targets
+                      WHERE target_id = ?1 AND profile_name = ?1",
+                    [target_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(storage_error)?;
+            match recorded {
+                Some(0) => Ok(Some(false)),
+                Some(1) => Ok(Some(true)),
+                None => Ok(None),
+                Some(_) => Err(renderpilot_application::AppError::storage_failed(
+                    "invalid recorded NVIDIA profile status",
+                )),
+            }
+        })
+    }
+
     /// Returns RenderPilot's owned profile record for one game, if present.
     pub fn get_nvapi_owned_profile(
         &self,
