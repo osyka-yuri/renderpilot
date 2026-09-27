@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.14.1] - 2026-09-27
+
+### Fixed
+
+- **NVIDIA game settings**: Fixed an error that blocked changes when an existing NVIDIA profile listed the game's executable by filename rather than full path. Settings can now be changed or restored for these profiles, while RenderPilot still checks that it is acting on the intended profile.
+
 ## [1.14.0] - 2026-09-26
 
 ### Added
