@@ -5,7 +5,9 @@ export {
   type ExclusiveAddonKind,
 } from './addon-kind';
 export {
+  d3d12ExecutableActionIdentity,
   isD3d12ExecutableMutationAction,
+  uniqueD3d12ExecutableMutationActions,
   type D3d12ExecutableAction,
   type D3d12ExecutableMutationAction,
 } from './d3d12-executable-action';

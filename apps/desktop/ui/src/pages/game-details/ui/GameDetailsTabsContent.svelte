@@ -1,11 +1,5 @@
 <script lang="ts">
-  import type {
-    GameCandidateGroup,
-    GameDetails,
-    GameFileSafetyAssessment,
-    GameLibraryComponent,
-  } from '@entities/game';
-  import { GameFileSafetyRow } from '@entities/game';
+  import type { GameCandidateGroup, GameDetails, GameLibraryComponent } from '@entities/game';
   import type { SettingFamily } from '@features/nvapi-settings';
   import { LumaCard } from '@features/luma';
   import { OptiScalerCard } from '@features/optiscaler';
@@ -36,12 +30,12 @@
   type Props = {
     details: GameDetails;
     gameId: string;
+    installPath: string;
     profile: NvapiProfileContext;
     onOpenGameDetails: (gameId: string) => void | Promise<void>;
     onRecoveryDeleteComplete: () => void;
     vendorTabs: readonly VendorTab[];
     hasAddonsTab: boolean;
-    assessment: GameFileSafetyAssessment | null;
     nvidia: NvidiaDriverContext;
     busy: boolean;
     exclusiveBusy: boolean;
@@ -63,12 +57,12 @@
   const {
     details,
     gameId,
+    installPath,
     profile,
     onOpenGameDetails,
     onRecoveryDeleteComplete,
     vendorTabs,
     hasAddonsTab,
-    assessment,
     nvidia,
     busy,
     exclusiveBusy,
@@ -124,8 +118,6 @@
     />
   {/if}
 
-  <GameFileSafetyRow {assessment} />
-
   {#each vendorTabs as tab (tab.key)}
     <TabsContent value={tab.key} class="mt-0 w-full min-w-0">
       <div class="grid min-w-0 gap-3">
@@ -150,6 +142,7 @@
             {#if dlssCard}
               <DlssComponentCard
                 {gameId}
+                {installPath}
                 {component}
                 {group}
                 family={dlssCard.family}
@@ -161,7 +154,7 @@
                 {onRollback}
               />
             {:else}
-              <VendorComponentCard {component} {group} {busy} {onSwap} {onRollback} />
+              <VendorComponentCard {component} {group} {installPath} {busy} {onSwap} {onRollback} />
             {/if}
           {/each}
 
@@ -183,7 +176,7 @@
         {:else}
           {#each tab.components as component (component.id)}
             {@const group = getCandidateGroup(component.id)}
-            <VendorComponentCard {component} {group} {busy} {onSwap} {onRollback} />
+            <VendorComponentCard {component} {group} {installPath} {busy} {onSwap} {onRollback} />
           {/each}
         {/if}
       </div>

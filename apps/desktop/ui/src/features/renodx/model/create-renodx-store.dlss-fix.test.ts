@@ -5,6 +5,7 @@ vi.mock('@shared/notifications', () => ({
 }));
 
 import { createRenoDxStore } from './create-renodx-store.svelte';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 import type { DlssFixAvailability, RenoDxUpdateReport } from './types';
 import {
   DLSS_FIX_INSTALLABLE,
@@ -19,6 +20,107 @@ import {
 } from './renodx-store-test-fixtures';
 
 describe('createRenoDxStore', () => {
+  it('skips unavailable DLSS-Fix actions before requesting safety tokens', async () => {
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'unused' }));
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+      dlssFixAvailability: vi.fn(() => Promise.resolve(DLSS_FIX_UNAVAILABLE)),
+    });
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+    await store.load('steam:1091500');
+
+    await expect(store.installDlssFix('steam:1091500')).resolves.toBe('skipped');
+    await expect(store.updateDlssFix('steam:1091500')).resolves.toBe('skipped');
+
+    expect(requireSafetyTokens).not.toHaveBeenCalled();
+    expect(api.installDlssFix).not.toHaveBeenCalled();
+    expect(api.updateDlssFix).not.toHaveBeenCalled();
+  });
+
+  it('does not capture safety tokens for a DLSS-Fix action while another mutation is running', async () => {
+    const pendingUpdate = Promise.withResolvers<typeof INSTALLED_WITH_DLSS_FIX>();
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'game-token' }));
+    const api = fakeApi({
+      getAvailability: vi.fn(() =>
+        Promise.resolve({ ...INSTALLED, state: INSTALLED_WITH_DLSS_FIX }),
+      ),
+      checkUpdate: vi.fn(() =>
+        Promise.resolve({
+          addon: 'current',
+          host: 'current',
+          dlssFix: 'unknown_needs_validation',
+          overall: 'current',
+        } as RenoDxUpdateReport),
+      ),
+      dlssFixAvailability: vi.fn(() => Promise.resolve(DLSS_FIX_NEEDS_REPAIR)),
+      updateDlssFix: vi.fn(() => pendingUpdate.promise),
+    });
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+    await store.load('steam:1091500');
+
+    const firstUpdate = store.updateDlssFix('steam:1091500');
+    await vi.waitFor(() => {
+      expect(api.updateDlssFix).toHaveBeenCalledOnce();
+    });
+    await expect(store.updateDlssFix('steam:1091500')).resolves.toBe('skipped');
+
+    expect(requireSafetyTokens).toHaveBeenCalledOnce();
+
+    pendingUpdate.resolve(INSTALLED_WITH_DLSS_FIX);
+    await expect(firstUpdate).resolves.toBe('ok');
+  });
+
+  it('claims the DLSS-Fix mutation slot synchronously without a safety gate', async () => {
+    const pendingUpdate = Promise.withResolvers<typeof INSTALLED_WITH_DLSS_FIX>();
+    const api = fakeApi({
+      getAvailability: vi.fn(() =>
+        Promise.resolve({ ...INSTALLED, state: INSTALLED_WITH_DLSS_FIX }),
+      ),
+      checkUpdate: vi.fn(() =>
+        Promise.resolve({
+          addon: 'current',
+          host: 'current',
+          dlssFix: 'unknown_needs_validation',
+          overall: 'current',
+        } as RenoDxUpdateReport),
+      ),
+      dlssFixAvailability: vi.fn(() => Promise.resolve(DLSS_FIX_NEEDS_REPAIR)),
+      updateDlssFix: vi.fn(() => pendingUpdate.promise),
+    });
+    const store = createRenoDxStore({ api });
+    await store.load('steam:1091500');
+
+    const update = store.updateDlssFix('steam:1091500');
+
+    expect(store.busy).toBe(true);
+    expect(api.updateDlssFix).toHaveBeenCalledOnce();
+    await expect(store.uninstall('steam:1091500')).resolves.toBe('skipped');
+
+    pendingUpdate.resolve(INSTALLED_WITH_DLSS_FIX);
+    await expect(update).resolves.toBe('ok');
+  });
+
+  it('reports safety context failures without starting the DLSS-Fix mutation', async () => {
+    vi.mocked(publishPresentedErrorNotification).mockClear();
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+      dlssFixAvailability: vi.fn(() => Promise.resolve(DLSS_FIX_INSTALLABLE)),
+    });
+    const store = createRenoDxStore({
+      api,
+      requireSafetyTokens: vi.fn(() => Promise.reject(failure)),
+    });
+    await store.load('steam:1091500');
+
+    await expect(store.installDlssFix('steam:1091500')).resolves.toBe('failed');
+
+    expect(api.installDlssFix).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).toHaveBeenCalledOnce();
+  });
+
   it('installDlssFix() preserves the install presentation when the backend fails', async () => {
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),

@@ -4,6 +4,9 @@ import type { SwapPlan } from '@entities/operation';
 import type { D3d12ExecutableAction } from '@shared/model';
 
 import { prepareBulkD3d12Swaps, prepareD3d12Swap } from './prepare-d3d12-operation';
+import { d3d12PlanFingerprint } from './swap-request';
+
+const PLAN_FINGERPRINT = d3d12PlanFingerprint(null, null);
 
 describe('D3D12 operation preparation', () => {
   it('returns the fresh action and canonical swap token', async () => {
@@ -36,6 +39,7 @@ describe('D3D12 operation preparation', () => {
         artifactId: 'd3d12-artifact',
         isDownloaded: false,
       },
+      planFingerprint: PLAN_FINGERPRINT,
     };
 
     const prepared = await prepareBulkD3d12Swaps('game', [nonD3d, d3d], deps);
@@ -44,10 +48,12 @@ describe('D3D12 operation preparation', () => {
     expect(prepared.kind).toBe('ready');
     if (prepared.kind === 'ready') {
       expect(prepared.value[0]).toEqual({
+        kind: 'direct',
         request: nonD3d.target,
         d3d12ExecutableAction: null,
       });
       expect(prepared.value[1]?.request.confirmationToken).toBe('fresh-swap-token');
+      expect(prepared.value[1]?.planFingerprint).toBe(PLAN_FINGERPRINT);
     }
   });
 
@@ -69,6 +75,7 @@ describe('D3D12 operation preparation', () => {
         artifactId: 'd3d12-artifact',
         isDownloaded: true,
       },
+      planFingerprint: PLAN_FINGERPRINT,
     };
 
     const preparedBatch = await prepareBulkD3d12Swaps('game', [item], deps);
@@ -94,6 +101,7 @@ describe('D3D12 operation preparation', () => {
         artifactId: `${componentId}-artifact`,
         isDownloaded: false,
       },
+      planFingerprint: PLAN_FINGERPRINT,
     }));
 
     await expect(prepareBulkD3d12Swaps('game', items, { planSwap })).rejects.toThrow(
@@ -126,6 +134,7 @@ describe('D3D12 operation preparation', () => {
         artifactId: `${componentId}-artifact`,
         isDownloaded: true,
       },
+      planFingerprint: PLAN_FINGERPRINT,
     }));
 
     await expect(prepareBulkD3d12Swaps('game', items, { planSwap })).resolves.toEqual({

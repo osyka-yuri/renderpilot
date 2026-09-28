@@ -21,12 +21,10 @@ type CreateGameAddonsContextOptions = {
   getGameId: () => string | null;
   getCapabilities: () => readonly AddonCapability[];
   onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
-  requireSafetyTokens?: (gameId: string, scope: FileSafetyScope) => Promise<MutationSafetyTokens>;
-  requireInstallSafetyTokens?: (
+  requireSafetyTokens?: (
     gameId: string,
     scope: FileSafetyScope,
   ) => Promise<MutationSafetyTokens | null>;
-  onSafetyContextError?: (error: unknown, scope: FileSafetyScope) => void | Promise<void>;
 };
 
 function normalizeOptionalGameId(gameId: string | null): string | null {
@@ -41,7 +39,6 @@ function normalizeOptionalGameId(gameId: string | null): string | null {
 export function createGameAddonsContext(options: CreateGameAddonsContextOptions) {
   let destroyed = false;
   const requireSafetyTokens = options.requireSafetyTokens;
-  const requireInstallSafetyTokens = options.requireInstallSafetyTokens;
   const gameId = $derived(normalizeOptionalGameId(options.getGameId()));
   const capabilities = $derived(canonicalAddonCapabilities(options.getCapabilities()));
 
@@ -56,10 +53,6 @@ export function createGameAddonsContext(options: CreateGameAddonsContextOptions)
     requireSafetyTokens: requireSafetyTokens
       ? (changedGameId) => requireSafetyTokens(changedGameId, 'game')
       : undefined,
-    requireInstallSafetyTokens: requireInstallSafetyTokens
-      ? (changedGameId) => requireInstallSafetyTokens(changedGameId, 'game')
-      : undefined,
-    onSafetyContextError: (error) => options.onSafetyContextError?.(error, 'game'),
   });
 
   async function invalidateAfterPeerMutation(changedGameId: string): Promise<void> {
@@ -76,16 +69,12 @@ export function createGameAddonsContext(options: CreateGameAddonsContextOptions)
           onExclusivityChange,
           onGameDetailsInvalidate: invalidateAfterPeerMutation,
           requireSafetyTokens: options.requireSafetyTokens,
-          requireInstallSafetyTokens: options.requireInstallSafetyTokens,
-          onSafetyContextError: options.onSafetyContextError,
         }),
       luma: ({ onExclusivityChange }) =>
         createLumaStore({
           onExclusivityChange,
           onGameDetailsInvalidate: invalidateAfterPeerMutation,
           requireSafetyTokens: options.requireSafetyTokens,
-          requireInstallSafetyTokens: options.requireInstallSafetyTokens,
-          onSafetyContextError: (error) => options.onSafetyContextError?.(error, 'game'),
         }),
     },
     {

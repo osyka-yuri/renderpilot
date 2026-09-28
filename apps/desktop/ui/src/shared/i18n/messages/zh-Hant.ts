@@ -254,6 +254,8 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.updateAll.actionCount': '全部更新 ({count})',
   'gameDetails.updateAll.upToDate': '所有穩定版本均為最新',
   'gameDetails.updateAll.partialFailure': '部分更新失敗（{count}）。請檢視詳情後重試。',
+  'gameDetails.updateAll.prepareFailed': '無法準備更新。請重試。',
+  'gameDetails.updateAll.running': '正在準備或套用更新…',
   'gameDetails.updateAll.tooltip': plural('count', {
     other: '將 {count} 個元件更新到最新穩定版本',
   }),
@@ -290,19 +292,16 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.d3d12.action.repair': '必須先修復 EXE',
   'gameDetails.d3d12.action.blocked': '目前狀態下無法套用此 D3D12 版本。',
   'gameDetails.d3d12.action.planPatch': '將套用修補程式：SDK {from} → {to}',
-  'gameDetails.d3d12.action.planRestore': '將還原原始 EXE：SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore': '將還原原始可執行檔：SDK {from} → {to}',
   'gameDetails.d3d12.select.compatible': '與目前 EXE 相容',
   'gameDetails.d3d12.select.changesExecutable': '需要變更 EXE',
   'gameDetails.d3d12.select.unavailable': '無法使用',
-  'gameDetails.d3d12.confirm.title': '確認變更 EXE',
-  'gameDetails.d3d12.confirm.description': 'RenderPilot 將變更遊戲執行檔匯出的 D3D12SDKVersion。',
-  'gameDetails.d3d12.confirm.updateAllDescription':
-    '這些更新需要將所列的遊戲 EXE 切換至其他 D3D12 SDK 版本系列。確認前不會下載或變更任何內容。',
+  'gameDetails.d3d12.confirm.title': '變更遊戲執行檔',
   'gameDetails.d3d12.confirm.backup': '備份路徑：{path}',
-  'gameDetails.d3d12.confirm.backupWillCreate': '變更前，將在以下位置建立原始 EXE 的備份：{path}',
-  'gameDetails.d3d12.confirm.backupExists': '原始 EXE 已儲存在：{path}。此副本不會被覆寫。',
+  'gameDetails.d3d12.confirm.backupWillCreate': '將建立用於復原的備份：{path}',
+  'gameDetails.d3d12.confirm.backupExists': '用於復原的備份已存在：{path}。不會覆寫該備份。',
   'gameDetails.d3d12.confirm.signatureWarning':
-    '變更後，EXE 的數位簽章可能被視為無效，完整性檢查也可能回報檔案已被修改。完全復原 D3D12 時，RenderPilot 將還原原始 EXE。',
+    '套用修補程式後，檔案的數位簽章可能失效，完整性檢查可能提示檔案已遭修改。',
   'gameDetails.d3d12.confirm.accept': '變更',
   'gameDetails.d3d12.executableLockedTitle': 'EXE 選擇已鎖定',
   'gameDetails.d3d12.executableLocked': '如需選擇其他 EXE，請完全復原 D3D12 元件。',
@@ -783,14 +782,16 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.renodx.attributionLink': '檢視專案',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.fileSafety.generic': '修改多人遊戲檔案可能導致帳號受限或停權。',
-  'gameDetails.fileSafety.detectedOne': '偵測到 {engine}。修改遊戲檔案可能導致帳號受限或停權。',
-  'gameDetails.fileSafety.detectedMany':
-    '偵測到反作弊：{engines}。修改遊戲檔案可能導致帳號受限或停權。',
-  'gameDetails.fileSafety.loadError': '無法檢查檔案修改風險',
-  'gameDetails.fileSafety.installConfirmTitle': '要在此遊戲中安裝附加元件嗎？',
-  'gameDetails.fileSafety.installConfirmBody':
-    '偵測到反作弊系統。安裝附加元件會修改遊戲資料夾中的檔案。',
-  'gameDetails.fileSafety.installConfirmAction': '安裝',
+  'gameDetails.fileSafety.limitedDetail': '檢查不完整，部分反作弊標記可能未被找到。',
+  'gameDetails.fileSafety.detectedEngines': '找到反作弊標記',
+  'gameDetails.fileSafety.confirmTitle': '確認變更遊戲檔案',
+  'gameDetails.fileSafety.confirmChangeAction': '確認變更',
+  'gameDetails.fileSafety.confirmExePatchAction': '變更',
+  'gameDetails.fileSafety.confirmExeRestoreAction': '還原',
+  'gameDetails.fileSafety.confirmExeMixedAction': '變更並還原',
+  'gameDetails.fileSafety.skipGeneralRiskConfirmation': '不再要求確認一般風險',
+  'gameDetails.fileSafety.preferenceSaveFailed':
+    '無法儲存此偏好設定。下次啟動時可能會再次顯示此警告。',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     '此遊戲已安裝 {installedAddon} — 請先解除安裝它，再安裝 {blockedAddon}。',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':

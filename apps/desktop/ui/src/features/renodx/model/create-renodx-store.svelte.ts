@@ -4,11 +4,15 @@ import {
   createAddonStore,
   hostSnapshotApi,
   mergeAddonApis,
+  requestMutationSafetyTokens,
   type MatchConfidence,
+  type MutationSafetyCapture,
   type ReshadeChannel,
   type MutationSafetyTokens,
   type AddonMutationResult,
 } from '@entities/addon';
+import { t } from '@shared/i18n';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 
 import { renodxApi, type RenoDxApi } from '../api/desktop';
 import {
@@ -45,15 +49,7 @@ export type RenoDxStoreOptions = {
   requireSafetyTokens?: (
     gameId: string,
     scope: 'game' | 'game_and_shared',
-  ) => Promise<MutationSafetyTokens>;
-  requireInstallSafetyTokens?: (
-    gameId: string,
-    scope: 'game' | 'game_and_shared',
   ) => Promise<MutationSafetyTokens | null>;
-  onSafetyContextError?: (
-    error: unknown,
-    scope: 'game' | 'game_and_shared',
-  ) => void | Promise<void>;
 };
 
 /**
@@ -157,11 +153,6 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     },
     messages: { loadFailed: 'addon.availability.loadFailed' },
     onExclusivityChange,
-    onMutationError: (error, scope) => {
-      if (requireSafetyTokens) {
-        void options.onSafetyContextError?.(error, scope);
-      }
-    },
     postMutationProbe: 'never',
     applyLoadReport: (report) => {
       applyAvailabilitySnapshot(report, 'resetSelection');
@@ -297,7 +288,6 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       };
     },
     requireSafetyTokens,
-    requireInstallSafetyTokens: options.requireInstallSafetyTokens,
     afterInstallLikeCommit: companion.afterInstallLikeCommit,
     afterCapabilityCommit: companion.afterCapabilityCommit,
   });
@@ -305,6 +295,8 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     api,
     core,
     requireSafetyTokens,
+    getPrimaryAction: () =>
+      dlssFix.kind === 'component' ? (dlssFix.primaryAction?.kind ?? null) : null,
     afterInstallLikeCommit: companion.afterInstallLikeCommit,
   });
 
@@ -314,17 +306,31 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
 
   async function applyEngineConfig(gameId: string): Promise<AddonMutationResult> {
     const apply = api.applyEngineConfig;
-    if (!apply) {
+    if (!apply || core.busy) {
       return 'skipped';
     }
-    return core.runSidecarMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, 'game');
-        return tokens ? apply(gameId, tokens.gameContextToken) : apply(gameId);
-      },
-      { errorKey: 'gameDetails.renodx.engineConfigApplyError', safetyScope: 'game' },
-    );
+    const runApply = (tokens?: MutationSafetyTokens) =>
+      core.runSidecarMutation(
+        gameId,
+        () => (tokens ? apply(gameId, tokens.gameContextToken) : apply(gameId)),
+        { errorKey: 'gameDetails.renodx.engineConfigApplyError', safetyScope: 'game' },
+      );
+    if (!requireSafetyTokens) {
+      // Claim the sidecar's core busy slot in this turn when no gate exists.
+      return runApply();
+    }
+
+    let safety: MutationSafetyCapture;
+    try {
+      safety = await requestMutationSafetyTokens(requireSafetyTokens, gameId, 'game');
+    } catch (error) {
+      publishPresentedErrorNotification(t('gameDetails.renodx.engineConfigApplyError'), error);
+      return 'failed';
+    }
+    if (safety.kind === 'cancelled') {
+      return 'skipped';
+    }
+    return runApply(safety.tokens);
   }
 
   return mergeAddonApis(
@@ -401,6 +407,10 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       },
       get dlssFix() {
         return dlssFix;
+      },
+      get safetyContextError() {
+        const updateError = mutations.safetyContextError;
+        return updateError === undefined ? core.safetyContextError : updateError;
       },
       load: companion.load,
       retry: companion.retry,

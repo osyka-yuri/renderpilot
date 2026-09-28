@@ -282,6 +282,8 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.updateAll.upToDate': 'すべての安定版は最新です',
   'gameDetails.updateAll.partialFailure':
     '一部の更新に失敗しました（{count}）。詳細を確認して再試行してください。',
+  'gameDetails.updateAll.prepareFailed': '更新を準備できませんでした。もう一度お試しください。',
+  'gameDetails.updateAll.running': '更新を準備または適用しています…',
   'gameDetails.updateAll.tooltip': plural('count', {
     other: '{count} 個のコンポーネントを最新の安定版に更新します',
   }),
@@ -321,22 +323,17 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.d3d12.action.repair': '先に EXE の修復が必要です',
   'gameDetails.d3d12.action.blocked': '現在の状態では、この D3D12 バージョンを適用できません。',
   'gameDetails.d3d12.action.planPatch': 'パッチを適用します: SDK {from} → {to}',
-  'gameDetails.d3d12.action.planRestore': '元の EXE を復元します: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore': '元の実行ファイルを復元します: SDK {from} → {to}',
   'gameDetails.d3d12.select.compatible': '現在の EXE と互換',
   'gameDetails.d3d12.select.changesExecutable': 'EXE の変更が必要',
   'gameDetails.d3d12.select.unavailable': '利用不可',
-  'gameDetails.d3d12.confirm.title': 'EXE の変更を確認',
-  'gameDetails.d3d12.confirm.description':
-    'RenderPilot は実行ファイルの D3D12SDKVersion エクスポートを変更します。',
-  'gameDetails.d3d12.confirm.updateAllDescription':
-    'これらの更新では、表示されたゲーム EXE の D3D12 SDK ラインを切り替える必要があります。確認するまでダウンロードも変更も行いません。',
+  'gameDetails.d3d12.confirm.title': 'ゲーム実行ファイルを変更',
   'gameDetails.d3d12.confirm.backup': 'バックアップ先: {path}',
-  'gameDetails.d3d12.confirm.backupWillCreate':
-    '変更前に元の EXE のバックアップを次の場所へ作成します: {path}',
+  'gameDetails.d3d12.confirm.backupWillCreate': '元に戻すためのバックアップを作成します: {path}',
   'gameDetails.d3d12.confirm.backupExists':
-    '元の EXE はすでに次の場所へ保存されています: {path}。このコピーは上書きされません。',
+    '元に戻すためのバックアップは既にあります: {path}。上書きされません。',
   'gameDetails.d3d12.confirm.signatureWarning':
-    '変更後は EXE のデジタル署名が無効と判断され、整合性チェックでファイルの変更が検出される場合があります。D3D12 を完全にロールバックすると、RenderPilot が元の EXE を復元します。',
+    'パッチ適用後、ファイルのデジタル署名が無効になり、整合性チェックでファイルの変更が報告される可能性があります。',
   'gameDetails.d3d12.confirm.accept': '変更',
   'gameDetails.d3d12.executableLockedTitle': 'EXE の選択はロックされています',
   'gameDetails.d3d12.executableLocked':
@@ -872,15 +869,17 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.fileSafety.generic':
     'マルチプレイヤーゲームのファイル変更は、アカウントの制限や停止につながる可能性があります。',
-  'gameDetails.fileSafety.detectedOne':
-    '{engine}を検出しました。ゲームファイルの変更は、アカウントの制限や停止につながる可能性があります。',
-  'gameDetails.fileSafety.detectedMany':
-    'アンチチートを検出しました: {engines}。ゲームファイルの変更は、アカウントの制限や停止につながる可能性があります。',
-  'gameDetails.fileSafety.loadError': 'ファイル変更のリスクを確認できませんでした',
-  'gameDetails.fileSafety.installConfirmTitle': 'このゲームにアドオンをインストールしますか？',
-  'gameDetails.fileSafety.installConfirmBody':
-    'アンチチートが検出されました。アドオンをインストールするとゲームフォルダー内のファイルが変更されます。',
-  'gameDetails.fileSafety.installConfirmAction': 'インストール',
+  'gameDetails.fileSafety.limitedDetail':
+    '確認は不完全です。一部のアンチチートマーカーが見つかっていない可能性があります。',
+  'gameDetails.fileSafety.detectedEngines': 'アンチチート識別マーカーが見つかりました',
+  'gameDetails.fileSafety.confirmTitle': 'ゲームファイルの変更を確認',
+  'gameDetails.fileSafety.confirmChangeAction': '変更を確認',
+  'gameDetails.fileSafety.confirmExePatchAction': '変更',
+  'gameDetails.fileSafety.confirmExeRestoreAction': '復元',
+  'gameDetails.fileSafety.confirmExeMixedAction': '変更・復元',
+  'gameDetails.fileSafety.skipGeneralRiskConfirmation': '一般的なリスクの確認を今後求めない',
+  'gameDetails.fileSafety.preferenceSaveFailed':
+    'この設定を保存できませんでした。次回起動時に警告が再び表示される場合があります。',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     'このゲームには {installedAddon} がインストールされています — {blockedAddon} をインストールする前にアンインストールしてください。',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':

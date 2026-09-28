@@ -292,6 +292,9 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.updateAll.upToDate': 'Alle stabilen Versionen sind aktuell',
   'gameDetails.updateAll.partialFailure':
     'Einige Updates sind fehlgeschlagen ({count}). Details prüfen und erneut versuchen.',
+  'gameDetails.updateAll.prepareFailed':
+    'Updates konnten nicht vorbereitet werden. Bitte versuche es erneut.',
+  'gameDetails.updateAll.running': 'Updates werden vorbereitet oder ausgeführt…',
   'gameDetails.updateAll.tooltip': plural('count', {
     one: '1 Komponente auf die neueste stabile Version aktualisieren',
     other: '{count} Komponenten jeweils auf die neueste stabile Version aktualisieren',
@@ -335,22 +338,18 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Diese D3D12-Version kann im aktuellen Zustand nicht angewendet werden.',
   'gameDetails.d3d12.action.planPatch': 'Patch wird angewendet: SDK {from} → {to}',
   'gameDetails.d3d12.action.planRestore':
-    'Die Original-EXE wird wiederhergestellt: SDK {from} → {to}',
+    'Die ursprüngliche ausführbare Datei wird wiederhergestellt: SDK {from} → {to}',
   'gameDetails.d3d12.select.compatible': 'Mit der aktuellen EXE kompatibel',
   'gameDetails.d3d12.select.changesExecutable': 'EXE-Änderung erforderlich',
   'gameDetails.d3d12.select.unavailable': 'Nicht verfügbar',
-  'gameDetails.d3d12.confirm.title': 'EXE-Änderung bestätigen',
-  'gameDetails.d3d12.confirm.description':
-    'RenderPilot ändert den D3D12SDKVersion-Export der Spiel-EXE.',
-  'gameDetails.d3d12.confirm.updateAllDescription':
-    'Für diese Updates müssen die aufgeführten Spiel-EXEs ihre D3D12-SDK-Linie wechseln. Vor der Bestätigung wird nichts heruntergeladen oder geändert.',
+  'gameDetails.d3d12.confirm.title': 'Spielprogrammdatei ändern',
   'gameDetails.d3d12.confirm.backup': 'Sicherungspfad: {path}',
   'gameDetails.d3d12.confirm.backupWillCreate':
-    'Vor der Änderung wird eine Sicherungskopie der ursprünglichen EXE erstellt: {path}',
+    'Für die Rücknahme der Änderung wird eine Sicherungskopie erstellt: {path}',
   'gameDetails.d3d12.confirm.backupExists':
-    'Die Original-EXE ist bereits hier gespeichert: {path}. Diese Kopie wird nicht überschrieben.',
+    'Eine Sicherungskopie für die Rücknahme ist bereits vorhanden: {path}. Sie wird nicht überschrieben.',
   'gameDetails.d3d12.confirm.signatureWarning':
-    'Nach der Änderung kann die digitale Signatur der EXE als ungültig gelten und eine Integritätsprüfung die Datei als geändert melden. Bei einem vollständigen Rollback von D3D12 stellt RenderPilot die ursprüngliche EXE wieder her.',
+    'Nach dem Patch kann die digitale Signatur der Datei ungültig werden; Integritätsprüfungen können melden, dass die Datei verändert wurde.',
   'gameDetails.d3d12.confirm.accept': 'Ändern',
   'gameDetails.d3d12.executableLockedTitle': 'EXE-Auswahl gesperrt',
   'gameDetails.d3d12.executableLocked':
@@ -914,15 +913,18 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.fileSafety.generic':
     'Änderungen an Dateien von Mehrspieler-Spielen können zu Kontobeschränkungen oder einer Sperre führen.',
-  'gameDetails.fileSafety.detectedOne':
-    '{engine} erkannt. Änderungen an Spieldateien können zu Kontobeschränkungen oder einer Sperre führen.',
-  'gameDetails.fileSafety.detectedMany':
-    'Anti-Cheat erkannt: {engines}. Änderungen an Spieldateien können zu Kontobeschränkungen oder einer Sperre führen.',
-  'gameDetails.fileSafety.loadError': 'Risiken von Dateiänderungen konnten nicht geprüft werden',
-  'gameDetails.fileSafety.installConfirmTitle': 'Add-on in diesem Spiel installieren?',
-  'gameDetails.fileSafety.installConfirmBody':
-    'Ein Anti-Cheat-System wurde erkannt. Die Installation eines Add-ons ändert Dateien im Spielordner.',
-  'gameDetails.fileSafety.installConfirmAction': 'Installieren',
+  'gameDetails.fileSafety.limitedDetail':
+    'Die Prüfung war unvollständig; einige Anti-Cheat-Marker wurden möglicherweise nicht gefunden.',
+  'gameDetails.fileSafety.detectedEngines': 'Anti-Cheat-Marker gefunden',
+  'gameDetails.fileSafety.confirmTitle': 'Änderungen an Spieldateien bestätigen',
+  'gameDetails.fileSafety.confirmChangeAction': 'Änderung bestätigen',
+  'gameDetails.fileSafety.confirmExePatchAction': 'Ändern',
+  'gameDetails.fileSafety.confirmExeRestoreAction': 'Wiederherstellen',
+  'gameDetails.fileSafety.confirmExeMixedAction': 'Ändern und wiederherstellen',
+  'gameDetails.fileSafety.skipGeneralRiskConfirmation':
+    'Allgemeines Risiko künftig nicht erneut bestätigen',
+  'gameDetails.fileSafety.preferenceSaveFailed':
+    'Diese Einstellung konnte nicht gespeichert werden. Die Warnung kann beim nächsten Start erneut erscheinen.',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     '{installedAddon} ist für dieses Spiel installiert — deinstallieren Sie es, bevor Sie {blockedAddon} installieren.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':

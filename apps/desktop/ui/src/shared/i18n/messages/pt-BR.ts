@@ -325,6 +325,9 @@ export const ptBr = defineLocalizedCatalog<'pt-BR', EnglishCatalog>()({
   'gameDetails.updateAll.upToDate': 'Todas as versões estáveis estão atualizadas',
   'gameDetails.updateAll.partialFailure':
     'Algumas atualizações falharam ({count}). Confira os detalhes e tente novamente.',
+  'gameDetails.updateAll.prepareFailed':
+    'Não foi possível preparar as atualizações. Tente novamente.',
+  'gameDetails.updateAll.running': 'Preparando ou aplicando atualizações…',
   'gameDetails.updateAll.tooltip': plural('count', {
     one: 'Atualizar 1 componente para a versão estável mais recente',
     many: 'Atualizar {count} componentes para as versões estáveis mais recentes',
@@ -367,22 +370,19 @@ export const ptBr = defineLocalizedCatalog<'pt-BR', EnglishCatalog>()({
   'gameDetails.d3d12.action.repair': 'O EXE precisa ser reparado primeiro',
   'gameDetails.d3d12.action.blocked': 'Esta versão do D3D12 não pode ser aplicada no estado atual.',
   'gameDetails.d3d12.action.planPatch': 'Será aplicada uma modificação: SDK {from} → {to}',
-  'gameDetails.d3d12.action.planRestore': 'O EXE original será restaurado: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore':
+    'O executável original será restaurado: SDK {from} → {to}',
   'gameDetails.d3d12.select.compatible': 'Compatível com o EXE atual',
   'gameDetails.d3d12.select.changesExecutable': 'Exige alteração do EXE',
   'gameDetails.d3d12.select.unavailable': 'Indisponível',
-  'gameDetails.d3d12.confirm.title': 'Confirmar alteração do EXE',
-  'gameDetails.d3d12.confirm.description':
-    'O RenderPilot alterará a exportação D3D12SDKVersion do executável.',
-  'gameDetails.d3d12.confirm.updateAllDescription':
-    'Estas atualizações exigem a alteração da linha do SDK do D3D12 nos executáveis indicados. Nada será baixado nem alterado até você confirmar.',
+  'gameDetails.d3d12.confirm.title': 'Alterar o executável do jogo',
   'gameDetails.d3d12.confirm.backup': 'Caminho do backup: {path}',
   'gameDetails.d3d12.confirm.backupWillCreate':
-    'Antes da alteração, será criado um backup do EXE original em: {path}',
+    'Um backup para reverter a alteração será criado em: {path}',
   'gameDetails.d3d12.confirm.backupExists':
-    'O EXE original já está salvo em: {path}. Esse backup não será substituído.',
+    'Já existe um backup para reverter a alteração em: {path}. Ele não será substituído.',
   'gameDetails.d3d12.confirm.signatureWarning':
-    'Após a alteração, a assinatura digital do EXE poderá ser considerada inválida e as verificações de integridade poderão detectar que o arquivo foi modificado. Ao reverter completamente o D3D12, o RenderPilot restaurará o EXE original.',
+    'Após o patch, a assinatura digital do arquivo pode se tornar inválida, e as verificações de integridade podem indicar que o arquivo foi alterado.',
   'gameDetails.d3d12.confirm.accept': 'Alterar',
   'gameDetails.d3d12.executableLockedTitle': 'Seleção de EXE bloqueada',
   'gameDetails.d3d12.executableLocked':
@@ -876,16 +876,17 @@ export const ptBr = defineLocalizedCatalog<'pt-BR', EnglishCatalog>()({
     'Arquivos de {installedAddon} foram encontrados no disco para este jogo — remova-os antes de instalar {blockedAddon}.',
   'gameDetails.fileSafety.generic':
     'Modificar arquivos de jogos multijogador pode causar restrições ou o bloqueio da conta.',
-  'gameDetails.fileSafety.detectedOne':
-    '{engine} foi detectado. Modificar arquivos do jogo pode causar restrições ou o bloqueio da conta.',
-  'gameDetails.fileSafety.detectedMany':
-    'Anti-cheat detectado: {engines}. Modificar arquivos do jogo pode causar restrições ou o bloqueio da conta.',
-  'gameDetails.fileSafety.loadError':
-    'Não foi possível verificar os riscos da alteração de arquivos',
-  'gameDetails.fileSafety.installConfirmTitle': 'Instalar complemento neste jogo?',
-  'gameDetails.fileSafety.installConfirmBody':
-    'Um sistema anti-cheat foi detectado. Instalar um complemento modifica arquivos no diretório do jogo.',
-  'gameDetails.fileSafety.installConfirmAction': 'Instalar',
+  'gameDetails.fileSafety.limitedDetail':
+    'A verificação foi incompleta; alguns marcadores anti-cheat podem não ter sido encontrados.',
+  'gameDetails.fileSafety.detectedEngines': 'Marcadores de anti-cheat encontrados',
+  'gameDetails.fileSafety.confirmTitle': 'Confirmar alterações nos arquivos do jogo',
+  'gameDetails.fileSafety.confirmChangeAction': 'Confirmar alteração',
+  'gameDetails.fileSafety.confirmExePatchAction': 'Alterar',
+  'gameDetails.fileSafety.confirmExeRestoreAction': 'Restaurar',
+  'gameDetails.fileSafety.confirmExeMixedAction': 'Alterar e restaurar',
+  'gameDetails.fileSafety.skipGeneralRiskConfirmation': 'Não pedir nova confirmação do risco geral',
+  'gameDetails.fileSafety.preferenceSaveFailed':
+    'Não foi possível salvar esta preferência. O aviso pode aparecer novamente na próxima inicialização.',
   'addon.availability.loadFailed': 'Não foi possível verificar',
   'addon.availability.retry': 'Tentar novamente',
   'addon.availability.checking': 'Verificando…',

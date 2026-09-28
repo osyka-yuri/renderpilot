@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { areSameGameIds, presentFileSafetyMessage, type GameDetails } from '@entities/game';
+  import { areSameGameIds, type GameDetails } from '@entities/game';
   import {
     createGameDetailsTabs,
     DLSS_FAMILY_CARDS,
@@ -10,7 +10,10 @@
   import { track } from '@shared/reactivity';
   import { DesktopCommandError, isFileSafetyContextError, reportClientError } from '@shared/errors';
   import { sumDownloadFractions } from '@shared/lib';
-  import { publishPresentedErrorNotification } from '@shared/notifications';
+  import {
+    publishCommandErrorNotification,
+    publishPresentedErrorNotification,
+  } from '@shared/notifications';
   import type {
     SwapHandler,
     RollbackHandler,
@@ -22,17 +25,23 @@
   import { createGameAddonsContext } from '../model/create-game-addons-context.svelte';
   import { createFileSafetyContext } from '../model/create-file-safety-context.svelte';
   import type { FileSafetyScope } from '../model/create-file-safety-context.svelte';
+  import { createMutationConfirmationCoordinator } from '../model/create-mutation-confirmation.svelte';
   import { createUpdateAllWorkflow } from '../model/create-update-all-workflow.svelte';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createGameExecutableContext } from '../model/create-game-executable-context.svelte';
-  import { AddonActionConfirmDialog, type MutationSafetyTokens } from '@entities/addon';
-  import type { SwapRequest } from '../model/swap-request';
+  import type { MutationSafetyTokens } from '@entities/addon';
+  import type { UpdateAllOwner } from '../model/run-update-all';
+  import {
+    d3d12PlanFingerprint,
+    type PreparedSwapPresentation,
+    type SwapRequest,
+  } from '../model/swap-request';
   import { resolveExecutableLockReason } from '../model/game-executable-lock';
-  import D3d12ExecutableConfirmDialog from './D3d12ExecutableConfirmDialog.svelte';
   import DeveloperModeRequirementDialog from './DeveloperModeRequirementDialog.svelte';
   import { onDestroy, untrack } from 'svelte';
   import GameDetailsToolbar from './GameDetailsToolbar.svelte';
   import GameDetailsTabsContent from './GameDetailsTabsContent.svelte';
+  import FileSafetyConfirmationDialog from './FileSafetyConfirmationDialog.svelte';
   import { createNvapiProfileContext } from '../model/create-nvapi-profile-context.svelte';
 
   type Props = {
@@ -68,28 +77,66 @@
   const tabs = $derived(createGameDetailsTabs(details));
   const vendorTabs = $derived(tabs.vendorTabs);
   const gameId = $derived(details?.game.identity.id ?? null);
+  const installPath = $derived(details?.game.install_path ?? null);
   const executableLockReason = $derived(resolveExecutableLockReason(details?.components ?? []));
   // The game's launcher, for add-on launch-argument instructions.
   const launcher = $derived(details?.game.identity.launcher ?? '');
 
-  const fileSafety = createFileSafetyContext({ getGameId: () => gameId });
+  const fileSafety = createFileSafetyContext({
+    getGameId: () => gameId,
+    getInstallPath: () => installPath,
+  });
+  const mutationConfirmation = createMutationConfirmationCoordinator({
+    getGameId: () => gameId,
+    getInstallPath: () => installPath,
+    captureFreshContext: (scope) => fileSafety.captureFreshContext(scope),
+    isCurrentCapture: (captured) => fileSafety.isCurrentCapture(captured),
+    invalidatePendingCapture: () => {
+      fileSafety.invalidatePendingCapture();
+    },
+  });
   // Update All deliberately keeps one captured assessment for every step. A
   // refreshed context is used by the next user action, while this run stops on
   // the stale token instead of silently switching authorization mid-batch.
-  let updateAllSafetyTokens = $state<MutationSafetyTokens | null | undefined>(undefined);
+  let activeUpdateAllCapture = $state.raw<{
+    owner: UpdateAllOwner;
+    scope: FileSafetyScope;
+    tokens: MutationSafetyTokens;
+  } | null>(null);
   let capturingUpdateAllSafety = $state(false);
+
+  function updateAllOwnerMismatch(): DesktopCommandError {
+    return DesktopCommandError.fromDto({ code: 'safety_context_scope_mismatch' });
+  }
 
   async function requirePageSafetyTokens(
     requestedGameId: string,
     scope: FileSafetyScope,
-  ): Promise<MutationSafetyTokens> {
+  ): Promise<MutationSafetyTokens | null> {
+    const activeCapture = activeUpdateAllCapture;
+    if (activeCapture) {
+      const { owner, tokens } = activeCapture;
+      if (
+        !gameId ||
+        !areSameGameIds(requestedGameId, gameId) ||
+        !areSameGameIds(owner.gameId, requestedGameId) ||
+        !areSameGameIds(owner.gameId, gameId) ||
+        owner.installPath !== installPath
+      ) {
+        throw updateAllOwnerMismatch();
+      }
+      if (
+        scope === 'game_and_shared' &&
+        (activeCapture.scope !== 'game_and_shared' || !tokens.sharedVulkanContextToken)
+      ) {
+        throw updateAllOwnerMismatch();
+      }
+      return tokens;
+    }
     if (!gameId || !areSameGameIds(requestedGameId, gameId)) {
-      throw DesktopCommandError.fromDto({ code: 'safety_context_scope_mismatch' });
+      return null;
     }
-    if (updateAllSafetyTokens) {
-      return updateAllSafetyTokens;
-    }
-    return fileSafety.requireTokens(scope);
+    return mutationConfirmation.requestTokens({ scope });
   }
 
   const gameAddons = createGameAddonsContext({
@@ -97,13 +144,6 @@
     getCapabilities: () => tabs.addonsTab?.capabilities ?? [],
     onGameDetailsInvalidate: (id) => onGameDetailsInvalidate(id),
     requireSafetyTokens: (id, scope) => requirePageSafetyTokens(id, scope),
-    requireInstallSafetyTokens: async (id, scope) => {
-      if (!gameId || !areSameGameIds(id, gameId)) {
-        throw DesktopCommandError.fromDto({ code: 'safety_context_scope_mismatch' });
-      }
-      return fileSafety.requireInstallTokens(scope);
-    },
-    onSafetyContextError: (error, scope) => fileSafety.refreshForMutationError(error, scope),
   });
   const { renodx, luma, optiscaler } = gameAddons.stores;
 
@@ -116,58 +156,75 @@
 
   const updateAllWorkflow = createUpdateAllWorkflow({
     getGameId: () => gameId,
+    getInstallPath: () => installPath,
     getPlan: () => updatePlan,
     getAddonUpdates: () => gameAddons.addonUpdates,
     hasUpdates: () => !nothingToUpdate,
     isBusy: () => busy || gameAddons.busy,
     onBulkSwap: (items) => handleBulkSwapWithSafety(items),
+    onPreparationError: reportUpdateAllPreparationError,
     onError: reportUpdateAllError,
   });
   const updatingAll = $derived(updateAllWorkflow.updating);
   const planningUpdateAll = $derived(updateAllWorkflow.planning);
-  const updateConfirmOpen = $derived(updateAllWorkflow.confirmationOpen);
-  const preparedUpdateExecutableActions = $derived(updateAllWorkflow.confirmationActions);
+  const preparedUpdateBatch = $derived(updateAllWorkflow.preparedBatch);
   const pendingDownloadIds = $derived(updateAllWorkflow.pendingDownloadIds);
-  let updateAllOwnerGameId: string | null | undefined;
+  let updateAllOwnerKey: string | null | undefined;
+  let updateAllOwnerRevision = 0;
+
+  type CapturedUpdateAllOwner = Readonly<{
+    gameId: string;
+    installPath: string | null;
+    revision: number;
+  }>;
+
+  function captureUpdateAllOwner(): CapturedUpdateAllOwner | null {
+    return gameId ? Object.freeze({ gameId, installPath, revision: updateAllOwnerRevision }) : null;
+  }
+
+  function isCurrentUpdateAllOwner(owner: CapturedUpdateAllOwner): boolean {
+    return (
+      owner.revision === updateAllOwnerRevision &&
+      gameId !== null &&
+      areSameGameIds(gameId, owner.gameId) &&
+      installPath === owner.installPath
+    );
+  }
 
   $effect(() => {
-    const currentGameId = gameId;
-    if (updateAllOwnerGameId === undefined) {
-      updateAllOwnerGameId = currentGameId;
+    const currentOwnerKey = JSON.stringify([gameId, installPath]);
+    if (updateAllOwnerKey === undefined) {
+      updateAllOwnerKey = currentOwnerKey;
       return;
     }
-    if (currentGameId !== updateAllOwnerGameId) {
-      updateAllOwnerGameId = currentGameId;
+    if (currentOwnerKey !== updateAllOwnerKey) {
+      updateAllOwnerKey = currentOwnerKey;
+      updateAllOwnerRevision += 1;
       untrack(() => {
         updateAllWorkflow.invalidatePending();
+        mutationConfirmation.cancel();
       });
     }
   });
 
   onDestroy(() => {
     updateAllWorkflow.destroy();
+    mutationConfirmation.destroy();
     gameAddons.destroy();
     fileSafety.destroy();
     nvidiaProfile.clear();
   });
-  // One game-scoped gate for add-on mutations and Update All.
-  const installConfirmationOpen = $derived(fileSafety.installConfirmation !== null);
-  const installConfirmationWarning = $derived(
-    fileSafety.installConfirmation
-      ? presentFileSafetyMessage({
-          detected_engines: fileSafety.installConfirmation.detectedEngines,
-        })
-      : '',
-  );
+  const safetyConfirmationOpen = $derived(mutationConfirmation.pending !== null);
+  const safetyGateActive = $derived(mutationConfirmation.requesting || safetyConfirmationOpen);
   const exclusiveBusy = $derived(
-    busy || gameAddons.busy || updatingAll || planningUpdateAll || installConfirmationOpen,
+    busy || gameAddons.busy || updatingAll || planningUpdateAll || safetyGateActive,
   );
   const showProgress = $derived(updatingAll && pendingDownloadIds.length > 0);
   const downloadCount = $derived(pendingDownloadIds.length);
   const downloadValue = $derived(showProgress ? sumDownloadFractions(pendingDownloadIds) : 0);
 
-  function updateAllSafetyScope(): FileSafetyScope {
-    const includesRenoDx = gameAddons.addonUpdates.some(({ step }) => step === 'renodx');
+  function updateAllSafetyScope(addonUpdates: typeof gameAddons.addonUpdates): FileSafetyScope {
+    const includesRenoDx = addonUpdates.some(({ step }) => step === 'renodx');
     if (!includesRenoDx) {
       return 'game';
     }
@@ -176,88 +233,202 @@
       : 'game_and_shared';
   }
 
+  async function confirmAndRunPreparedUpdateAll(): Promise<void> {
+    const batch = updateAllWorkflow.preparedBatch;
+    if (!batch) {
+      return;
+    }
+
+    const owner = Object.freeze({ gameId: batch.gameId, installPath: batch.installPath });
+    const scope = updateAllSafetyScope(batch.addonUpdates);
+    const tokens = await mutationConfirmation.requestTokens({
+      scope,
+      actions: updateAllWorkflow.confirmationActions,
+      isCurrent: () =>
+        gameId !== null &&
+        areSameGameIds(gameId, owner.gameId) &&
+        installPath === owner.installPath &&
+        updateAllWorkflow.isCurrentPreparedBatch(batch) &&
+        updateAllSafetyScope(batch.addonUpdates) === scope,
+    });
+    if (!tokens) {
+      updateAllWorkflow.invalidatePending();
+      return;
+    }
+
+    const capture = Object.freeze({ owner, scope, tokens });
+    activeUpdateAllCapture = capture;
+    try {
+      await updateAllWorkflow.confirm();
+    } finally {
+      if (activeUpdateAllCapture === capture) {
+        activeUpdateAllCapture = null;
+      }
+    }
+  }
+
   async function handleUpdateAll(): Promise<void> {
     if (
       !gameId ||
       capturingUpdateAllSafety ||
       updatingAll ||
       planningUpdateAll ||
+      updateAllWorkflow.developerModeOpen ||
+      safetyGateActive ||
       gameAddons.busy ||
       busy ||
       nothingToUpdate
     ) {
       return;
     }
+    const requestOwner = captureUpdateAllOwner();
+    if (!requestOwner) {
+      return;
+    }
     capturingUpdateAllSafety = true;
     try {
-      // Capture one context for the complete batch. Individual steps reuse it,
-      // so a stale token stops the batch instead of switching authorization
-      // halfway through Update All.
-      updateAllSafetyTokens = await fileSafety.requireTokens(updateAllSafetyScope());
+      // Preflight first so the page-owned dialog can show any executable plan
+      // and the current file-risk notice in one confirmation.
       await updateAllWorkflow.start();
+      await confirmAndRunPreparedUpdateAll();
     } catch (error) {
-      reportUpdateAllError(error, true);
+      updateAllWorkflow.invalidatePending();
+      if (isCurrentUpdateAllOwner(requestOwner)) {
+        reportUpdateAllPreparationError(error);
+      }
     } finally {
       capturingUpdateAllSafety = false;
     }
   }
 
-  $effect(() => {
-    const workflowActive =
+  async function retryUpdateAllDeveloperMode(): Promise<void> {
+    if (
+      !updateAllWorkflow.developerModeOpen ||
+      capturingUpdateAllSafety ||
       updatingAll ||
       planningUpdateAll ||
-      updateConfirmOpen ||
-      updateAllWorkflow.developerModeOpen ||
-      updateAllWorkflow.developerModeRetrying;
-    if (!workflowActive && updateAllSafetyTokens !== undefined) {
-      untrack(() => {
-        updateAllSafetyTokens = undefined;
-      });
+      safetyGateActive ||
+      gameAddons.busy ||
+      busy
+    ) {
+      return;
     }
-  });
-
-  async function handleSwapWithSafety(request: Parameters<SwapHandler>[0]): Promise<void> {
+    const requestOwner = captureUpdateAllOwner();
+    if (!requestOwner) {
+      return;
+    }
+    capturingUpdateAllSafety = true;
     try {
-      if (!gameId) {
-        throw DesktopCommandError.fromDto({ code: 'safety_context_missing' });
-      }
-      const tokens = await requirePageSafetyTokens(gameId, 'game');
-      await onSwap({ ...request, gameContextToken: tokens.gameContextToken });
+      await updateAllWorkflow.retryDeveloperMode();
+      await confirmAndRunPreparedUpdateAll();
     } catch (error) {
-      await fileSafety.refreshForMutationError(error, 'game');
-      throw error;
+      updateAllWorkflow.invalidatePending();
+      if (isCurrentUpdateAllOwner(requestOwner)) {
+        reportUpdateAllPreparationError(error);
+      }
+    } finally {
+      capturingUpdateAllSafety = false;
     }
+  }
+
+  function isCurrentSwap(request: SwapRequest, presentation?: PreparedSwapPresentation): boolean {
+    if (!gameId || !installPath || !details || !areSameGameIds(details.game.identity.id, gameId)) {
+      return false;
+    }
+    const component = details.components.find((item) => item.id === request.componentId);
+    const candidate = details.candidate_groups
+      .find((group) => group.component_id === request.componentId)
+      ?.candidates.find((item) => item.artifact_id === request.artifactId);
+    if (!component || !candidate) {
+      return false;
+    }
+    if (!presentation) {
+      return true;
+    }
+    const { owner } = presentation;
+    return (
+      areSameGameIds(owner.gameId, gameId) &&
+      owner.installPath === installPath &&
+      owner.componentId === request.componentId &&
+      owner.artifactId === request.artifactId &&
+      owner.planFingerprint ===
+        d3d12PlanFingerprint(component.d3d12_executable_status, candidate.d3d12_executable_action)
+    );
+  }
+
+  async function handleSwapWithSafety(
+    request: Parameters<SwapHandler>[0],
+    presentation?: PreparedSwapPresentation,
+  ): Promise<void> {
+    if (!gameId) {
+      throw DesktopCommandError.fromDto({ code: 'safety_context_missing' });
+    }
+    const tokens = await mutationConfirmation.requestTokens({
+      scope: 'game',
+      actions: presentation ? [presentation.action] : [],
+      isCurrent: () => isCurrentSwap(request, presentation),
+    });
+    if (!tokens) {
+      return;
+    }
+    await onSwap({ ...request, gameContextToken: tokens.gameContextToken });
   }
 
   async function handleBulkSwapWithSafety(items: readonly SwapRequest[]): Promise<void> {
+    if (!gameId) {
+      throw DesktopCommandError.fromDto({ code: 'safety_context_missing' });
+    }
+    const tokens = await requirePageSafetyTokens(gameId, 'game');
+    if (!tokens) {
+      return;
+    }
+    await onBulkSwap(
+      items.map((item) => ({
+        ...item,
+        gameContextToken: tokens.gameContextToken,
+      })),
+    );
+  }
+
+  async function runStandaloneMutation(mutation: () => Promise<void>): Promise<void> {
     try {
-      if (!gameId) {
-        throw DesktopCommandError.fromDto({ code: 'safety_context_missing' });
-      }
-      const tokens = await requirePageSafetyTokens(gameId, 'game');
-      await onBulkSwap(
-        items.map((item) => ({
-          ...item,
-          gameContextToken: tokens.gameContextToken,
-        })),
-      );
+      await mutation();
     } catch (error) {
-      await fileSafety.refreshForMutationError(error, 'game');
-      throw error;
+      publishCommandErrorNotification(error);
+      reportClientError('game_details_standalone_mutation', error);
     }
   }
 
-  function reportUpdateAllError(error: unknown, notifySafety = false): void {
+  function handleStandaloneSwapWithSafety(
+    request: Parameters<SwapHandler>[0],
+    presentation?: PreparedSwapPresentation,
+  ): Promise<void> {
+    return runStandaloneMutation(() => handleSwapWithSafety(request, presentation));
+  }
+
+  function handleStandaloneBulkSwapWithSafety(items: readonly SwapRequest[]): Promise<void> {
+    return runStandaloneMutation(() => handleBulkSwapWithSafety(items));
+  }
+
+  function reportUpdateAllError(error: unknown): void {
     const failureCount = error instanceof UpdateAllError ? error.failures.length : 1;
+    const primaryFailure = error instanceof UpdateAllError ? error.failures[0] : undefined;
     const primaryError =
       error instanceof UpdateAllError ? (error.failures[0]?.error ?? error) : error;
-    if (notifySafety || !isFileSafetyContextError(primaryError)) {
-      publishPresentedErrorNotification(
-        t('gameDetails.updateAll.partialFailure', { count: failureCount }),
-        primaryError,
-      );
+    if (primaryFailure?.reportedByStore === true && isFileSafetyContextError(primaryError)) {
+      reportClientError('update_all_workflow', primaryError);
+      return;
     }
+    publishPresentedErrorNotification(
+      t('gameDetails.updateAll.partialFailure', { count: failureCount }),
+      primaryError,
+    );
     reportClientError('update_all_workflow', primaryError);
+  }
+
+  function reportUpdateAllPreparationError(error: unknown): void {
+    publishPresentedErrorNotification(t('gameDetails.updateAll.prepareFailed'), error);
+    reportClientError('update_all_preparation', error);
   }
 
   const hasNvidiaTab = $derived(vendorTabs.some((tab) => tab.key === 'nvidia'));
@@ -392,7 +563,6 @@
       </CardContent>
     </Card>
   {:else if gameId}
-    <!-- Keep tab controls visible while the notice and active tab content share one viewport. -->
     <Tabs bind:value={selectedTab} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <GameDetailsToolbar
         title={details.game.identity.title}
@@ -411,7 +581,7 @@
         {updatingAll}
         {capturingUpdateAllSafety}
         {planningUpdateAll}
-        {busy}
+        busy={exclusiveBusy}
         addonsBusy={gameAddons.busy}
         {nothingToUpdate}
         {totalUpdateCount}
@@ -424,14 +594,14 @@
         <GameDetailsTabsContent
           {details}
           {gameId}
+          installPath={details.game.install_path}
           profile={nvidiaProfile}
           {onOpenGameDetails}
           onRecoveryDeleteComplete={focusPageHeading}
           {vendorTabs}
           hasAddonsTab={tabs.addonsTab !== null}
-          assessment={fileSafety.assessment}
           {nvidia}
-          {busy}
+          busy={busy || safetyGateActive}
           {exclusiveBusy}
           {launcher}
           {renodx}
@@ -440,9 +610,9 @@
           renodxEnabled={gameAddons.isEnabled('renodx')}
           lumaEnabled={gameAddons.isEnabled('luma')}
           optiscalerEnabled={gameAddons.isEnabled('optiscaler')}
-          onSwap={handleSwapWithSafety}
+          onSwap={handleStandaloneSwapWithSafety}
           {onRollback}
-          onBulkSwap={handleBulkSwapWithSafety}
+          onBulkSwap={handleStandaloneBulkSwapWithSafety}
           {onBulkRollback}
           {onOpenRenoDxSettings}
           {onPreloadRenoDxSettings}
@@ -451,17 +621,6 @@
     </Tabs>
   {/if}
 </section>
-
-<D3d12ExecutableConfirmDialog
-  open={updateConfirmOpen}
-  busy={updatingAll}
-  actions={preparedUpdateExecutableActions}
-  reason="update_all"
-  onOpenChange={(open: boolean) => {
-    updateAllWorkflow.setConfirmationOpen(open);
-  }}
-  onConfirm={() => void updateAllWorkflow.confirm()}
-/>
 
 <DeveloperModeRequirementDialog
   open={updateAllWorkflow.developerModeOpen}
@@ -473,23 +632,20 @@
       updateAllWorkflow.cancelDeveloperMode();
     }
   }}
-  onRetry={() => void updateAllWorkflow.retryDeveloperMode()}
+  onRetry={() => void retryUpdateAllDeveloperMode()}
 />
 
-<AddonActionConfirmDialog
-  open={installConfirmationOpen}
-  busy={false}
-  tone="warning"
-  title={t('gameDetails.fileSafety.installConfirmTitle')}
-  description={t('gameDetails.fileSafety.installConfirmBody')}
-  warning={installConfirmationWarning}
-  confirmLabel={t('gameDetails.fileSafety.installConfirmAction')}
-  onOpenChange={(open: boolean) => {
-    if (!open) {
-      fileSafety.resolveInstallConfirmation(false);
+<FileSafetyConfirmationDialog
+  notice={mutationConfirmation.pending?.notice ?? null}
+  actions={mutationConfirmation.pending?.actions ?? []}
+  isUpdateAll={preparedUpdateBatch !== null}
+  onCancel={() => {
+    mutationConfirmation.pending?.resolve(false);
+    if (preparedUpdateBatch) {
+      updateAllWorkflow.invalidatePending();
     }
   }}
-  onConfirm={() => {
-    fileSafety.resolveInstallConfirmation(true);
+  onConfirm={(rememberGeneralWarning: boolean) => {
+    mutationConfirmation.pending?.resolve(true, rememberGeneralWarning);
   }}
 />

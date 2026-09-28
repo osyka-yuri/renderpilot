@@ -4,9 +4,14 @@ import {
   createAddonStore,
   hostSnapshotApi,
   mergeAddonApis,
+  requestMutationSafetyTokens,
   type AddonMutationResult,
+  type MutationSafetyCapture,
   type MutationSafetyTokens,
 } from '@entities/addon';
+import { isFileSafetyContextError } from '@shared/errors';
+import { t, type MessageKeyWithoutParams } from '@shared/i18n';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 
 import { lumaApi, type LumaApi } from '../api/desktop';
 import {
@@ -42,12 +47,7 @@ export type LumaStoreOptions = {
    * separate companion add-on and does not need this path.
    */
   onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
-  requireSafetyTokens?: (gameId: string, scope: 'game') => Promise<MutationSafetyTokens>;
-  requireInstallSafetyTokens?: (
-    gameId: string,
-    scope: 'game',
-  ) => Promise<MutationSafetyTokens | null>;
-  onSafetyContextError?: (error: unknown, scope: 'game') => void | Promise<void>;
+  requireSafetyTokens?: (gameId: string, scope: 'game') => Promise<MutationSafetyTokens | null>;
 };
 
 /**
@@ -59,7 +59,70 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
   const onExclusivityChange = options.onExclusivityChange;
   const onGameDetailsInvalidate = options.onGameDetailsInvalidate;
   const requireSafetyTokens = options.requireSafetyTokens;
-  const onSafetyContextError = options.onSafetyContextError;
+  let safetyContextError = $state.raw<unknown>(null);
+  let safetyAttemptGeneration = 0;
+
+  function beginSafetyAttempt(): number {
+    safetyContextError = null;
+    return ++safetyAttemptGeneration;
+  }
+
+  function recordSafetyContextError(owner: number, error: unknown): void {
+    if (owner === safetyAttemptGeneration) {
+      safetyContextError = isFileSafetyContextError(error) ? error : null;
+    }
+  }
+
+  function captureSafetyTokens(gameId: string): Promise<MutationSafetyCapture> {
+    if (core.busy) {
+      return Promise.resolve({ kind: 'cancelled' });
+    }
+
+    return requestMutationSafetyTokens(requireSafetyTokens, gameId, 'game');
+  }
+
+  function handleSafetyCaptureError(
+    error: unknown,
+    errorKey: MessageKeyWithoutParams,
+    safetyAttempt: number,
+  ): AddonMutationResult {
+    if (safetyAttempt !== safetyAttemptGeneration) {
+      return 'skipped';
+    }
+    publishPresentedErrorNotification(t(errorKey), error);
+    recordSafetyContextError(safetyAttempt, error);
+    return 'failed';
+  }
+
+  function runWithSafetyTokens(
+    gameId: string,
+    errorKey: MessageKeyWithoutParams,
+    safetyAttempt: number,
+    run: (tokens?: MutationSafetyTokens) => Promise<AddonMutationResult>,
+  ): Promise<AddonMutationResult> {
+    const runAndRecordOutcome = (tokens?: MutationSafetyTokens) =>
+      run(tokens).then((result) => {
+        recordSafetyContextError(
+          safetyAttempt,
+          result === 'failed' ? core.safetyContextError : null,
+        );
+        return result;
+      });
+
+    if (!requireSafetyTokens) {
+      return runAndRecordOutcome();
+    }
+
+    return captureSafetyTokens(gameId).then(
+      (safety) => {
+        if (safetyAttempt !== safetyAttemptGeneration || safety.kind === 'cancelled') {
+          return 'skipped';
+        }
+        return runAndRecordOutcome(safety.tokens);
+      },
+      (error: unknown) => handleSafetyCaptureError(error, errorKey, safetyAttempt),
+    );
+  }
 
   type RetainedProfileMeta = {
     profile: LumaProfile | null;
@@ -109,11 +172,6 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
     },
     messages: { loadFailed: 'addon.availability.loadFailed' },
     onExclusivityChange,
-    onMutationError: (error) => {
-      if (requireSafetyTokens) {
-        void onSafetyContextError?.(error, 'game');
-      }
-    },
     // Advisory ZIP / dgVoodoo ownership need a passive probe after mutations.
     postMutationProbe: 'passive',
     onMutationSideEffect: onGameDetailsInvalidate
@@ -130,6 +188,8 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
       applyOutcome(report);
     },
     resetToolState: (gameId) => {
+      safetyContextError = null;
+      safetyAttemptGeneration += 1;
       availabilitySnapshot = {
         engineConfig: {
           status: 'not_applicable',
@@ -237,21 +297,17 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
   );
 
   async function install(gameId: string): Promise<AddonMutationResult> {
-    const installTokens = await options.requireInstallSafetyTokens?.(gameId, 'game');
-    if (options.requireInstallSafetyTokens && installTokens === null) {
-      return 'skipped';
-    }
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = installTokens ?? (await requireSafetyTokens?.(gameId, 'game'));
-        return tokens ? api.install(gameId, tokens.gameContextToken) : api.install(gameId);
-      },
-      {
-        errorKey: 'gameDetails.luma.installError',
-        safetyScope: 'game',
-        notifyExclusivity: true,
-      },
+    const safetyAttempt = beginSafetyAttempt();
+    return runWithSafetyTokens(gameId, 'gameDetails.luma.installError', safetyAttempt, (tokens) =>
+      core.runBusyMutation(
+        gameId,
+        () => (tokens ? api.install(gameId, tokens.gameContextToken) : api.install(gameId)),
+        {
+          errorKey: 'gameDetails.luma.installError',
+          safetyScope: 'game',
+          notifyExclusivity: true,
+        },
+      ),
     );
   }
 
@@ -261,19 +317,23 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
     requireUpdateAvailable: boolean,
     forceFull: boolean,
   ): Promise<AddonMutationResult> {
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, 'game');
-        return tokens
-          ? api.update(gameId, { forceFull, gameContextToken: tokens.gameContextToken })
-          : api.update(gameId, { forceFull });
-      },
-      {
-        errorKey,
-        safetyScope: 'game',
-        requireUpdateAvailable,
-      },
+    const safetyAttempt = beginSafetyAttempt();
+    if (requireUpdateAvailable && !core.updateAvailable) {
+      return 'skipped';
+    }
+    return runWithSafetyTokens(gameId, errorKey, safetyAttempt, (tokens) =>
+      core.runBusyMutation(
+        gameId,
+        () =>
+          tokens
+            ? api.update(gameId, { forceFull, gameContextToken: tokens.gameContextToken })
+            : api.update(gameId, { forceFull }),
+        {
+          errorKey,
+          safetyScope: 'game',
+          requireUpdateAvailable,
+        },
+      ),
     );
   }
 
@@ -287,25 +347,37 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
   }
 
   async function uninstall(gameId: string): Promise<AddonMutationResult> {
-    return core.runBusyMutation(gameId, () => api.uninstall(gameId), {
+    const safetyAttempt = beginSafetyAttempt();
+    const result = await core.runBusyMutation(gameId, () => api.uninstall(gameId), {
       errorKey: 'gameDetails.luma.uninstallError',
       clearDownloadProgress: false,
       notifyExclusivity: true,
     });
+    recordSafetyContextError(safetyAttempt, result === 'failed' ? core.safetyContextError : null);
+    return result;
+  }
+
+  function checkForUpdates(gameId: string): Promise<void> {
+    beginSafetyAttempt();
+    return core.checkForUpdates(gameId);
   }
 
   async function applyEngineConfig(gameId: string): Promise<AddonMutationResult> {
+    const safetyAttempt = beginSafetyAttempt();
     const apply = api.applyEngineConfig;
     if (!apply) {
       return 'skipped';
     }
-    return core.runSidecarMutation(
+    return runWithSafetyTokens(
       gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, 'game');
-        return tokens ? apply(gameId, tokens.gameContextToken) : apply(gameId);
-      },
-      { errorKey: 'gameDetails.luma.engineConfigApplyError', safetyScope: 'game' },
+      'gameDetails.luma.engineConfigApplyError',
+      safetyAttempt,
+      (tokens) =>
+        core.runSidecarMutation(
+          gameId,
+          () => (tokens ? apply(gameId, tokens.gameContextToken) : apply(gameId)),
+          { errorKey: 'gameDetails.luma.engineConfigApplyError', safetyScope: 'game' },
+        ),
     );
   }
 
@@ -317,7 +389,7 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
       load: core.load,
       retry: core.retry,
       refreshAvailability: core.refreshAvailability,
-      checkForUpdates: core.checkForUpdates,
+      checkForUpdates,
       get vcredistPresent() {
         return availabilitySnapshot.vcredistPresent;
       },
@@ -332,6 +404,9 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
       },
       get uninstallBlockedBy() {
         return availabilitySnapshot.uninstallBlockedBy;
+      },
+      get safetyContextError() {
+        return safetyContextError;
       },
       get externalRequirement() {
         return externalRequirement;

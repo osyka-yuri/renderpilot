@@ -9,9 +9,12 @@ import { executeGraphicsSwap } from '@features/swap-graphics-component';
 import { isFileSafetyContextError } from '@shared/errors';
 import { clearDownloadProgress } from '@shared/lib';
 
-import type { SwapRequest } from './swap-request';
+import type { PreparedSwapPresentation, SwapRequest } from './swap-request';
 
-export type SwapHandler = (request: SwapRequest) => Promise<void> | void;
+export type SwapHandler = (
+  request: SwapRequest,
+  presentation?: PreparedSwapPresentation,
+) => Promise<void> | void;
 
 export type RollbackHandler = (componentId: string) => Promise<void> | void;
 

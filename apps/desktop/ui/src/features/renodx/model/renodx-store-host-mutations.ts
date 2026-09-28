@@ -1,10 +1,15 @@
+import { requestMutationSafetyTokens } from '@entities/addon';
 import type {
   AddonMutationResult,
+  MutationSafetyCapture,
   MutationSafetyScope,
   ReshadeChannel,
   MutationSafetyTokens,
   createAddonStore,
 } from '@entities/addon';
+import { isFileSafetyContextError } from '@shared/errors';
+import { t, type MessageKeyWithoutParams } from '@shared/i18n';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 
 import type { RenoDxApi } from '../api/desktop';
 import type { AvailabilitySnapshot } from './renodx-store-helpers';
@@ -18,7 +23,7 @@ import type {
 
 type RenoDxCore = Pick<
   ReturnType<typeof createAddonStore<RenoDxInstallState, RenoDxUpdateReport, AvailabilityReport>>,
-  'runBusyMutation' | 'busy' | 'state'
+  'runBusyMutation' | 'busy' | 'state' | 'updateAvailable' | 'safetyContextError'
 >;
 
 export type RenoDxHostMutationOptions = {
@@ -30,10 +35,6 @@ export type RenoDxHostMutationOptions = {
   onChannelSwitched: (channel: ReshadeChannel) => void;
   channelIsSupported: (channel: ReshadeChannel) => boolean;
   requireSafetyTokens?: (
-    gameId: string,
-    scope: 'game' | 'game_and_shared',
-  ) => Promise<MutationSafetyTokens>;
-  requireInstallSafetyTokens?: (
     gameId: string,
     scope: 'game' | 'game_and_shared',
   ) => Promise<MutationSafetyTokens | null>;
@@ -77,10 +78,53 @@ export function createRenoDxHostMutations(options: RenoDxHostMutationOptions) {
     onChannelSwitched,
     channelIsSupported,
     requireSafetyTokens,
-    requireInstallSafetyTokens,
     afterInstallLikeCommit,
     afterCapabilityCommit,
   } = options;
+
+  let updateSafetyContextOutcome: { value: unknown } | null = null;
+  let updateCaptureGeneration = 0;
+
+  function captureSafetyTokens(
+    gameId: string,
+    scope: MutationSafetyScope,
+  ): Promise<MutationSafetyCapture> {
+    if (core.busy) {
+      return Promise.resolve({ kind: 'cancelled' });
+    }
+
+    return requestMutationSafetyTokens(requireSafetyTokens, gameId, scope);
+  }
+
+  function handleSafetyCaptureError(
+    error: unknown,
+    errorKey: MessageKeyWithoutParams,
+    onSafetyContextError?: (error: unknown) => void,
+  ): AddonMutationResult {
+    if (isFileSafetyContextError(error)) {
+      onSafetyContextError?.(error);
+    }
+    publishPresentedErrorNotification(t(errorKey), error);
+    return 'failed';
+  }
+
+  function runWithSafetyTokens(
+    gameId: string,
+    scope: MutationSafetyScope,
+    errorKey: MessageKeyWithoutParams,
+    run: (tokens?: MutationSafetyTokens) => Promise<AddonMutationResult>,
+    onSafetyContextError?: (error: unknown) => void,
+  ): Promise<AddonMutationResult> {
+    if (!requireSafetyTokens) {
+      // Preserve the core mutation's same-turn busy claim when no gate exists.
+      return run();
+    }
+
+    return captureSafetyTokens(gameId, scope).then(
+      (safety) => (safety.kind === 'cancelled' ? 'skipped' : run(safety.tokens)),
+      (error: unknown) => handleSafetyCaptureError(error, errorKey, onSafetyContextError),
+    );
+  }
 
   function installedHostKind(): HostKind | null {
     return core.state?.status === 'installed' ? core.state.host_kind : null;
@@ -93,24 +137,20 @@ export function createRenoDxHostMutations(options: RenoDxHostMutationOptions) {
     const safetyScope = safetyScopeForHost(
       plannedInstallHostKind(getOutcome(), getManualInstallHostKind()),
     );
-    const installTokens = await requireInstallSafetyTokens?.(gameId, safetyScope);
-    if (requireInstallSafetyTokens && installTokens === null) {
-      return 'skipped';
-    }
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = installTokens ?? (await requireSafetyTokens?.(gameId, safetyScope));
-        return tokens
-          ? api.install(gameId, channel, tokens.gameContextToken, tokens.sharedVulkanContextToken)
-          : api.install(gameId, channel);
-      },
-      {
-        errorKey: 'gameDetails.renodx.installError',
-        safetyScope,
-        afterCommit: (token) => afterCapabilityCommit(gameId, token, channel),
-        notifyExclusivity: true,
-      },
+    return runWithSafetyTokens(gameId, safetyScope, 'gameDetails.renodx.installError', (tokens) =>
+      core.runBusyMutation(
+        gameId,
+        () =>
+          tokens
+            ? api.install(gameId, channel, tokens.gameContextToken, tokens.sharedVulkanContextToken)
+            : api.install(gameId, channel),
+        {
+          errorKey: 'gameDetails.renodx.installError',
+          safetyScope,
+          afterCommit: (token) => afterCapabilityCommit(gameId, token, channel),
+          notifyExclusivity: true,
+        },
+      ),
     );
   }
 
@@ -125,48 +165,67 @@ export function createRenoDxHostMutations(options: RenoDxHostMutationOptions) {
     const safetyScope = safetyScopeForHost(
       plannedInstallHostKind(getOutcome(), getManualInstallHostKind()),
     );
-    const installTokens = await requireInstallSafetyTokens?.(gameId, safetyScope);
-    if (requireInstallSafetyTokens && installTokens === null) {
-      return 'skipped';
-    }
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = installTokens ?? (await requireSafetyTokens?.(gameId, safetyScope));
-        return tokens
-          ? api.installFromFile(
-              gameId,
-              filePath,
-              channel,
-              tokens.gameContextToken,
-              tokens.sharedVulkanContextToken,
-            )
-          : api.installFromFile(gameId, filePath, channel);
-      },
-      {
-        errorKey: 'gameDetails.renodx.installError',
-        safetyScope,
-        afterCommit: (token) => afterCapabilityCommit(gameId, token, channel),
-        notifyExclusivity: true,
-      },
+    return runWithSafetyTokens(gameId, safetyScope, 'gameDetails.renodx.installError', (tokens) =>
+      core.runBusyMutation(
+        gameId,
+        () =>
+          tokens
+            ? api.installFromFile(
+                gameId,
+                filePath,
+                channel,
+                tokens.gameContextToken,
+                tokens.sharedVulkanContextToken,
+              )
+            : api.installFromFile(gameId, filePath, channel),
+        {
+          errorKey: 'gameDetails.renodx.installError',
+          safetyScope,
+          afterCommit: (token) => afterCapabilityCommit(gameId, token, channel),
+          notifyExclusivity: true,
+        },
+      ),
     );
   }
 
   async function update(gameId: string): Promise<AddonMutationResult> {
+    if (core.busy || !core.updateAvailable) {
+      return 'skipped';
+    }
+    const captureGeneration = ++updateCaptureGeneration;
+    updateSafetyContextOutcome = { value: null };
     const safetyScope = safetyScopeForHost(installedHostKind());
-    return core.runBusyMutation(
+    return runWithSafetyTokens(
       gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, safetyScope);
-        return tokens
-          ? api.update(gameId, tokens.gameContextToken, tokens.sharedVulkanContextToken)
-          : api.update(gameId);
-      },
-      {
-        errorKey: 'gameDetails.renodx.updateError',
-        safetyScope,
-        requireUpdateAvailable: true,
-        afterCommit: (token) => afterInstallLikeCommit(gameId, token),
+      safetyScope,
+      'gameDetails.renodx.updateError',
+      (tokens) =>
+        core
+          .runBusyMutation(
+            gameId,
+            () =>
+              tokens
+                ? api.update(gameId, tokens.gameContextToken, tokens.sharedVulkanContextToken)
+                : api.update(gameId),
+            {
+              errorKey: 'gameDetails.renodx.updateError',
+              safetyScope,
+              requireUpdateAvailable: true,
+              afterCommit: (token) => afterInstallLikeCommit(gameId, token),
+            },
+          )
+          .finally(() => {
+            if (captureGeneration === updateCaptureGeneration) {
+              const coreError = core.safetyContextError;
+              updateSafetyContextOutcome = {
+                value: isFileSafetyContextError(coreError) ? coreError : null,
+              };
+            }
+          }),
+      (failure) => {
+        if (captureGeneration === updateCaptureGeneration) {
+          updateSafetyContextOutcome = { value: failure };
+        }
       },
     );
   }
@@ -188,26 +247,26 @@ export function createRenoDxHostMutations(options: RenoDxHostMutationOptions) {
       return 'skipped';
     }
     const safetyScope = 'game' satisfies MutationSafetyScope;
-    return core.runBusyMutation(
-      gameId,
-      async () => {
-        const tokens = await requireSafetyTokens?.(gameId, safetyScope);
-        return tokens
-          ? api.switchChannel(
-              gameId,
-              channel,
-              tokens.gameContextToken,
-              tokens.sharedVulkanContextToken,
-            )
-          : api.switchChannel(gameId, channel);
-      },
-      {
-        errorKey: 'gameDetails.renodx.switchError',
-        safetyScope,
-        afterCommit: () => {
-          onChannelSwitched(channel);
+    return runWithSafetyTokens(gameId, safetyScope, 'gameDetails.renodx.switchError', (tokens) =>
+      core.runBusyMutation(
+        gameId,
+        () =>
+          tokens
+            ? api.switchChannel(
+                gameId,
+                channel,
+                tokens.gameContextToken,
+                tokens.sharedVulkanContextToken,
+              )
+            : api.switchChannel(gameId, channel),
+        {
+          errorKey: 'gameDetails.renodx.switchError',
+          safetyScope,
+          afterCommit: () => {
+            onChannelSwitched(channel);
+          },
         },
-      },
+      ),
     );
   }
 
@@ -226,5 +285,8 @@ export function createRenoDxHostMutations(options: RenoDxHostMutationOptions) {
     update,
     switchChannel,
     uninstall,
+    get safetyContextError() {
+      return updateSafetyContextOutcome?.value;
+    },
   };
 }

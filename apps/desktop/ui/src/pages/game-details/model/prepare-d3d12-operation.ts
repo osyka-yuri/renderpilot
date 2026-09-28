@@ -42,6 +42,7 @@ export async function prepareBulkD3d12Swaps(
   for (const item of items) {
     if (item.kind === 'direct') {
       preparedItems.push({
+        kind: 'direct',
         request: { ...item.target },
         d3d12ExecutableAction: null,
       });
@@ -58,11 +59,13 @@ export async function prepareBulkD3d12Swaps(
       continue;
     }
     preparedItems.push({
+      kind: 'd3d12',
       request: {
         ...item.target,
         confirmationToken: preparation.value.confirmationToken,
       },
       d3d12ExecutableAction: preparation.value.action,
+      planFingerprint: item.planFingerprint,
     });
   }
 

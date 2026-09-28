@@ -8,7 +8,10 @@ import { flushSync, mount, unmount } from 'svelte';
 import { defaultHostFacts } from '@entities/addon';
 import { createGameDetails } from '@entities/game';
 import type { SettingStateResponse } from '@features/nvapi-settings';
+import { setLanguageMode, t } from '@shared/i18n';
+import { DesktopCommandError } from '@shared/errors';
 import { registerPreviewInvoker, type DesktopInvoker } from '@shared/api-preview';
+import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
 
 import GameDetailsPageTestHost from './GameDetailsPage.test-host.svelte';
 
@@ -25,9 +28,31 @@ const VULKAN_NOT_INSTALLED = {
   actions: {},
 };
 
-let nvapiProfileStatusForTest: Record<string, unknown>;
+const D3D12_ACTION = {
+  kind: 'patch',
+  executable_path: '/games/test/Game.exe',
+  backup_path: '/games/test/Game.exe.rp-backup',
+  backup_exists: false,
+  original_sdk_version: 606,
+  current_sdk_version: 606,
+  target_sdk_version: 619,
+  requires_confirmation: true,
+} as const;
+const D3D12_REPATCH_ACTION = { ...D3D12_ACTION, requires_confirmation: false } as const;
 
-function unsupportedRenoDxAvailability(): unknown {
+let nvapiProfileStatusForTest: Record<string, unknown>;
+let safetyEnginesForGame: string[];
+let safetyCompletenessForGame: 'complete' | 'limited';
+let catalogSettingWrites: { key: string; value: string }[];
+let planSwapRepliesForTest: unknown[];
+let enableAddonUpdateScenarioForTest: boolean;
+let lumaUpdateForTest: Promise<unknown> | null;
+let lumaUpdateErrorForTest: Error | null;
+let safetyAssessmentForTest: (() => Promise<unknown>) | null;
+let renodxAvailabilityForTest: unknown;
+let renodxCheckUpdateForTest: unknown;
+
+function unsupportedRenoDxAvailability(): Record<string, unknown> {
   return {
     state: { status: 'not_installed' },
     host_detection: 'absent',
@@ -148,11 +173,175 @@ function driverSetting(overrides: Partial<SettingStateResponse> = {}): SettingSt
   };
 }
 
+function d3dUpdateDetails(installPath = '/games/test') {
+  return createGameDetails({
+    game: {
+      identity: { id: 'steam:123', title: 'Test Game', launcher: 'Steam' },
+      install_path: installPath,
+    },
+    components: [
+      {
+        id: 'component-d3d12',
+        game_id: 'steam:123',
+        kind: 'library',
+        technology: 'd3d12_agility',
+        swappability: 'swappable',
+        files: [],
+        rollback_available: false,
+        d3d12_executable_status: null,
+      },
+    ],
+    candidate_groups: [
+      {
+        component_id: 'component-d3d12',
+        technology: 'd3d12_agility',
+        file_path: 'Game.dll',
+        version_report: {
+          kind: 'known',
+          technical_version: '1.0',
+          release_label: null,
+          catalog_release: null,
+        },
+        automatic_candidate_artifact_id: 'artifact-d3d12',
+        candidates: [
+          {
+            artifact_id: 'artifact-d3d12',
+            file_name: 'Game.dll',
+            file_path: null,
+            technical_version: '2.0',
+            release_label: 'Latest',
+            source_game_id: null,
+            comparison: 'newer',
+            catalog_package: null,
+            is_downloaded: true,
+            is_debug: false,
+            sha256: 'sha256-d3d12',
+            d3d12_executable_action: D3D12_ACTION,
+          },
+        ],
+      },
+    ],
+  });
+}
+
+function addonUpdateDetails(installPath: string) {
+  return createGameDetails({
+    game: {
+      identity: { id: 'steam:123', title: 'Test Game', launcher: 'Steam' },
+      install_path: installPath,
+    },
+    addon_capabilities: ['luma', 'optiscaler'],
+  });
+}
+
+function streamlineUpdateDetails(optionId: string) {
+  return createGameDetails({
+    game: {
+      identity: { id: 'steam:123', title: 'Test Game', launcher: 'Steam' },
+      install_path: '/games/test',
+    },
+    components: [
+      {
+        id: 'component:streamline',
+        game_id: 'steam:123',
+        kind: 'native_library',
+        technology: 'nvidia_streamline',
+        swappability: 'bundle_only',
+        files: [],
+        rollback_available: false,
+        d3d12_executable_status: null,
+      },
+    ],
+    candidate_groups: [
+      {
+        component_id: 'component:streamline',
+        technology: 'nvidia_streamline',
+        file_path: 'streamline.dll',
+        version_report: {
+          kind: 'known',
+          technical_version: '2.3.0',
+          release_label: null,
+          catalog_release: null,
+        },
+        automatic_candidate_artifact_id: null,
+        candidates: [
+          {
+            artifact_id: 'streamline-2.4.0',
+            file_name: 'sl.interposer.dll',
+            file_path: null,
+            technical_version: '2.4.0',
+            release_label: null,
+            source_game_id: null,
+            comparison: 'newer_version',
+            catalog_package: null,
+            is_downloaded: true,
+            is_debug: false,
+            sha256: 'streamline-hash',
+            d3d12_executable_action: null,
+          },
+        ],
+      },
+    ],
+    streamline_candidate_options: [
+      {
+        option_id: optionId,
+        release: { version: '2.4.0', channel: 'stable', label: null },
+        items: [{ component_id: 'component:streamline', artifact_id: 'streamline-2.4.0' }],
+      },
+    ],
+  });
+}
+
+async function dialogContaining(text: string): Promise<HTMLElement> {
+  return vi.waitFor(() => {
+    const dialog = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+      (item) => item.textContent.includes(text),
+    );
+    if (!dialog) {
+      throw new Error(
+        `Expected a dialog containing: ${text}; dialogs: ${[...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].map((item) => item.textContent).join(' || ')}`,
+      );
+    }
+    return dialog;
+  });
+}
+
+function clickDialogButton(dialog: HTMLElement, name: string): void {
+  const button = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent.includes(name),
+  );
+  if (!button) {
+    throw new Error(`Expected dialog button: ${name}`);
+  }
+  button.click();
+}
+
+async function chooseSelectOption(trigger: HTMLButtonElement, value: string): Promise<void> {
+  trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  trigger.click();
+  flushSync();
+
+  const option = await vi.waitFor(() => {
+    const candidate = document.body.querySelector<HTMLElement>(
+      `[role="option"][data-value="${value}"]`,
+    );
+    if (!candidate) {
+      throw new Error(`Expected option ${value}`);
+    }
+    return candidate;
+  });
+  option.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  option.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }));
+  option.click();
+  flushSync();
+}
+
 describe('GameDetailsPage', () => {
   let target: HTMLDivElement;
   let component: object | undefined;
   let disposeInvoker: (() => void) | undefined;
   let invokedCommands: string[];
+  let lumaUpdatePayloads: (Record<string, unknown> | undefined)[];
   let unexpectedCommands: string[];
   let executableOverrideGameIds: string[];
   let profileStatusForGame: (gameId: string) => Promise<unknown>;
@@ -161,7 +350,19 @@ describe('GameDetailsPage', () => {
   let nvidiaSettingsForGame: (gameId: string) => Promise<SettingStateResponse[]>;
   let deleteProfileForGame: (gameId: string) => Promise<unknown>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await setLanguageMode('en');
+    clearAllNotifications();
+    safetyEnginesForGame = [];
+    safetyCompletenessForGame = 'complete';
+    catalogSettingWrites = [];
+    planSwapRepliesForTest = [];
+    enableAddonUpdateScenarioForTest = false;
+    lumaUpdateForTest = null;
+    lumaUpdateErrorForTest = null;
+    safetyAssessmentForTest = null;
+    renodxAvailabilityForTest = null;
+    renodxCheckUpdateForTest = null;
     nvapiProfileStatusForTest = {
       selectedExecutable: null,
       bindingPath: null,
@@ -183,7 +384,18 @@ describe('GameDetailsPage', () => {
         disconnect = vi.fn();
       },
     });
+    Object.defineProperties(HTMLElement.prototype, {
+      hasPointerCapture: {
+        configurable: true,
+        value: vi.fn(() => false),
+      },
+      releasePointerCapture: {
+        configurable: true,
+        value: vi.fn(),
+      },
+    });
     invokedCommands = [];
+    lumaUpdatePayloads = [];
     unexpectedCommands = [];
     executableOverrideGameIds = [];
     profileStatusForGame = () => Promise.resolve(nvapiProfileStatusForTest);
@@ -194,10 +406,69 @@ describe('GameDetailsPage', () => {
     const invoker = ((command: string, payload?: Record<string, unknown>) => {
       invokedCommands.push(command);
       if (command === 'renodx_availability') {
-        return Promise.resolve(unsupportedRenoDxAvailability());
+        return Promise.resolve(renodxAvailabilityForTest ?? unsupportedRenoDxAvailability());
+      }
+      if (command === 'renodx_check_update') {
+        return Promise.resolve(
+          renodxCheckUpdateForTest ?? {
+            addon: 'current',
+            host: 'current',
+            dlssFix: null,
+            overall: 'current',
+          },
+        );
+      }
+      if (command === 'luma_availability' && enableAddonUpdateScenarioForTest) {
+        return Promise.resolve({
+          state: {
+            status: 'installed',
+            version: 'Build 515',
+            addon_dated: null,
+            installed_at: 1,
+            updated_at: 1,
+            reshade_channel: 'nightly',
+            launch_args: [],
+          },
+          outcome: { kind: 'unsupported' },
+          host_detection: 'present',
+          host_facts: defaultHostFacts('nightly'),
+          actions: {},
+          min_reshade_version: '6.7.0',
+          vcredist_present: null,
+          vcredist_installer_url: 'https://aka.ms/vs/17/release/vc_redist.x64.exe',
+          install_torn: false,
+          uninstall_blocked_by: null,
+        });
       }
       if (command === 'luma_availability') {
         return Promise.resolve(unsupportedLumaAvailability());
+      }
+      if (command === 'get_optiscaler_availability' && enableAddonUpdateScenarioForTest) {
+        return Promise.resolve({
+          game_id: 'steam:123',
+          launcher: 'Steam',
+          install: { installed: true, release: '1.0.0' },
+          eligibility: { available: true, block_code: null },
+          selected_release: 'stable',
+          relocation: null,
+          proxy_conflict: null,
+          compatibility: {
+            status: 'working',
+            declared_inputs: [],
+            launch: null,
+            guidance: [],
+          },
+          prerequisite: { state: 'none' },
+          modules: [],
+          lifecycle: {
+            update_available: true,
+            repair_required: false,
+            drifted: false,
+            unmanaged: false,
+            maintenance_available: true,
+            maintenance_block_code: null,
+          },
+        });
       }
       if (command === 'get_optiscaler_availability') {
         return Promise.resolve(unsupportedOptiScalerAvailability());
@@ -206,12 +477,61 @@ describe('GameDetailsPage', () => {
         return Promise.resolve(unavailableDlssFixAvailability());
       }
       if (command === 'get_game_file_safety_assessment') {
+        if (safetyAssessmentForTest) {
+          return safetyAssessmentForTest();
+        }
+        const requestedGameId = typeof payload?.gameId === 'string' ? payload.gameId : 'steam:123';
         return Promise.resolve({
-          game_id: 'steam:123',
+          game_id: requestedGameId,
           context_token: 'game-safety-token',
-          detected_engines: [],
-          scan_completeness: 'complete',
+          detected_engines: safetyEnginesForGame,
+          scan_completeness: safetyCompletenessForGame,
         });
+      }
+      if (command === 'plan_swap') {
+        return Promise.resolve(
+          planSwapRepliesForTest.shift() ?? {
+            blockers: [],
+            confirmation_token: 'd3d12-confirmation-token',
+            d3d12_executable_action: D3D12_ACTION,
+          },
+        );
+      }
+      if (command === 'luma_check_update' && enableAddonUpdateScenarioForTest) {
+        return Promise.resolve({
+          addon: 'available',
+          host: 'current',
+          dgvoodoo: null,
+          overall: 'available',
+        });
+      }
+      if (command === 'luma_update' && enableAddonUpdateScenarioForTest) {
+        lumaUpdatePayloads.push(payload);
+        if (lumaUpdateErrorForTest !== null) {
+          return Promise.reject(lumaUpdateErrorForTest);
+        }
+        return (
+          lumaUpdateForTest ??
+          Promise.resolve({
+            status: 'installed',
+            version: 'Build 516',
+            addon_dated: null,
+            installed_at: 1,
+            updated_at: 2,
+            reshade_channel: 'nightly',
+            launch_args: [],
+          })
+        );
+      }
+      if (command === 'get_catalog_setting') {
+        return Promise.resolve({ value: null });
+      }
+      if (command === 'set_catalog_setting') {
+        catalogSettingWrites.push({
+          key: typeof payload?.key === 'string' ? payload.key : '',
+          value: typeof payload?.value === 'string' ? payload.value : '',
+        });
+        return Promise.resolve({ saved: true });
       }
       if (command === 'get_shared_vulkan_safety_assessment') {
         return Promise.resolve({ context_token: 'shared-vulkan-safety-token' });
@@ -253,6 +573,9 @@ describe('GameDetailsPage', () => {
     expect(unexpectedCommands).toEqual([]);
     disposeInvoker?.();
     disposeInvoker = undefined;
+    clearAllNotifications();
+    delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).releasePointerCapture;
     target.remove();
   });
 
@@ -742,20 +1065,952 @@ describe('GameDetailsPage', () => {
     expect(onOpenOperations).toHaveBeenCalledTimes(1);
   });
 
-  it('loads only the game assessment for the passive safety notice', async () => {
+  it('keeps disabled Update All focusable and explains why it cannot run', async () => {
     component = mount(GameDetailsPageTestHost, {
       target,
       props: { details: createGameDetails() },
     });
     flushSync();
 
+    const updateAll = target.querySelector<HTMLButtonElement>(
+      'button[aria-label="All stable versions are up to date"]',
+    );
+    expect(updateAll).toBeDefined();
+    expect(updateAll?.getAttribute('aria-disabled')).toBe('true');
+    expect(updateAll?.disabled).toBe(false);
+
+    const assessmentRequests = invokedCommands.filter(
+      (command) => command === 'get_game_file_safety_assessment',
+    ).length;
+    updateAll?.focus();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain(
+        'All stable versions are up to date',
+      );
+    });
+    updateAll?.click();
+    await Promise.resolve();
+    expect(
+      invokedCommands.filter((command) => command === 'get_game_file_safety_assessment'),
+    ).toHaveLength(assessmentRequests);
+  });
+
+  it('captures one risk approval and reuses its token for the complete Update All batch', async () => {
+    enableAddonUpdateScenarioForTest = true;
+    planSwapRepliesForTest = [
+      {
+        blockers: [],
+        confirmation_token: 'first-patch-token',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+      {
+        blockers: [],
+        confirmation_token: '',
+        d3d12_executable_action: D3D12_REPATCH_ACTION,
+      },
+    ];
+    const onBulkSwap = vi.fn(() => Promise.resolve());
+    const details = createGameDetails({
+      game: { identity: { id: 'steam:123', title: 'Test Game', launcher: 'Steam' } },
+      addon_capabilities: ['luma'],
+      components: [
+        {
+          id: 'component-1',
+          game_id: 'steam:123',
+          kind: 'library',
+          technology: 'd3d12_agility',
+          swappability: 'swappable',
+          files: [],
+          rollback_available: false,
+          d3d12_executable_status: null,
+        },
+      ],
+      candidate_groups: [
+        {
+          component_id: 'component-1',
+          technology: 'd3d12_agility',
+          file_path: 'game.dll',
+          version_report: { kind: 'unknown' },
+          automatic_candidate_artifact_id: 'artifact-1',
+          candidates: [
+            {
+              artifact_id: 'artifact-1',
+              file_name: 'game.dll',
+              file_path: null,
+              technical_version: '2',
+              release_label: 'Latest',
+              source_game_id: null,
+              comparison: 'newer',
+              catalog_package: null,
+              is_downloaded: true,
+              is_debug: false,
+              sha256: 'sha256',
+              d3d12_executable_action: D3D12_ACTION,
+            },
+          ],
+        },
+      ],
+    });
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details, onBulkSwap },
+    });
+    flushSync();
+    expect(invokedCommands).not.toContain('get_game_file_safety_assessment');
+
+    const updateAll = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (2)"]');
+      if (!button) {
+        throw new Error('Expected the library and Luma updates to be available');
+      }
+      return button;
+    });
+    updateAll.click();
+    flushSync();
+
+    const dialog = await vi.waitFor(() => {
+      const candidate = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+        (item) => item.textContent.includes(t('gameDetails.fileSafety.generic')),
+      );
+      if (!candidate) {
+        throw new Error('Expected the game-file risk confirmation');
+      }
+      return candidate;
+    });
+    expect(
+      dialog.textContent.match(
+        /Changes to multiplayer game files may result in account restrictions or a ban\./g,
+      ),
+    ).toHaveLength(1);
+    expect(dialog.textContent).toContain('/games/test/Game.exe.rp-backup');
+    expect(dialog.textContent).toContain(t('gameDetails.fileSafety.skipGeneralRiskConfirmation'));
+    expect(dialog.querySelector('[data-slot="dialog-title"]')?.textContent).toBe(
+      t('gameDetails.d3d12.confirm.title'),
+    );
+    expect(dialog.textContent).toContain(t('gameDetails.updateAll.action'));
+    dialog.querySelector<HTMLButtonElement>('[data-slot="checkbox"]')?.click();
+    clickDialogButton(dialog, t('gameDetails.updateAll.action'));
+
+    await vi.waitFor(() => {
+      expect(onBulkSwap).toHaveBeenCalledOnce();
+      expect(lumaUpdatePayloads).toHaveLength(1);
+    });
+    expect(onBulkSwap).toHaveBeenCalledWith([
+      expect.objectContaining({
+        componentId: 'component-1',
+        artifactId: 'artifact-1',
+        confirmationToken: 'first-patch-token',
+        gameContextToken: 'game-safety-token',
+      }),
+    ]);
+    expect(lumaUpdatePayloads[0]).toEqual(
+      expect.objectContaining({ gameId: 'steam:123', gameContextToken: 'game-safety-token' }),
+    );
+    await vi.waitFor(() => {
+      expect(catalogSettingWrites).toContainEqual({
+        key: 'game_file_safety_warning_v1',
+        value: 'true',
+      });
+    });
+    expect(
+      invokedCommands.filter((command) => command === 'get_game_file_safety_assessment'),
+    ).toHaveLength(1);
+    expect(invokedCommands.indexOf('plan_swap')).toBeLessThan(
+      invokedCommands.lastIndexOf('get_game_file_safety_assessment'),
+    );
+    const repatchButton = await vi.waitFor(() => {
+      const button = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+        (candidate) => candidate.getAttribute('aria-label') === 'Update all (2)',
+      );
+      if (!button || button.getAttribute('aria-disabled') === 'true') {
+        throw new Error('Expected Update All to be available for the repatch');
+      }
+      return button;
+    });
+    repatchButton.click();
+    flushSync();
+    const repatchDialog = await dialogContaining(t('gameDetails.d3d12.confirm.title'));
+    expect(repatchDialog.textContent.split(t('gameDetails.fileSafety.generic'))).toHaveLength(2);
+    expect(repatchDialog.textContent).toContain('/games/test/Game.exe.rp-backup');
+    expect(repatchDialog.querySelector('[data-slot="checkbox"]')).toBeNull();
+    expect(repatchDialog.textContent).toContain(t('gameDetails.updateAll.action'));
+    clickDialogButton(repatchDialog, t('gameDetails.updateAll.action'));
+    await vi.waitFor(() => {
+      expect(onBulkSwap).toHaveBeenCalledTimes(2);
+    });
+    expect(onBulkSwap).toHaveBeenLastCalledWith([
+      expect.objectContaining({ confirmationToken: null, gameContextToken: 'game-safety-token' }),
+    ]);
+  });
+
+  it('continues Update All after Developer Mode retry through one combined confirmation', async () => {
+    safetyEnginesForGame = ['DeveloperRetryAntiCheat'];
+    planSwapRepliesForTest = [
+      {
+        blockers: ['developer_mode_required'],
+        confirmation_token: '',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+      {
+        blockers: [],
+        confirmation_token: 'retry-d3d12-token',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+    ];
+    const onBulkSwap = vi.fn(() => Promise.resolve());
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: d3dUpdateDetails(), onBulkSwap },
+    });
+    flushSync();
+
+    const assessmentRequestsBeforeAction = invokedCommands.filter(
+      (command) => command === 'get_game_file_safety_assessment',
+    ).length;
+    const updateAll = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (1)"]');
+      if (!button) {
+        throw new Error('Expected the enabled Update All button');
+      }
+      return button;
+    });
+    updateAll.click();
+    flushSync();
+
+    const developerDialog = await dialogContaining(t('gameDetails.developerMode.requiredTitle'));
+    clickDialogButton(developerDialog, t('gameDetails.developerMode.checkStatus'));
+    flushSync();
+
+    const riskDialog = await dialogContaining(t('gameDetails.fileSafety.generic'));
+    const canonicalWarning = t('gameDetails.fileSafety.generic');
+    expect(riskDialog.textContent.split(canonicalWarning)).toHaveLength(2);
+    expect(riskDialog.textContent).toContain(t('gameDetails.d3d12.confirm.title'));
+    expect(riskDialog.textContent).toContain('/games/test/Game.exe.rp-backup');
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    clickDialogButton(riskDialog, t('gameDetails.updateAll.action'));
+
+    await vi.waitFor(() => {
+      expect(onBulkSwap).toHaveBeenCalledOnce();
+    });
+    expect(onBulkSwap).toHaveBeenCalledWith([
+      expect.objectContaining({
+        confirmationToken: 'retry-d3d12-token',
+        gameContextToken: 'game-safety-token',
+      }),
+    ]);
+    expect(invokedCommands.filter((command) => command === 'plan_swap')).toHaveLength(2);
+    expect(
+      invokedCommands.filter((command) => command === 'get_game_file_safety_assessment'),
+    ).toHaveLength(assessmentRequestsBeforeAction + 1);
+  });
+
+  it('cancels the combined confirmation after Developer Mode retry without running Update All', async () => {
+    safetyEnginesForGame = ['DeveloperRetryCancelAntiCheat'];
+    planSwapRepliesForTest = [
+      {
+        blockers: ['developer_mode_required'],
+        confirmation_token: '',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+      {
+        blockers: [],
+        confirmation_token: 'retry-d3d12-token',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+    ];
+    const onBulkSwap = vi.fn(() => Promise.resolve());
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: d3dUpdateDetails(), onBulkSwap },
+    });
+    flushSync();
+
+    const updateAll = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (1)"]');
+      if (!button) {
+        throw new Error('Expected the enabled Update All button');
+      }
+      return button;
+    });
+    updateAll.click();
+    flushSync();
+
+    const developerDialog = await dialogContaining(t('gameDetails.developerMode.requiredTitle'));
+    clickDialogButton(developerDialog, t('gameDetails.developerMode.checkStatus'));
+    flushSync();
+
+    const riskDialog = await dialogContaining(t('gameDetails.fileSafety.generic'));
+    clickDialogButton(riskDialog, t('common.cancel'));
+    await vi.waitFor(() => {
+      expect(riskDialog.isConnected).toBe(false);
+    });
+
+    expect(onBulkSwap).not.toHaveBeenCalled();
+    expect(catalogSettingWrites).toEqual([]);
+    expect(invokedCommands.filter((command) => command === 'plan_swap')).toHaveLength(2);
+  });
+
+  it('rejects an Update All add-on request that needs a wider scope than its captured token', async () => {
+    safetyEnginesForGame = ['UpdateAllScopeTestMarker'];
+    const renodxState = {
+      status: 'installed' as const,
+      host_kind: 'proxy' as 'proxy' | 'vulkan',
+      version: 'snapshot-test',
+      addon_dated: null,
+      installed_at: 1,
+      updated_at: 1,
+      dlss_fix_evidence_present: false,
+      addon_tracked: true,
+    };
+    renodxAvailabilityForTest = {
+      ...unsupportedRenoDxAvailability(),
+      state: renodxState,
+      host_detection: 'present',
+    };
+    renodxCheckUpdateForTest = {
+      addon: 'available',
+      host: 'current',
+      dlssFix: null,
+      overall: 'available',
+    };
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: createGameDetails({ addon_capabilities: ['renodx'] }) },
+    });
+    flushSync();
+
+    const updateAll = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (1)"]');
+      if (!button || button.getAttribute('aria-disabled') === 'true') {
+        throw new Error('Expected the RenoDX Update All action to be available');
+      }
+      return button;
+    });
+    updateAll.click();
+    flushSync();
+
+    const dialog = await dialogContaining(t('gameDetails.fileSafety.generic'));
+    expect(invokedCommands).not.toContain('get_shared_vulkan_safety_assessment');
+    clickDialogButton(dialog, t('gameDetails.updateAll.action'));
+
+    // Simulate the RenoDX store requiring shared Vulkan authority after the
+    // batch has captured only the narrower game token.
+    renodxState.host_kind = 'vulkan';
+    await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (1)"]');
+      expect(button?.getAttribute('aria-busy')).toBe('false');
+    });
+
+    expect(getActiveNotifications()).toContainEqual(
+      expect.objectContaining({
+        title: t('gameDetails.renodx.updateError'),
+        description: t('user_message.safety_context_scope_mismatch'),
+      }),
+    );
+    expect(invokedCommands).not.toContain('get_shared_vulkan_safety_assessment');
+    expect(invokedCommands).not.toContain('renodx_update');
+  });
+
+  it('stops the captured add-on batch when the game moves away and back during its first update', async () => {
+    enableAddonUpdateScenarioForTest = true;
+    safetyEnginesForGame = ['UpdateAllOwnerAntiCheat'];
+    const lumaUpdate = deferred<unknown>();
+    lumaUpdateForTest = lumaUpdate.promise;
+    const onBulkSwap = vi.fn(() => Promise.resolve());
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: addonUpdateDetails('/games/first'), onBulkSwap },
+    });
+    flushSync();
+
+    const updateAll = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (2)"]');
+      if (!button) {
+        throw new Error('Expected both add-on updates to be available');
+      }
+      return button;
+    });
+    updateAll.click();
+    flushSync();
+
+    const riskDialog = await dialogContaining(t('gameDetails.fileSafety.generic'));
+    clickDialogButton(riskDialog, t('gameDetails.updateAll.action'));
+    await vi.waitFor(() => {
+      expect(invokedCommands).toContain('luma_update');
+    });
+    expect(invokedCommands).not.toContain('update_optiscaler');
+
+    const host = component as {
+      replaceDetails: (details: ReturnType<typeof createGameDetails>) => void;
+    };
+    const safetyRequestsBeforeMove = invokedCommands.filter(
+      (command) => command === 'get_game_file_safety_assessment',
+    ).length;
+    host.replaceDetails(addonUpdateDetails('/games/second'));
+    flushSync();
+    const safetyRequestsAfterMove = invokedCommands.filter(
+      (command) => command === 'get_game_file_safety_assessment',
+    ).length;
+    expect(safetyRequestsAfterMove).toBe(safetyRequestsBeforeMove);
+
+    host.replaceDetails(addonUpdateDetails('/games/first'));
+    flushSync();
+    const safetyRequestsAfterReturn = invokedCommands.filter(
+      (command) => command === 'get_game_file_safety_assessment',
+    ).length;
+    expect(safetyRequestsAfterReturn).toBe(safetyRequestsAfterMove);
+
+    lumaUpdate.resolve({
+      status: 'installed',
+      version: 'Build 516',
+      addon_dated: null,
+      installed_at: 1,
+      updated_at: 2,
+      reshade_channel: 'nightly',
+      launch_args: [],
+    });
+    await vi.waitFor(() => {
+      expect(
+        target
+          .querySelector<HTMLButtonElement>('button[aria-label^="Update all"]')
+          ?.getAttribute('aria-busy'),
+      ).toBe('false');
+    });
+
+    expect(invokedCommands).not.toContain('update_optiscaler');
+    expect(
+      invokedCommands.filter((command) => command === 'get_game_file_safety_assessment'),
+    ).toHaveLength(safetyRequestsAfterReturn);
+    expect(
+      [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].some((dialog) =>
+        dialog.textContent.includes(t('gameDetails.fileSafety.generic')),
+      ),
+    ).toBe(false);
+    expect(getActiveNotifications()).toEqual([]);
+  });
+
+  it('does not duplicate a store-reported safety error with an Update All toast', async () => {
+    enableAddonUpdateScenarioForTest = true;
+    safetyEnginesForGame = ['UpdateAllStoreReportedAntiCheat'];
+    lumaUpdateErrorForTest = DesktopCommandError.fromDto({ code: 'safety_context_stale' });
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: addonUpdateDetails('/games/test') },
+    });
+    flushSync();
+
+    const updateAll = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (2)"]');
+      if (!button) {
+        throw new Error('Expected both add-on updates to be available');
+      }
+      return button;
+    });
+    updateAll.click();
+    flushSync();
+
+    const dialog = await dialogContaining(t('gameDetails.fileSafety.generic'));
+    clickDialogButton(dialog, t('gameDetails.updateAll.action'));
+    await vi.waitFor(() => {
+      expect(invokedCommands).toContain('luma_update');
+      expect(getActiveNotifications()).toHaveLength(1);
+    });
+
+    expect(invokedCommands).not.toContain('update_optiscaler');
+    expect(getActiveNotifications().map((notification) => notification.title)).not.toContain(
+      t('gameDetails.updateAll.partialFailure', { count: 1 }),
+    );
+  });
+
+  it('reports a standalone swap safety assessment failure once', async () => {
+    planSwapRepliesForTest = [
+      {
+        blockers: [],
+        confirmation_token: 'd3d12-confirmation-token',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+    ];
+    safetyAssessmentForTest = () =>
+      Promise.reject(DesktopCommandError.fromDto({ code: 'safety_context_stale' }));
+    const onSwap = vi.fn(() => Promise.resolve());
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: d3dUpdateDetails(), onSwap },
+    });
+    flushSync();
+
+    const trigger = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+      if (!button) {
+        throw new Error('Expected the D3D12 version selector');
+      }
+      return button;
+    });
+    await chooseSelectOption(trigger, 'artifact-d3d12');
+
+    await vi.waitFor(() => {
+      expect(getActiveNotifications()).toHaveLength(1);
+    });
+    expect(invokedCommands).toContain('get_game_file_safety_assessment');
+    expect(onSwap).not.toHaveBeenCalled();
+  });
+
+  it('restores the installed version selection after cancelling a standalone EXE change', async () => {
+    safetyEnginesForGame = ['BattlEye'];
+    planSwapRepliesForTest = [
+      {
+        blockers: [],
+        confirmation_token: 'd3d12-confirmation-token',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+    ];
+    const onSwap = vi.fn(() => Promise.resolve());
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: d3dUpdateDetails(), onSwap },
+    });
+    flushSync();
+
+    const trigger = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+      if (!button) {
+        throw new Error('Expected the D3D12 version selector');
+      }
+      return button;
+    });
+    await chooseSelectOption(trigger, 'artifact-d3d12');
+    const dialog = await dialogContaining('BattlEye');
+    clickDialogButton(dialog, t('common.cancel'));
+
+    await vi.waitFor(() => {
+      expect(dialog.isConnected).toBe(false);
+      expect(trigger.disabled).toBe(false);
+    });
+    expect(onSwap).not.toHaveBeenCalled();
+
+    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    trigger.click();
+    flushSync();
+    const installed = await vi.waitFor(() => {
+      const option = document.body.querySelector<HTMLElement>(
+        '[role="option"][data-value="installed:component-d3d12:0"]',
+      );
+      if (!option) {
+        throw new Error('Expected the installed version option');
+      }
+      return option;
+    });
+    expect(installed.getAttribute('aria-selected')).toBe('true');
+    expect(
+      document.body
+        .querySelector('[role="option"][data-value="artifact-d3d12"]')
+        ?.getAttribute('aria-selected'),
+    ).not.toBe('true');
+  });
+
+  it('reports a standalone backend safety-token rejection once', async () => {
+    safetyEnginesForGame = ['BattlEye'];
+    planSwapRepliesForTest = [
+      {
+        blockers: [],
+        confirmation_token: 'd3d12-confirmation-token',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+    ];
+    const onSwap = vi.fn(() =>
+      Promise.reject(DesktopCommandError.fromDto({ code: 'safety_context_stale' })),
+    );
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: d3dUpdateDetails(), onSwap },
+    });
+    flushSync();
+
+    const trigger = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+      if (!button) {
+        throw new Error('Expected the D3D12 version selector');
+      }
+      return button;
+    });
+    await chooseSelectOption(trigger, 'artifact-d3d12');
+    const dialog = await dialogContaining('BattlEye');
+    clickDialogButton(dialog, t('gameDetails.fileSafety.confirmExePatchAction'));
+
+    await vi.waitFor(() => {
+      expect(getActiveNotifications()).toHaveLength(1);
+    });
+    expect(onSwap).toHaveBeenCalledOnce();
+    expect(invokedCommands).toContain('get_game_file_safety_assessment');
+  });
+
+  it('shows a preparation failure for same-owner safety capture errors', async () => {
+    enableAddonUpdateScenarioForTest = true;
+    safetyAssessmentForTest = () =>
+      Promise.reject(DesktopCommandError.fromDto({ code: 'safety_context_stale' }));
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: addonUpdateDetails('/games/test') },
+    });
+    flushSync();
+
+    const updateAll = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (2)"]');
+      if (!button) {
+        throw new Error('Expected both add-on updates to be available');
+      }
+      return button;
+    });
+    updateAll.click();
+
+    await vi.waitFor(() => {
+      expect(getActiveNotifications()).toHaveLength(1);
+    });
+    expect(getActiveNotifications()[0]?.title).toBe(t('gameDetails.updateAll.prepareFailed'));
+    expect(invokedCommands).toContain('get_game_file_safety_assessment');
+    expect(invokedCommands).not.toContain('luma_update');
+    expect(invokedCommands).not.toContain('update_optiscaler');
+    expect(target.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('silently discards a late safety assessment after the Update All owner changes', async () => {
+    enableAddonUpdateScenarioForTest = true;
+    const assessment = deferred<unknown>();
+    safetyAssessmentForTest = () => assessment.promise;
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: addonUpdateDetails('/games/first') },
+    });
+    flushSync();
+
+    const updateAll = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>('button[aria-label="Update all (2)"]');
+      if (!button) {
+        throw new Error('Expected both add-on updates to be available');
+      }
+      return button;
+    });
+    updateAll.click();
     await vi.waitFor(() => {
       expect(invokedCommands).toContain('get_game_file_safety_assessment');
     });
+
+    const host = component as {
+      replaceDetails: (details: ReturnType<typeof createGameDetails>) => void;
+    };
+    host.replaceDetails(addonUpdateDetails('/games/second'));
+    flushSync();
+    assessment.resolve({
+      game_id: 'steam:123',
+      context_token: 'stale-game-safety-token',
+      detected_engines: [],
+      scan_completeness: 'complete',
+    });
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="dialog"]')).toBeNull();
+      expect(getActiveNotifications()).toEqual([]);
+      expect(invokedCommands).not.toContain('luma_update');
+    });
+  });
+
+  it('combines the fresh risk notice and single-swap executable plan, then keeps EXE-only confirmation', async () => {
+    await setLanguageMode('ru');
+    safetyEnginesForGame = ['BattlEye'];
+    safetyCompletenessForGame = 'limited';
+    planSwapRepliesForTest = [
+      {
+        blockers: [],
+        confirmation_token: 'first-patch-token',
+        d3d12_executable_action: D3D12_ACTION,
+      },
+      {
+        blockers: [],
+        confirmation_token: '',
+        d3d12_executable_action: D3D12_REPATCH_ACTION,
+      },
+      {
+        blockers: [],
+        confirmation_token: 'must-not-be-forwarded',
+        d3d12_executable_action: D3D12_REPATCH_ACTION,
+      },
+    ];
+    const onSwap = vi.fn(() => Promise.resolve());
+    const candidates = ['artifact-1', 'artifact-2'].map((artifactId, index) => ({
+      artifact_id: artifactId,
+      file_name: 'Game.dll',
+      file_path: null,
+      technical_version: `${index + 2}.0`,
+      release_label: null,
+      source_game_id: null,
+      comparison: 'newer',
+      catalog_package: null,
+      is_downloaded: true,
+      is_debug: false,
+      sha256: `sha256-${artifactId}`,
+      d3d12_executable_action: index === 0 ? D3D12_ACTION : D3D12_REPATCH_ACTION,
+    }));
+    const details = createGameDetails({
+      game: { identity: { id: 'steam:123', title: 'Test Game', launcher: 'Steam' } },
+      components: [
+        {
+          id: 'component-d3d12',
+          game_id: 'steam:123',
+          kind: 'library',
+          technology: 'd3d12_agility',
+          swappability: 'swappable',
+          files: [],
+          rollback_available: false,
+          d3d12_executable_status: null,
+        },
+      ],
+      candidate_groups: [
+        {
+          component_id: 'component-d3d12',
+          technology: 'd3d12_agility',
+          file_path: 'Game.dll',
+          version_report: {
+            kind: 'known',
+            technical_version: '1.0',
+            release_label: null,
+            catalog_release: null,
+          },
+          automatic_candidate_artifact_id: null,
+          candidates,
+        },
+      ],
+    });
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details, onSwap },
+    });
+    flushSync();
+
+    async function choose(artifactId: string): Promise<HTMLElement> {
+      const trigger = await vi.waitFor(() => {
+        const candidate = [
+          ...target.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]'),
+        ].at(0);
+        if (!candidate) {
+          throw new Error('Expected the D3D12 version selector');
+        }
+        return candidate;
+      });
+      trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+      trigger.click();
+      flushSync();
+      const option = await vi.waitFor(() => {
+        const candidate = document.body.querySelector<HTMLElement>(
+          `[role="option"][data-value="${artifactId}"]`,
+        );
+        if (!candidate) {
+          throw new Error(`Expected candidate ${artifactId}`);
+        }
+        return candidate;
+      });
+      option.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+      option.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }));
+      option.click();
+      flushSync();
+      return option;
+    }
+
+    await choose('artifact-1');
+    const combinedDialog = await vi.waitFor(() => {
+      const dialog = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+        (item) => item.textContent.includes('BattlEye'),
+      );
+      if (!dialog) {
+        throw new Error('Expected a combined risk and executable confirmation');
+      }
+      return dialog;
+    });
+    const canonicalWarning = t('gameDetails.fileSafety.generic');
+    expect(combinedDialog.textContent.split(canonicalWarning)).toHaveLength(2);
+    expect(combinedDialog.textContent.split('BattlEye')).toHaveLength(2);
+    expect(combinedDialog.textContent).toContain(t('gameDetails.fileSafety.detectedEngines'));
+    expect(combinedDialog.textContent).not.toContain(t('gameDetails.fileSafety.limitedDetail'));
+    expect(combinedDialog.textContent).toContain(t('gameDetails.d3d12.confirm.title'));
+    expect(combinedDialog.textContent).not.toContain('D3D12SDKVersion');
+    expect(combinedDialog.textContent).toContain(
+      t('gameDetails.d3d12.action.planPatch', { from: 606, to: 619 }),
+    );
+    expect(combinedDialog.textContent).toContain('/games/test/Game.exe.rp-backup');
+    expect(combinedDialog.textContent).toContain(t('gameDetails.d3d12.confirm.signatureWarning'));
+    expect(combinedDialog.querySelector('[data-slot="dialog-title"]')?.textContent).toBe(
+      t('gameDetails.d3d12.confirm.title'),
+    );
+    expect(combinedDialog.textContent).toContain(t('gameDetails.fileSafety.confirmExePatchAction'));
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    [...combinedDialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) =>
+        button.textContent.includes(t('gameDetails.fileSafety.confirmExePatchAction')),
+      )
+      ?.click();
+    await vi.waitFor(() => {
+      expect(onSwap).toHaveBeenCalledOnce();
+    });
+    expect(onSwap).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        artifactId: 'artifact-1',
+        confirmationToken: 'first-patch-token',
+        gameContextToken: 'game-safety-token',
+      }),
+    );
+
+    await choose('artifact-2');
+    const executableOnlyDialog = await vi.waitFor(() => {
+      const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+      if (
+        !dialog ||
+        !dialog.textContent.includes(t('gameDetails.d3d12.confirm.title')) ||
+        !dialog.textContent.includes('BattlEye')
+      ) {
+        throw new Error('Expected the detected-engine warning with the executable confirmation');
+      }
+      return dialog;
+    });
+    expect(executableOnlyDialog.textContent).toContain('/games/test/Game.exe.rp-backup');
+    expect(executableOnlyDialog.textContent.split(canonicalWarning)).toHaveLength(2);
+    expect(executableOnlyDialog.textContent).toContain(t('gameDetails.d3d12.confirm.title'));
+    expect(executableOnlyDialog.textContent).toContain(
+      t('gameDetails.fileSafety.confirmExePatchAction'),
+    );
+    expect(executableOnlyDialog.textContent).toContain(t('gameDetails.fileSafety.detectedEngines'));
+    expect(executableOnlyDialog.textContent).not.toContain(
+      t('gameDetails.fileSafety.limitedDetail'),
+    );
+    expect(executableOnlyDialog.querySelector('[data-slot="checkbox"]')).toBeNull();
+    [...executableOnlyDialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) =>
+        button.textContent.includes(t('gameDetails.fileSafety.confirmExePatchAction')),
+      )
+      ?.click();
+    await vi.waitFor(() => {
+      expect(onSwap).toHaveBeenCalledTimes(2);
+    });
+    expect(onSwap).toHaveBeenLastCalledWith(
+      expect.objectContaining({ artifactId: 'artifact-2', confirmationToken: null }),
+    );
+  });
+
+  it('treats standalone Streamline confirmation cancellation as a quiet skipped swap', async () => {
+    safetyEnginesForGame = ['EasyAntiCheat-Streamline'];
+    const onBulkSwap = vi.fn(() => Promise.resolve());
+    const optionId = 'a'.repeat(64);
+
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: streamlineUpdateDetails(optionId), onBulkSwap },
+    });
+    flushSync();
+
+    const trigger = await vi.waitFor(() => {
+      const candidate = [
+        ...target.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]'),
+      ].find((button) => button.textContent.includes('2.3.0'));
+      if (!candidate) {
+        throw new Error('Expected the Streamline version selector');
+      }
+      return candidate;
+    });
+    await chooseSelectOption(trigger, optionId);
+
+    const dialog = await vi.waitFor(() => {
+      const candidate = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+        (item) => item.textContent.includes('EasyAntiCheat-Streamline'),
+      );
+      if (!candidate) {
+        throw new Error('Expected the anti-cheat game-file risk confirmation');
+      }
+      return candidate;
+    });
+    expect(dialog.querySelector('[data-slot="dialog-title"]')?.textContent).toBe(
+      t('gameDetails.fileSafety.confirmTitle'),
+    );
+    expect(dialog.textContent).toContain(t('gameDetails.fileSafety.confirmChangeAction'));
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent.includes('Cancel'))
+      ?.click();
+
+    await vi.waitFor(() => {
+      expect(dialog.isConnected).toBe(false);
+    });
+    expect(onBulkSwap).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(trigger.disabled).toBe(false);
+    });
+    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    trigger.click();
+    flushSync();
+    const cancelledOption = await vi.waitFor(() => {
+      const option = document.body.querySelector<HTMLElement>(
+        `[role="option"][data-value="${optionId}"]`,
+      );
+      if (!option) {
+        throw new Error('Expected the Streamline version option');
+      }
+      return option;
+    });
+    expect(cancelledOption.getAttribute('aria-selected')).not.toBe('true');
+    expect(getActiveNotifications()).toEqual([]);
+    expect(
+      invokedCommands.filter((command) => command === 'get_game_file_safety_assessment'),
+    ).toHaveLength(1);
+  });
+
+  it('reports standalone Streamline safety-token failures once', async () => {
+    safetyEnginesForGame = ['EasyAntiCheat-Streamline'];
+    const onBulkSwap = vi.fn(() =>
+      Promise.reject(DesktopCommandError.fromDto({ code: 'safety_context_stale' })),
+    );
+    const optionId = 'b'.repeat(64);
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: streamlineUpdateDetails(optionId), onBulkSwap },
+    });
+    flushSync();
+
+    const trigger = await vi.waitFor(() => {
+      const button = [
+        ...target.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]'),
+      ].find((candidate) => candidate.textContent.includes('2.3.0'));
+      if (!button) {
+        throw new Error('Expected the Streamline version selector');
+      }
+      return button;
+    });
+    await chooseSelectOption(trigger, optionId);
+
+    const dialog = await dialogContaining('EasyAntiCheat-Streamline');
+    clickDialogButton(dialog, t('gameDetails.fileSafety.confirmChangeAction'));
+    await vi.waitFor(() => {
+      expect(onBulkSwap).toHaveBeenCalledOnce();
+      expect(getActiveNotifications()).toHaveLength(1);
+    });
+
+    expect(getActiveNotifications()).toContainEqual(
+      expect.objectContaining({ description: t('user_message.safety_context_stale') }),
+    );
+  });
+
+  it('does not passively assess file safety on mount', async () => {
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: createGameDetails() },
+    });
+    flushSync();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(invokedCommands).not.toContain('get_game_file_safety_assessment');
     expect(invokedCommands).not.toContain('get_shared_vulkan_safety_assessment');
-    const safetyRows = target.querySelectorAll('[data-file-safety-row]');
-    expect(safetyRows).toHaveLength(1);
-    expect(safetyRows[0]?.closest('[data-slot="scroll-area-viewport"]')).not.toBeNull();
+    expect(
+      [...target.querySelectorAll<HTMLButtonElement>('button')].some((button) =>
+        button.textContent.includes('Risk'),
+      ),
+    ).toBe(false);
+    expect(target.querySelector('[data-file-safety-row]')).toBeNull();
   });
 
   it.each([
@@ -941,21 +2196,14 @@ describe('GameDetailsPage', () => {
     expect(target.textContent).toContain('Addons');
   });
 
-  it('starts a fresh safety assessment when the selected game changes mid-request', async () => {
+  it('does not start a passive safety assessment when the selected game changes', async () => {
     disposeInvoker?.();
-    let resolveFirstAssessment!: (assessment: unknown) => void;
-    const firstAssessment = new Promise<unknown>((resolve) => {
-      resolveFirstAssessment = resolve;
-    });
     const safetyGameIds: string[] = [];
     const invoker = ((command: string, payload?: Record<string, unknown>) => {
       invokedCommands.push(command);
       if (command === 'get_game_file_safety_assessment') {
         const requestedGameId = typeof payload?.gameId === 'string' ? payload.gameId : '';
         safetyGameIds.push(requestedGameId);
-        if (requestedGameId === 'game-1') {
-          return firstAssessment;
-        }
         return Promise.resolve({
           game_id: requestedGameId,
           context_token: `${requestedGameId}-safety-token`,
@@ -1007,25 +2255,14 @@ describe('GameDetailsPage', () => {
       props: { details: detailsFor('game-1') },
     });
     flushSync();
-    await vi.waitFor(() => {
-      expect(safetyGameIds).toEqual(['game-1']);
-    });
+    expect(safetyGameIds).toEqual([]);
 
     const host = component as {
       replaceDetails: (details: ReturnType<typeof createGameDetails>) => void;
     };
     host.replaceDetails(detailsFor('game-2'));
     flushSync();
-    resolveFirstAssessment({
-      game_id: 'game-1',
-      context_token: 'game-1-safety-token',
-      detected_engines: [],
-      scan_completeness: 'complete',
-    });
-
-    await vi.waitFor(() => {
-      expect(safetyGameIds).toEqual(['game-1', 'game-2']);
-      expect(target.textContent).toContain('Easy Anti-Cheat detected.');
-    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(safetyGameIds).toEqual([]);
   });
 });

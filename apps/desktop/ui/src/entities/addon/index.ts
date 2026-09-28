@@ -12,6 +12,10 @@ export type { HostDescription } from './model/presenters';
 
 export { createAddonStore } from './model/create-addon-store.svelte';
 export {
+  requestMutationSafetyTokens,
+  type MutationSafetyCapture,
+} from './model/request-mutation-safety-tokens';
+export {
   isMutationFailure,
   isMutationSuccess,
   type AddonMutationResult,

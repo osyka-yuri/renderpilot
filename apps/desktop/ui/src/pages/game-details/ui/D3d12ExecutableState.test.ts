@@ -11,6 +11,7 @@ import { setLanguageMode } from '@shared/i18n';
 import type { D3d12ExecutableAction } from '@shared/model';
 
 import { candidate, group } from '../model/candidate-group-fixtures';
+import type { SwapHandler } from '../model/create-game-details-page-model';
 import ComponentVersionRowTestHost from './ComponentVersionRow.test-host.svelte';
 
 const planSwap = vi.hoisted(() => vi.fn());
@@ -66,6 +67,7 @@ describe('D3D12 executable state UI', () => {
       props: {
         component: repairComponent(),
         group: null,
+        installPath: '/games/test',
         busy: false,
         onSwap: vi.fn(),
         onRollback: vi.fn(),
@@ -89,6 +91,7 @@ describe('D3D12 executable state UI', () => {
       props: {
         component: repairComponent(false),
         group: null,
+        installPath: '/games/test',
         busy: false,
         onSwap: vi.fn(),
         onRollback: vi.fn(),
@@ -107,6 +110,7 @@ describe('D3D12 executable state UI', () => {
       props: {
         component: patchedComponent(),
         group: null,
+        installPath: '/games/test',
         busy: false,
         onSwap: vi.fn(),
         onRollback: vi.fn(),
@@ -125,6 +129,7 @@ describe('D3D12 executable state UI', () => {
       props: {
         component: patchedComponent(),
         group: null,
+        installPath: '/games/test',
         busy: false,
         onSwap: vi.fn(),
         onRollback,
@@ -148,7 +153,7 @@ describe('D3D12 executable state UI', () => {
   it('groups versions by whether they require an executable change', async () => {
     const repatchAction = executableAction('patch', 618);
     planSwap.mockResolvedValue(previewSwapPlan('repatch', repatchAction));
-    const onSwap = vi.fn();
+    const onSwap = vi.fn<SwapHandler>();
     component = mount(ComponentVersionRowTestHost, {
       target,
       props: {
@@ -163,6 +168,7 @@ describe('D3D12 executable state UI', () => {
             d3d12_executable_action: executableAction('patch', 618),
           }),
         ]),
+        installPath: '/games/test',
         busy: false,
         onSwap,
         onRollback: vi.fn(),
@@ -193,11 +199,19 @@ describe('D3D12 executable state UI', () => {
 
     await vi.waitFor(() => {
       expect(planSwap).toHaveBeenCalledWith('steam:123', 'component:d3d12', 'repatch');
-      expect(onSwap).toHaveBeenCalledWith({
+      expect(onSwap.mock.calls[0]?.[0]).toEqual({
         componentId: 'component:d3d12',
         artifactId: 'repatch',
         isDownloaded: true,
-        confirmationToken: undefined,
+        confirmationToken: null,
+      });
+      expect(onSwap.mock.calls[0]?.[1]).toMatchObject({
+        action: repatchAction,
+        owner: {
+          gameId: 'steam:123',
+          componentId: 'component:d3d12',
+          artifactId: 'repatch',
+        },
       });
     });
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
@@ -220,6 +234,7 @@ describe('D3D12 executable state UI', () => {
             d3d12_executable_action: action,
           },
         ]),
+        installPath: '/games/test',
         busy: false,
         onSwap,
         onRollback: vi.fn(),
@@ -231,12 +246,15 @@ describe('D3D12 executable state UI', () => {
 
     await vi.waitFor(() => {
       expect(planSwap).toHaveBeenCalledWith('steam:123', 'component:d3d12', artifactId);
-      expect(onSwap).toHaveBeenCalledWith({
-        componentId: 'component:d3d12',
-        artifactId,
-        isDownloaded: true,
-        confirmationToken: undefined,
-      });
+      expect(onSwap).toHaveBeenCalledWith(
+        {
+          componentId: 'component:d3d12',
+          artifactId,
+          isDownloaded: true,
+          confirmationToken: null,
+        },
+        undefined,
+      );
     });
   });
 
@@ -263,6 +281,7 @@ describe('D3D12 executable state UI', () => {
           group: group('component:d3d12', 'd3d12_agility', '1.619.1', [
             previewCandidate(artifactId),
           ]),
+          installPath: '/games/test',
           busy: false,
           onSwap,
           onRollback: vi.fn(),
@@ -285,12 +304,15 @@ describe('D3D12 executable state UI', () => {
 
       await vi.waitFor(() => {
         expect(planSwap).toHaveBeenCalledTimes(2);
-        expect(onSwap).toHaveBeenCalledWith({
-          componentId: 'component:d3d12',
-          artifactId,
-          isDownloaded: true,
-          confirmationToken: undefined,
-        });
+        expect(onSwap).toHaveBeenCalledWith(
+          {
+            componentId: 'component:d3d12',
+            artifactId,
+            isDownloaded: true,
+            confirmationToken: null,
+          },
+          undefined,
+        );
       });
       expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     },

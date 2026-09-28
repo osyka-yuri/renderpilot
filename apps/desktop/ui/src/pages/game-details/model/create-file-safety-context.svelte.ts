@@ -5,39 +5,53 @@ import {
   type GameFileSafetyAssessment,
 } from '@entities/game';
 import type { MutationSafetyTokens } from '@entities/addon';
-import { formatPresentedError } from '@shared/error-presentation';
-import { publishPresentedErrorNotification } from '@shared/notifications';
-import { t } from '@shared/i18n';
-import { DesktopCommandError, isFileSafetyContextError } from '@shared/errors';
+import { DesktopCommandError } from '@shared/errors';
 
 export type FileSafetyScope = 'game' | 'game_and_shared';
 
-type PendingInstallConfirmation = {
+export type CapturedFileSafetyContext = {
   gameId: string;
-  detectedEngines: string[];
-  resolve: (accepted: boolean) => void;
+  assessment: GameFileSafetyAssessment;
+  tokens: MutationSafetyTokens;
+  installPath: string;
 };
 
 type Options = {
   getGameId: () => string | null;
+  getInstallPath: () => string | null;
 };
 
 /** Owns fresh per-game and shared-Vulkan safety contexts for a game-details page. */
 export function createFileSafetyContext(options: Options) {
-  let gameAssessment = $state<GameFileSafetyAssessment | null>(null);
-  let sharedVulkanContextToken = $state<string | null>(null);
-  let loading = $state(false);
-  let error = $state<string | null>(null);
+  let gameAssessment = $state.raw<GameFileSafetyAssessment | null>(null);
   let requestId = 0;
   let destroyed = false;
+  let hasObservedInstallation = false;
   let lastGameId: string | null = null;
-  let pendingInstallConfirmation = $state.raw<PendingInstallConfirmation | null>(null);
+  let lastInstallPath: string | null = null;
+  let gameAssessmentInstallPath: string | null = null;
   type ReloadEntry = {
     gameId: string;
-    scope: FileSafetyScope;
-    notifyOnError: boolean;
-    promise: Promise<void>;
+    installPath: string;
+    generation: CaptureGeneration;
+    promise: Promise<CapturedFileSafetyContext | null>;
   };
+  type CaptureGeneration = {
+    invalidated: Promise<'invalidated'>;
+    invalidate: () => void;
+  };
+
+  function createCaptureGeneration(): CaptureGeneration {
+    let invalidate!: () => void;
+    const invalidated = new Promise<'invalidated'>((resolve) => {
+      invalidate = () => {
+        resolve('invalidated');
+      };
+    });
+    return { invalidated, invalidate };
+  }
+
+  let activeCaptureGeneration = createCaptureGeneration();
   let inFlight: ReloadEntry | null = null;
 
   function currentGameId(): string | null {
@@ -49,26 +63,24 @@ export function createFileSafetyContext(options: Options) {
     return normalizedGameId.length > 0 ? normalizedGameId : null;
   }
 
-  function scopeCovers(available: FileSafetyScope, requested: FileSafetyScope): boolean {
-    return available === 'game_and_shared' || available === requested;
-  }
-
-  function isCurrentGame(gameId: string): boolean {
-    return currentGameId() === gameId;
+  function isCurrentInstallation(gameId: string, installPath: string): boolean {
+    return currentGameId() === gameId && options.getInstallPath() === installPath;
   }
 
   function safetyContextError(code: 'safety_context_missing' | 'safety_context_scope_mismatch') {
     return DesktopCommandError.fromDto({ code });
   }
 
-  async function performReload(scope: FileSafetyScope, gameId: string): Promise<void> {
+  async function performReload(
+    scope: FileSafetyScope,
+    gameId: string,
+    installPath: string,
+  ): Promise<CapturedFileSafetyContext | null> {
     const token = ++requestId;
-    loading = true;
-    error = null;
     try {
       const nextGame = await getGameFileSafetyAssessment(gameId);
-      if (token !== requestId || isDestroyed() || !isCurrentGame(gameId)) {
-        return;
+      if (token !== requestId || isDestroyed() || !isCurrentInstallation(gameId, installPath)) {
+        return null;
       }
       if (normalizeSelectableGameId(nextGame.game_id) !== gameId) {
         throw safetyContextError('safety_context_scope_mismatch');
@@ -77,66 +89,82 @@ export function createFileSafetyContext(options: Options) {
       if (scope === 'game_and_shared') {
         nextShared = await getSharedVulkanSafetyAssessment();
       }
-      if (token !== requestId || isDestroyed() || !isCurrentGame(gameId)) {
-        return;
+      if (token !== requestId || isDestroyed() || !isCurrentInstallation(gameId, installPath)) {
+        return null;
       }
       gameAssessment = nextGame;
-      if (nextShared) {
-        sharedVulkanContextToken = nextShared.context_token;
-      }
+      gameAssessmentInstallPath = installPath;
+      return {
+        gameId,
+        assessment: nextGame,
+        installPath,
+        tokens: {
+          gameContextToken: nextGame.context_token,
+          ...(scope === 'game_and_shared' && nextShared
+            ? { sharedVulkanContextToken: nextShared.context_token }
+            : {}),
+        },
+      };
     } catch (loadError) {
-      if (token !== requestId || isDestroyed()) {
-        return;
+      if (token !== requestId || isDestroyed() || !isCurrentInstallation(gameId, installPath)) {
+        return null;
       }
-      error = formatPresentedError(loadError);
       throw loadError;
-    } finally {
-      if (token === requestId && !isDestroyed()) {
-        loading = false;
-      }
     }
   }
 
-  function beginReload(scope: FileSafetyScope, notifyOnError: boolean): ReloadEntry | null {
+  function beginCapture(scope: FileSafetyScope): ReloadEntry | null {
     const gameId = currentGameId();
-    if (!gameId || destroyed) {
+    const installPath = options.getInstallPath();
+    if (!gameId || !installPath || destroyed) {
       return null;
     }
 
+    const generation = activeCaptureGeneration;
     const current = inFlight;
-    if (current?.gameId === gameId && scopeCovers(current.scope, scope)) {
-      // A mutation is the consumer of this request, so its operation-level
-      // error notification is the single user-visible notification.
-      if (!notifyOnError) {
-        current.notifyOnError = false;
-      }
-      return current;
-    }
+    const currentMatchesInstallation =
+      current?.generation === generation &&
+      current.gameId === gameId &&
+      current.installPath === installPath;
 
-    const entry = {} as ReloadEntry;
     // A wider request for the same game must wait for its narrower predecessor,
     // but a newly selected game must never inherit the previous game's latency.
-    // The request id and current-game checks below already discard late results.
-    const previous = current?.gameId === gameId ? current : null;
-    entry.gameId = gameId;
-    entry.scope = scope;
-    entry.notifyOnError = notifyOnError;
-    entry.promise = (async () => {
+    // Capture generations detach cancelled work; owner checks discard results
+    // from a game or installation that is no longer selected.
+    const previous = currentMatchesInstallation ? current : null;
+    const promise = (async () => {
       // Do not overlap a narrower assessment request with the wider request
       // that follows it. The previous request may fail; the wider request must
       // still get its own chance to establish a complete context.
       if (previous) {
-        try {
-          await previous.promise;
-        } catch {
-          // The wider request below is the authoritative result.
+        const predecessor = await Promise.race([
+          previous.promise.then(
+            () => 'complete' as const,
+            () => 'complete' as const,
+          ),
+          generation.invalidated,
+        ]);
+        if (predecessor === 'invalidated') {
+          return null;
         }
       }
-      if (!isCurrentGame(gameId) || isDestroyed()) {
-        return;
+      if (
+        generation !== activeCaptureGeneration ||
+        !isCurrentInstallation(gameId, installPath) ||
+        isDestroyed()
+      ) {
+        return null;
       }
-      await performReload(scope, gameId);
+      const result = await Promise.race([
+        performReload(scope, gameId, installPath).then((captured) => ({
+          kind: 'complete' as const,
+          captured,
+        })),
+        generation.invalidated.then(() => ({ kind: 'invalidated' as const })),
+      ]);
+      return result.kind === 'complete' ? result.captured : null;
     })();
+    const entry: ReloadEntry = { gameId, installPath, generation, promise };
     inFlight = entry;
     entry.promise.then(
       () => {
@@ -153,156 +181,93 @@ export function createFileSafetyContext(options: Options) {
     return entry;
   }
 
+  // Read at the time of each async continuation; TypeScript cannot infer destroy() calls across awaits.
   function isDestroyed(): boolean {
     return destroyed;
   }
 
-  async function reload(scope: FileSafetyScope = 'game'): Promise<void> {
-    const entry = beginReload(scope, true);
-    if (!entry) {
-      return;
-    }
-    try {
-      await entry.promise;
-    } catch (loadError) {
-      if (entry.notifyOnError) {
-        publishPresentedErrorNotification(t('gameDetails.fileSafety.loadError'), loadError);
-      }
-    }
-  }
-
-  async function requireTokens(scope: FileSafetyScope = 'game'): Promise<MutationSafetyTokens> {
-    const gameId = currentGameId();
-    if (!gameId || destroyed) {
-      throw safetyContextError('safety_context_missing');
-    }
-
-    const entry = beginReload(scope, false);
-    if (!entry) {
-      throw safetyContextError('safety_context_missing');
-    }
-    await entry.promise;
-
-    if (isDestroyed() || !isCurrentGame(gameId) || gameAssessment?.game_id !== gameId) {
-      throw safetyContextError('safety_context_scope_mismatch');
-    }
-    const gameContextToken = gameAssessment.context_token;
-    if (!gameContextToken) {
-      throw safetyContextError('safety_context_missing');
-    }
-    if (scope === 'game_and_shared' && !sharedVulkanContextToken) {
-      throw safetyContextError('safety_context_missing');
-    }
-    return {
-      gameContextToken,
-      ...(scope === 'game_and_shared' ? { sharedVulkanContextToken } : {}),
-    };
-  }
-
-  /**
-   * Captures the same fresh mutation authority as `requireTokens`, then pauses
-   * only when that assessment explicitly names an anti-cheat engine. A cancel
-   * is a normal skipped install, not a command failure.
-   */
-  async function requireInstallTokens(
+  async function captureFreshContext(
     scope: FileSafetyScope = 'game',
-  ): Promise<MutationSafetyTokens | null> {
+  ): Promise<CapturedFileSafetyContext> {
     const gameId = currentGameId();
-    const tokens = await requireTokens(scope);
-    if (!gameId || !isCurrentGame(gameId) || gameAssessment?.game_id !== gameId) {
+    const installPath = options.getInstallPath();
+    if (!gameId || !installPath || destroyed) {
+      throw safetyContextError('safety_context_missing');
+    }
+
+    const entry = beginCapture(scope);
+    if (!entry) {
+      throw safetyContextError('safety_context_missing');
+    }
+    const captured = await entry.promise;
+    if (
+      !captured ||
+      isDestroyed() ||
+      !isCurrentInstallation(gameId, installPath) ||
+      captured.installPath !== installPath ||
+      captured.assessment.game_id !== gameId
+    ) {
       throw safetyContextError('safety_context_scope_mismatch');
     }
-    const detectedEngines = [...gameAssessment.detected_engines];
-    if (detectedEngines.length === 0) {
-      return tokens;
+    if (!captured.tokens.gameContextToken) {
+      throw safetyContextError('safety_context_missing');
     }
-    if (pendingInstallConfirmation) {
-      return null;
+    if (scope === 'game_and_shared' && !captured.tokens.sharedVulkanContextToken) {
+      throw safetyContextError('safety_context_missing');
     }
-
-    return new Promise<MutationSafetyTokens | null>((resolve) => {
-      pendingInstallConfirmation = {
-        gameId,
-        detectedEngines,
-        resolve: (accepted) => {
-          const stillCurrent = !isDestroyed() && isCurrentGame(gameId);
-          pendingInstallConfirmation = null;
-          resolve(accepted && stillCurrent ? tokens : null);
-        },
-      };
-    });
+    return captured;
   }
 
-  function resolveInstallConfirmation(accepted: boolean): void {
-    pendingInstallConfirmation?.resolve(accepted);
+  /** Captures assessment and backend authority together for the page coordinator. */
+  function isCurrentCapture(captured: CapturedFileSafetyContext): boolean {
+    return (
+      !isDestroyed() &&
+      isCurrentInstallation(captured.gameId, captured.installPath) &&
+      gameAssessmentInstallPath === captured.installPath &&
+      gameAssessment === captured.assessment &&
+      captured.assessment.game_id === captured.gameId
+    );
   }
 
-  function cancelInstallConfirmation(): void {
-    resolveInstallConfirmation(false);
-  }
-
-  async function refreshForMutationError(errorValue: unknown, scope: FileSafetyScope = 'game') {
-    if (!isFileSafetyContextError(errorValue)) {
-      return;
-    }
-    const entry = beginReload(scope, false);
-    if (!entry) {
-      return;
-    }
-    try {
-      await entry.promise;
-    } catch {
-      // The original mutation already produced the user-visible error. A
-      // refresh failure is diagnostic state, not a second notification.
-    }
+  /** Detaches pending assessments so a cancelled attempt cannot block a retry. */
+  function invalidatePendingCapture(): void {
+    const invalidatedGeneration = activeCaptureGeneration;
+    activeCaptureGeneration = createCaptureGeneration();
+    requestId += 1;
+    inFlight = null;
+    invalidatedGeneration.invalidate();
   }
 
   $effect(() => {
     const gameId = currentGameId();
-    if (gameId === lastGameId) {
+    const installPath = options.getInstallPath();
+    if (!hasObservedInstallation) {
+      hasObservedInstallation = true;
+      lastGameId = gameId;
+      lastInstallPath = installPath;
       return;
     }
-    cancelInstallConfirmation();
-    lastGameId = gameId;
-    gameAssessment = null;
-    sharedVulkanContextToken = null;
-    if (gameId) {
-      void reload('game');
+    if (gameId === lastGameId && installPath === lastInstallPath) {
+      return;
     }
+    lastGameId = gameId;
+    lastInstallPath = installPath;
+    invalidatePendingCapture();
+    gameAssessment = null;
+    gameAssessmentInstallPath = null;
   });
 
   function destroy(): void {
-    cancelInstallConfirmation();
     destroyed = true;
-    requestId += 1;
+    invalidatePendingCapture();
     gameAssessment = null;
-    sharedVulkanContextToken = null;
+    gameAssessmentInstallPath = null;
   }
 
   return {
-    get assessment() {
-      return gameAssessment;
-    },
-    get gameContextToken() {
-      return gameAssessment?.context_token ?? null;
-    },
-    get sharedVulkanContextToken() {
-      return sharedVulkanContextToken;
-    },
-    get loading() {
-      return loading;
-    },
-    get error() {
-      return error;
-    },
-    get installConfirmation() {
-      return pendingInstallConfirmation;
-    },
-    reload,
-    requireTokens,
-    requireInstallTokens,
-    resolveInstallConfirmation,
-    refreshForMutationError,
+    captureFreshContext,
+    isCurrentCapture,
+    invalidatePendingCapture,
     destroy,
   };
 }

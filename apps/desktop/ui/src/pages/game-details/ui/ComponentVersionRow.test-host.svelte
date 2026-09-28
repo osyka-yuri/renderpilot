@@ -8,14 +8,15 @@
   type Props = {
     component: GameLibraryComponent;
     group: GameCandidateGroup | null;
+    installPath: string;
     busy: boolean;
     onSwap: SwapHandler;
     onRollback: (componentId: string) => void;
   };
 
-  const { component, group, busy, onSwap, onRollback }: Props = $props();
+  const { component, group, installPath, busy, onSwap, onRollback }: Props = $props();
 </script>
 
 <TooltipProvider>
-  <ComponentVersionRow {component} {group} {busy} {onSwap} {onRollback} />
+  <ComponentVersionRow {component} {group} {installPath} {busy} {onSwap} {onRollback} />
 </TooltipProvider>

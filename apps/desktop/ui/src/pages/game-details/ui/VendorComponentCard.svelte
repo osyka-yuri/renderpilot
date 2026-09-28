@@ -9,12 +9,13 @@
   type Props = {
     component: GameLibraryComponent;
     group: GameCandidateGroup | null;
+    installPath: string;
     busy: boolean;
     onSwap: SwapHandler;
     onRollback: RollbackHandler;
   };
 
-  const { component, group, busy, onSwap, onRollback }: Props = $props();
+  const { component, group, installPath, busy, onSwap, onRollback }: Props = $props();
 
   const title = $derived(formatCanonicalLibraryLabel(component.technology));
 </script>
@@ -27,7 +28,7 @@
 
   <CardContent>
     <ItemGroup class="rounded-md border bg-muted/30">
-      <ComponentVersionRow {component} {group} {busy} {onSwap} {onRollback} />
+      <ComponentVersionRow {component} {group} {installPath} {busy} {onSwap} {onRollback} />
     </ItemGroup>
   </CardContent>
 </Card>

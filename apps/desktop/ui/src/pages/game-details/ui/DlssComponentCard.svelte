@@ -16,6 +16,7 @@
 
   type Props = {
     gameId: string;
+    installPath: string;
     component: GameLibraryComponent;
     group: GameCandidateGroup | null;
     family: SettingFamily;
@@ -29,6 +30,7 @@
 
   const {
     gameId,
+    installPath,
     component,
     group,
     family,
@@ -90,7 +92,7 @@
         <span>{t('gameDetails.dlss.libraryFileLabel')}</span>
       </div>
       <ItemGroup class="rounded-md border bg-muted/30">
-        <ComponentVersionRow {component} {group} {busy} {onSwap} {onRollback} />
+        <ComponentVersionRow {component} {group} {installPath} {busy} {onSwap} {onRollback} />
       </ItemGroup>
     </div>
 

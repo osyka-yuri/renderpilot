@@ -372,6 +372,8 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.updateAll.upToDate': 'Все стабильные версии актуальны',
   'gameDetails.updateAll.partialFailure':
     'Часть обновлений не удалась ({count}). Проверьте детали и повторите.',
+  'gameDetails.updateAll.prepareFailed': 'Не удалось подготовить обновления. Попробуйте ещё раз.',
+  'gameDetails.updateAll.running': 'Подготовка или установка обновлений…',
   'gameDetails.updateAll.tooltip': plural('count', {
     one: 'Обновить {count} компонент до последней стабильной версии',
     few: 'Обновить {count} компонента до последней стабильной версии',
@@ -413,22 +415,18 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.d3d12.action.repair': 'Сначала требуется восстановить EXE',
   'gameDetails.d3d12.action.blocked': 'Эту версию D3D12 нельзя применить в текущем состоянии.',
   'gameDetails.d3d12.action.planPatch': 'Будет применён патч: SDK {from} → {to}',
-  'gameDetails.d3d12.action.planRestore': 'Будет восстановлен оригинальный EXE: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore':
+    'Будет восстановлен исходный исполняемый файл: SDK {from} → {to}',
   'gameDetails.d3d12.select.compatible': 'Совместимо с текущим EXE',
   'gameDetails.d3d12.select.changesExecutable': 'Требуется изменение EXE',
   'gameDetails.d3d12.select.unavailable': 'Недоступно',
-  'gameDetails.d3d12.confirm.title': 'Подтвердите изменение EXE',
-  'gameDetails.d3d12.confirm.description':
-    'RenderPilot изменит экспорт D3D12SDKVersion в исполняемом файле игры.',
-  'gameDetails.d3d12.confirm.updateAllDescription':
-    'Для этих обновлений перечисленные EXE должны переключиться на другие SDK-линии D3D12. До подтверждения ничего не будет загружено или изменено.',
+  'gameDetails.d3d12.confirm.title': 'Изменение исполняемого файла',
   'gameDetails.d3d12.confirm.backup': 'Путь резервной копии: {path}',
-  'gameDetails.d3d12.confirm.backupWillCreate':
-    'Перед изменением будет создана резервная копия оригинального EXE: {path}',
+  'gameDetails.d3d12.confirm.backupWillCreate': 'Будет создана резервная копия для отката: {path}',
   'gameDetails.d3d12.confirm.backupExists':
-    'Исходный EXE уже сохранён: {path}. Эта копия не будет перезаписана.',
+    'Резервная копия для отката уже существует: {path}. Она не будет перезаписана.',
   'gameDetails.d3d12.confirm.signatureWarning':
-    'После изменения цифровая подпись EXE может стать недействительной, а проверка целостности может сообщить, что файл изменён. При полном откате D3D12 RenderPilot восстановит исходный EXE.',
+    'После патча цифровая подпись файла может стать недействительной, а проверка целостности может сообщить, что файл изменён.',
   'gameDetails.d3d12.confirm.accept': 'Изменить',
   'gameDetails.d3d12.executableLockedTitle': 'Выбор EXE заблокирован',
   'gameDetails.d3d12.executableLocked':
@@ -951,15 +949,18 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'На диске найдены файлы {installedAddon} для этой игры — удалите их перед установкой {blockedAddon}.',
   'gameDetails.fileSafety.generic':
     'Изменение файлов многопользовательских игр может привести к ограничениям или блокировке аккаунта.',
-  'gameDetails.fileSafety.detectedOne':
-    'Обнаружен {engine}. Изменение файлов игры может привести к ограничениям или блокировке аккаунта.',
-  'gameDetails.fileSafety.detectedMany':
-    'Обнаружены античиты: {engines}. Изменение файлов игры может привести к ограничениям или блокировке аккаунта.',
-  'gameDetails.fileSafety.loadError': 'Не удалось проверить риски изменения файлов',
-  'gameDetails.fileSafety.installConfirmTitle': 'Установить аддон для этой игры?',
-  'gameDetails.fileSafety.installConfirmBody':
-    'Обнаружена система античита. Установка аддона изменит файлы в папке игры.',
-  'gameDetails.fileSafety.installConfirmAction': 'Установить',
+  'gameDetails.fileSafety.limitedDetail':
+    'Проверка неполная: некоторые маркеры античитов могли остаться ненайденными.',
+  'gameDetails.fileSafety.detectedEngines': 'Найдены маркеры античитов',
+  'gameDetails.fileSafety.confirmTitle': 'Подтвердите изменение файлов игры',
+  'gameDetails.fileSafety.confirmChangeAction': 'Подтвердить изменение',
+  'gameDetails.fileSafety.confirmExePatchAction': 'Изменить',
+  'gameDetails.fileSafety.confirmExeRestoreAction': 'Восстановить',
+  'gameDetails.fileSafety.confirmExeMixedAction': 'Изменить и восстановить',
+  'gameDetails.fileSafety.skipGeneralRiskConfirmation':
+    'Больше не запрашивать подтверждение общего риска',
+  'gameDetails.fileSafety.preferenceSaveFailed':
+    'Не удалось сохранить настройку. При следующем запуске предупреждение может появиться снова.',
   'addon.availability.loadFailed': 'Не удалось проверить',
   'addon.availability.retry': 'Повторить',
   'addon.availability.checking': 'Проверка…',

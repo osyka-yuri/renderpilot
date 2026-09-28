@@ -21,6 +21,9 @@ export const CATALOG_SETTING_KEYS = {
 
   /** Preferred ReShade channel for the shared RenoDX Vulkan layer. */
   RENODX_RESHADE_CHANNEL: 'renodx_reshade_channel',
+
+  /** Versioned acknowledgement for the general multiplayer file-change warning. */
+  GAME_FILE_SAFETY_WARNING_V1: 'game_file_safety_warning_v1',
 } as const;
 
 export type CatalogSettingKey = (typeof CATALOG_SETTING_KEYS)[keyof typeof CATALOG_SETTING_KEYS];

@@ -5,6 +5,7 @@ vi.mock('@shared/notifications', () => ({
 }));
 
 import type { OptiScalerApi } from '../api/desktop';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 import { createOptiScalerStore } from './create-optiscaler-store.svelte';
 import type { OptiScalerAvailability, OptiScalerOperationResult } from './types';
 import {
@@ -16,6 +17,14 @@ function availability(gameId: string): OptiScalerAvailability {
   return buildOptiScalerAvailability({
     game_id: gameId,
   });
+}
+
+function availabilityWithUpdate(gameId: string): OptiScalerAvailability {
+  const report = availability(gameId);
+  return {
+    ...report,
+    lifecycle: { ...report.lifecycle, update_available: true },
+  };
 }
 
 function operation(gameId: string): OptiScalerOperationResult {
@@ -143,6 +152,27 @@ describe('createOptiScalerStore', () => {
     expect(onAddonStateChange).toHaveBeenCalledWith('steam:1');
   });
 
+  it('claims the mutation slot synchronously when no safety gate is configured', async () => {
+    const pendingUpdate = Promise.withResolvers<OptiScalerOperationResult>();
+    const api = fakeApi({
+      availability: vi.fn<OptiScalerApi['availability']>((gameId) =>
+        Promise.resolve(availabilityWithUpdate(gameId)),
+      ),
+      update: vi.fn<OptiScalerApi['update']>(() => pendingUpdate.promise),
+    });
+    const store = createOptiScalerStore({ api });
+    await store.load('steam:1');
+
+    const update = store.update('steam:1');
+
+    expect(store.busy).toBe(true);
+    expect(api.update).toHaveBeenCalledOnce();
+    await expect(store.repair('steam:1')).resolves.toBe('skipped');
+
+    pendingUpdate.resolve(operation('steam:1'));
+    await expect(update).resolves.toBe('ok');
+  });
+
   it('uses the same install contract for every installation attempt', async () => {
     const currentApi = fakeApi();
     const store = createOptiScalerStore({ api: currentApi });
@@ -158,13 +188,161 @@ describe('createOptiScalerStore', () => {
 
   it('does not call the install command when the shared install warning is rejected', async () => {
     const currentApi = fakeApi();
-    const requireInstallSafetyTokens = vi.fn(() => Promise.resolve(null));
-    const store = createOptiScalerStore({ api: currentApi, requireInstallSafetyTokens });
+    const requireSafetyTokens = vi.fn(() => Promise.resolve(null));
+    const store = createOptiScalerStore({ api: currentApi, requireSafetyTokens });
 
     await expect(store.install('steam:1', ['core'])).resolves.toBe('skipped');
 
-    expect(requireInstallSafetyTokens).toHaveBeenCalledWith('steam:1', 'game');
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:1', 'game');
     expect(currentApi.install).not.toHaveBeenCalled();
+  });
+
+  it('reports safety context failures without starting the file mutation', async () => {
+    vi.mocked(publishPresentedErrorNotification).mockClear();
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const currentApi = fakeApi();
+    const requireSafetyTokens = vi.fn(() => Promise.reject(failure));
+    const store = createOptiScalerStore({ api: currentApi, requireSafetyTokens });
+
+    await expect(store.install('steam:1', ['core'])).resolves.toBe('failed');
+
+    expect(currentApi.install).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).toHaveBeenCalledOnce();
+    expect(store.safetyContextError).toBe(failure);
+  });
+
+  it('does not capture safety tokens when an update is unavailable', async () => {
+    const currentApi = fakeApi();
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'unused' }));
+    const store = createOptiScalerStore({ api: currentApi, requireSafetyTokens });
+    await store.load('steam:1');
+
+    await expect(store.update('steam:1')).resolves.toBe('skipped');
+
+    expect(store.updateAvailable).toBe(false);
+    expect(requireSafetyTokens).not.toHaveBeenCalled();
+    expect(currentApi.update).not.toHaveBeenCalled();
+  });
+
+  it('clears a capture error when the next update is cancelled', async () => {
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const requireSafetyTokens = vi.fn().mockRejectedValueOnce(failure).mockResolvedValueOnce(null);
+    const currentApi = fakeApi({
+      availability: vi.fn<OptiScalerApi['availability']>((gameId) =>
+        Promise.resolve(availabilityWithUpdate(gameId)),
+      ),
+    });
+    const store = createOptiScalerStore({ api: currentApi, requireSafetyTokens });
+    await store.load('steam:1');
+
+    await expect(store.update('steam:1')).resolves.toBe('failed');
+    expect(store.safetyContextError).toBe(failure);
+
+    await expect(store.update('steam:1')).resolves.toBe('skipped');
+    expect(store.safetyContextError).toBeNull();
+  });
+
+  it('clears a backend safety error when the next update is cancelled', async () => {
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const requireSafetyTokens = vi
+      .fn()
+      .mockResolvedValueOnce({ gameContextToken: 'game-token' })
+      .mockResolvedValueOnce(null);
+    const currentApi = fakeApi({
+      availability: vi.fn<OptiScalerApi['availability']>((gameId) =>
+        Promise.resolve(availabilityWithUpdate(gameId)),
+      ),
+      update: vi.fn<OptiScalerApi['update']>(() => Promise.reject(failure)),
+    });
+    const store = createOptiScalerStore({ api: currentApi, requireSafetyTokens });
+    await store.load('steam:1');
+
+    await expect(store.update('steam:1')).resolves.toBe('failed');
+    expect(store.safetyContextError).toBe(failure);
+
+    await expect(store.update('steam:1')).resolves.toBe('skipped');
+    expect(store.safetyContextError).toBeNull();
+  });
+
+  it('does not expose an older capture failure after a newer update is cancelled', async () => {
+    const oldCapture = Promise.withResolvers<{ gameContextToken: string } | null>();
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    let captureCount = 0;
+    const requireSafetyTokens = vi.fn(() => {
+      captureCount += 1;
+      return captureCount === 1 ? oldCapture.promise : Promise.resolve(null);
+    });
+    const currentApi = fakeApi({
+      availability: vi.fn<OptiScalerApi['availability']>((gameId) =>
+        Promise.resolve(availabilityWithUpdate(gameId)),
+      ),
+    });
+    const store = createOptiScalerStore({ api: currentApi, requireSafetyTokens });
+    await store.load('steam:1');
+
+    vi.mocked(publishPresentedErrorNotification).mockClear();
+    const olderUpdate = store.update('steam:1');
+    await expect(store.update('steam:1')).resolves.toBe('skipped');
+    oldCapture.reject(failure);
+
+    await expect(olderUpdate).resolves.toBe('skipped');
+    expect(store.safetyContextError).toBeNull();
+    expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
+  });
+
+  it('does not run an update with tokens captured by an older attempt', async () => {
+    const oldCapture = Promise.withResolvers<{ gameContextToken: string } | null>();
+    let captureCount = 0;
+    const requireSafetyTokens = vi.fn(() => {
+      captureCount += 1;
+      return captureCount === 1 ? oldCapture.promise : Promise.resolve(null);
+    });
+    const updateApi = vi.fn<OptiScalerApi['update']>((gameId) =>
+      Promise.resolve(operation(gameId)),
+    );
+    const currentApi = fakeApi({
+      availability: vi.fn<OptiScalerApi['availability']>((gameId) =>
+        Promise.resolve(availabilityWithUpdate(gameId)),
+      ),
+      update: updateApi,
+    });
+    const store = createOptiScalerStore({ api: currentApi, requireSafetyTokens });
+    await store.load('steam:1');
+
+    const olderUpdate = store.update('steam:1');
+    await expect(store.update('steam:1')).resolves.toBe('skipped');
+    oldCapture.resolve({ gameContextToken: 'stale-token' });
+
+    await expect(olderUpdate).resolves.toBe('skipped');
+    expect(updateApi).not.toHaveBeenCalled();
+    expect(store.safetyContextError).toBeNull();
+  });
+
+  it('does not start an install whose safety capture belongs to a previous game', async () => {
+    const capture = Promise.withResolvers<{ gameContextToken: string } | null>();
+    const currentApi = fakeApi();
+    const store = createOptiScalerStore({
+      api: currentApi,
+      requireSafetyTokens: vi.fn(() => capture.promise),
+    });
+    await store.load('steam:1');
+
+    const install = store.install('steam:1', ['core']);
+    expect(currentApi.install).not.toHaveBeenCalled();
+    await store.load('steam:2');
+    capture.resolve({ gameContextToken: 'stale-token' });
+
+    await expect(install).resolves.toBe('skipped');
+    expect(currentApi.install).not.toHaveBeenCalled();
+    expect(store.safetyContextError).toBeNull();
   });
 
   it('acquires a fresh game-scoped safety token for every file mutation', async () => {
@@ -192,14 +370,17 @@ describe('createOptiScalerStore', () => {
     const availabilityApi = vi.fn<OptiScalerApi['availability']>((gameId) =>
       Promise.resolve(availability(gameId)),
     );
-    const api = fakeApi({
-      availability: availabilityApi,
-      install: vi.fn<OptiScalerApi['install']>(() => install),
-    });
+    const installApi = vi.fn<OptiScalerApi['install']>(() => install);
+    const api = fakeApi({ availability: availabilityApi, install: installApi });
     const store = createOptiScalerStore({ api });
     await store.load('steam:1');
 
     const installing = store.install('steam:1', ['core']);
+    expect(store.busy).toBe(true);
+    await vi.waitFor(() => {
+      expect(installApi).toHaveBeenCalledOnce();
+      expect(store.busy).toBe(true);
+    });
     await store.load('steam:2');
     resolveInstall(operation('steam:1'));
 
@@ -217,15 +398,21 @@ describe('createOptiScalerStore', () => {
       resolveInstall = resolve;
     });
     const api = fakeApi({ install: vi.fn<OptiScalerApi['install']>(() => install) });
-    const store = createOptiScalerStore({ api });
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'game-token' }));
+    const store = createOptiScalerStore({ api, requireSafetyTokens });
     await store.load('steam:1');
 
     const installing = store.install('steam:1', ['core']);
+    await vi.waitFor(() => {
+      expect(api.install).toHaveBeenCalledOnce();
+      expect(store.busy).toBe(true);
+    });
     store.deactivate();
     await store.load('steam:2');
 
     expect(store.busy).toBe(true);
     expect(await store.repair('steam:2')).toBe('skipped');
+    expect(requireSafetyTokens).toHaveBeenCalledOnce();
 
     resolveInstall(operation('steam:1'));
     expect(await installing).toBe('ok');

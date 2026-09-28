@@ -28,15 +28,15 @@
     DownloadProgressBar,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
+  import type { BulkSwapHandler } from '../model/create-game-details-page-model';
   import { buildStreamlineVersionModel } from '../model/streamline-versions';
-  import type { SwapRequest } from '../model/swap-request';
 
   type Props = {
     components: GameLibraryComponent[];
     groupsById: Record<string, GameCandidateGroup | null>;
     coordinatedOptions: CoordinatedCandidateOption[];
     busy: boolean;
-    onBulkSwap: (items: readonly SwapRequest[]) => void;
+    onBulkSwap: BulkSwapHandler;
     onBulkRollback: (componentIds: string[]) => void;
   };
 
@@ -88,7 +88,7 @@
     const option = versionModel.options.find((o) => o.optionId === value);
     if (option) {
       pendingArtifactIds = option.items.map((item) => item.artifactId);
-      onBulkSwap(option.items);
+      void onBulkSwap(option.items);
     }
   }
 

@@ -353,6 +353,8 @@ export const en = defineSourceCatalog({
   'gameDetails.updateAll.upToDate': 'All stable versions are up to date',
   'gameDetails.updateAll.partialFailure':
     'Some updates failed ({count}). Check the details and try again.',
+  'gameDetails.updateAll.prepareFailed': 'Could not prepare updates. Try again.',
+  'gameDetails.updateAll.running': 'Preparing or applying updates…',
   'gameDetails.updateAll.tooltip': plural('count', {
     one: 'Update 1 component to its latest stable version',
     other: 'Update {count} components to their latest stable versions',
@@ -392,22 +394,18 @@ export const en = defineSourceCatalog({
   'gameDetails.d3d12.action.repair': 'EXE must be repaired first',
   'gameDetails.d3d12.action.blocked': 'This D3D12 version cannot be applied in the current state.',
   'gameDetails.d3d12.action.planPatch': 'A patch will be applied: SDK {from} → {to}',
-  'gameDetails.d3d12.action.planRestore': 'The original EXE will be restored: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore':
+    'The original executable will be restored: SDK {from} → {to}',
   'gameDetails.d3d12.select.compatible': 'Compatible with the current EXE',
   'gameDetails.d3d12.select.changesExecutable': 'Requires an EXE change',
   'gameDetails.d3d12.select.unavailable': 'Unavailable',
-  'gameDetails.d3d12.confirm.title': 'Confirm executable change',
-  'gameDetails.d3d12.confirm.description':
-    'RenderPilot will change the D3D12SDKVersion exported by the game executable.',
-  'gameDetails.d3d12.confirm.updateAllDescription':
-    'These updates require the listed game executables to switch D3D12 SDK lines. Nothing will be downloaded or changed until you confirm.',
+  'gameDetails.d3d12.confirm.title': 'Change game executable',
   'gameDetails.d3d12.confirm.backup': 'Backup path: {path}',
-  'gameDetails.d3d12.confirm.backupWillCreate':
-    'Before the change, a backup of the original EXE will be created at: {path}',
+  'gameDetails.d3d12.confirm.backupWillCreate': 'A backup for rollback will be created at: {path}',
   'gameDetails.d3d12.confirm.backupExists':
-    'The original EXE is already saved at: {path}. This copy will not be overwritten.',
+    'A backup for rollback already exists at: {path}. It will not be overwritten.',
   'gameDetails.d3d12.confirm.signatureWarning':
-    "After the change, the EXE's digital signature may be considered invalid and integrity checks may report that the file was modified. When you fully roll back D3D12, RenderPilot will restore the original EXE.",
+    "After patching, the file's digital signature may become invalid, and integrity checks may report that the file has changed.",
   'gameDetails.d3d12.confirm.accept': 'Change',
   'gameDetails.d3d12.executableLockedTitle': 'Executable selection is locked',
   'gameDetails.d3d12.executableLocked':
@@ -919,15 +917,18 @@ export const en = defineSourceCatalog({
     '{installedAddon} files were found on disk for this game — remove them before installing {blockedAddon}.',
   'gameDetails.fileSafety.generic':
     'Changes to multiplayer game files may result in account restrictions or a ban.',
-  'gameDetails.fileSafety.detectedOne':
-    '{engine} detected. Changes to game files may result in account restrictions or a ban.',
-  'gameDetails.fileSafety.detectedMany':
-    'Anti-cheat detected: {engines}. Changes to game files may result in account restrictions or a ban.',
-  'gameDetails.fileSafety.loadError': 'Could not check file-change risks',
-  'gameDetails.fileSafety.installConfirmTitle': 'Install add-on in this game?',
-  'gameDetails.fileSafety.installConfirmBody':
-    'An anti-cheat system was detected. Installing an add-on changes files in the game directory.',
-  'gameDetails.fileSafety.installConfirmAction': 'Install',
+  'gameDetails.fileSafety.limitedDetail':
+    'The check was incomplete; some anti-cheat markers may not have been found.',
+  'gameDetails.fileSafety.detectedEngines': 'Anti-cheat markers found',
+  'gameDetails.fileSafety.confirmTitle': 'Confirm game-file changes',
+  'gameDetails.fileSafety.confirmChangeAction': 'Confirm change',
+  'gameDetails.fileSafety.confirmExePatchAction': 'Change',
+  'gameDetails.fileSafety.confirmExeRestoreAction': 'Restore',
+  'gameDetails.fileSafety.confirmExeMixedAction': 'Change and restore',
+  'gameDetails.fileSafety.skipGeneralRiskConfirmation':
+    "Don't ask me to confirm the general risk again",
+  'gameDetails.fileSafety.preferenceSaveFailed':
+    'Could not save this preference. The warning may appear again next time.',
   'addon.availability.loadFailed': 'Could not check',
   'addon.availability.retry': 'Retry',
   'addon.availability.checking': 'Checking…',

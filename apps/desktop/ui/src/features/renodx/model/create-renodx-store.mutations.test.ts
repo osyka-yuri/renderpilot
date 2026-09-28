@@ -30,13 +30,13 @@ import {
 describe('createRenoDxStore', () => {
   it('does not call the install command when the shared install warning is rejected', async () => {
     const api = fakeApi();
-    const requireInstallSafetyTokens = vi.fn(() => Promise.resolve(null));
-    const store = createRenoDxStore({ api, requireInstallSafetyTokens });
+    const requireSafetyTokens = vi.fn(() => Promise.resolve(null));
+    const store = createRenoDxStore({ api, requireSafetyTokens });
     await store.load('steam:1091500');
 
     await expect(store.install('steam:1091500', 'stable')).resolves.toBe('skipped');
 
-    expect(requireInstallSafetyTokens).toHaveBeenCalledWith('steam:1091500', 'game');
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:1091500', 'game');
     expect(api.install).not.toHaveBeenCalled();
   });
 
@@ -96,6 +96,51 @@ describe('createRenoDxStore', () => {
 
     expect(requireSafetyTokens).toHaveBeenCalledWith('steam:1091500', 'game');
     expect(api.applyEngineConfig).toHaveBeenCalledWith('steam:1091500', 'game-token');
+  });
+
+  it('claims the Engine.ini mutation slot synchronously without a safety gate', async () => {
+    const pendingApply = Promise.withResolvers<RenoDxInstallState>();
+    const api = fakeApi({ applyEngineConfig: vi.fn(() => pendingApply.promise) });
+    const store = createRenoDxStore({ api });
+
+    const apply = store.applyEngineConfig('steam:1091500');
+
+    expect(store.busy).toBe(true);
+    expect(api.applyEngineConfig).toHaveBeenCalledOnce();
+    await expect(store.uninstall('steam:1091500')).resolves.toBe('skipped');
+
+    pendingApply.resolve(INSTALLED.state);
+    await expect(apply).resolves.toBe('ok');
+  });
+
+  it('skips Engine.ini apply when the safety request is cancelled', async () => {
+    const api = fakeApi({
+      applyEngineConfig: vi.fn(() => Promise.resolve(INSTALLED.state)),
+    });
+    const requireSafetyTokens = vi.fn(() => Promise.resolve(null));
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+
+    await expect(store.applyEngineConfig('steam:1091500')).resolves.toBe('skipped');
+
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:1091500', 'game');
+    expect(api.applyEngineConfig).not.toHaveBeenCalled();
+  });
+
+  it('reports Engine.ini safety request failures without applying the config', async () => {
+    vi.mocked(publishPresentedErrorNotification).mockClear();
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const api = fakeApi({
+      applyEngineConfig: vi.fn(() => Promise.resolve(INSTALLED.state)),
+    });
+    const requireSafetyTokens = vi.fn(() => Promise.reject(failure));
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+
+    await expect(store.applyEngineConfig('steam:1091500')).resolves.toBe('failed');
+
+    expect(api.applyEngineConfig).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).toHaveBeenCalledOnce();
   });
 
   it('keeps Engine.ini apply as a sidecar without update probes or lifecycle invalidation', async () => {
@@ -247,6 +292,7 @@ describe('createRenoDxStore', () => {
   });
 
   it('update() no-ops when only a channel switch action is available', async () => {
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'unused' }));
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
       checkUpdate: vi.fn(() =>
@@ -260,7 +306,7 @@ describe('createRenoDxStore', () => {
       switchChannel: vi.fn(() => Promise.resolve(installedWithChannel('nightly').state)),
       update: vi.fn(() => Promise.resolve(INSTALLED.state)),
     });
-    const store = createRenoDxStore({ api });
+    const store = createRenoDxStore({ api, requireSafetyTokens });
 
     await store.load('steam:1091500');
     const ok = await store.update('steam:1091500');
@@ -268,7 +314,65 @@ describe('createRenoDxStore', () => {
     expect(ok).toBe('skipped');
     expect(api.switchChannel).not.toHaveBeenCalled();
     expect(api.update).not.toHaveBeenCalled();
+    expect(requireSafetyTokens).not.toHaveBeenCalled();
     expect(store.updateAvailable).toBe(false);
+  });
+
+  it('does not capture safety tokens for a second update while the first is running', async () => {
+    const pendingUpdate = Promise.withResolvers<RenoDxInstallState>();
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'game-token' }));
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+      checkUpdate: vi.fn(() =>
+        Promise.resolve({
+          addon: 'available',
+          host: 'current',
+          dlssFix: null,
+          overall: 'available',
+        } as RenoDxUpdateReport),
+      ),
+      update: vi.fn(() => pendingUpdate.promise),
+    });
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+    await store.load('steam:1091500');
+
+    const firstUpdate = store.update('steam:1091500');
+    await vi.waitFor(() => {
+      expect(api.update).toHaveBeenCalledOnce();
+    });
+    await expect(store.update('steam:1091500')).resolves.toBe('skipped');
+
+    expect(requireSafetyTokens).toHaveBeenCalledOnce();
+
+    pendingUpdate.resolve(INSTALLED.state);
+    await expect(firstUpdate).resolves.toBe('ok');
+  });
+
+  it('claims the host mutation slot synchronously when no safety gate is configured', async () => {
+    const pendingUpdate = Promise.withResolvers<RenoDxInstallState>();
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+      checkUpdate: vi.fn(() =>
+        Promise.resolve({
+          addon: 'available',
+          host: 'current',
+          dlssFix: null,
+          overall: 'available',
+        } as RenoDxUpdateReport),
+      ),
+      update: vi.fn(() => pendingUpdate.promise),
+    });
+    const store = createRenoDxStore({ api });
+    await store.load('steam:1091500');
+
+    const update = store.update('steam:1091500');
+
+    expect(store.busy).toBe(true);
+    expect(api.update).toHaveBeenCalledOnce();
+    await expect(store.uninstall('steam:1091500')).resolves.toBe('skipped');
+
+    pendingUpdate.resolve(INSTALLED.state);
+    await expect(update).resolves.toBe('ok');
   });
 
   it('update() applies a normal RenoDX update without switching channels', async () => {
@@ -294,6 +398,40 @@ describe('createRenoDxStore', () => {
     expect(api.switchChannel).not.toHaveBeenCalled();
     expect(api.update).toHaveBeenCalledWith('steam:1091500');
     expect(store.updateAvailable).toBe(false);
+  });
+
+  it('exposes stale update token capture and clears the error on retry', async () => {
+    const stale = { code: 'safety_context_stale' };
+    const requireSafetyTokens = vi
+      .fn()
+      .mockRejectedValueOnce(stale)
+      .mockResolvedValue({ gameContextToken: 'fresh-game-token' });
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+      checkUpdate: vi.fn(() =>
+        Promise.resolve({
+          addon: 'available',
+          host: 'current',
+          dlssFix: null,
+          overall: 'available',
+        } as RenoDxUpdateReport),
+      ),
+      update: vi.fn(() => Promise.resolve(INSTALLED.state)),
+    });
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+    await store.load('steam:1091500');
+    vi.mocked(publishPresentedErrorNotification).mockClear();
+
+    await expect(store.update('steam:1091500')).resolves.toBe('failed');
+    expect(store.safetyContextError).toBe(stale);
+    expect(api.update).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).toHaveBeenCalledOnce();
+
+    await expect(store.update('steam:1091500')).resolves.toBe('ok');
+
+    expect(store.safetyContextError).toBeNull();
+    expect(api.update).toHaveBeenCalledWith('steam:1091500', 'fresh-game-token', undefined);
+    expect(publishPresentedErrorNotification).toHaveBeenCalledOnce();
   });
 
   it('does not count Vulkan channel mismatch as a per-game RenoDX update', async () => {

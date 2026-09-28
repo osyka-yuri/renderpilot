@@ -124,6 +124,7 @@ describe('ComponentVersionRow catalog releases', () => {
       props: {
         component: componentFixture('component:preview', 'microsoft_dxc'),
         group: candidateGroup,
+        installPath: '/games/test',
         busy: false,
         onSwap: vi.fn(),
         onRollback: vi.fn(),
@@ -292,6 +293,7 @@ describe('ComponentVersionRow catalog releases', () => {
       props: {
         component: componentFixture('component:preview', 'microsoft_dxc'),
         group: group('component:preview', 'microsoft_dxc', '10.0.0', candidates),
+        installPath: '/games/test',
         busy: false,
         onSwap: vi.fn(),
         onRollback: vi.fn(),

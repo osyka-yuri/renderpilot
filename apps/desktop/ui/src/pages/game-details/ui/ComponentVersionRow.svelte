@@ -2,10 +2,7 @@
   import { onDestroy } from 'svelte';
   import type { GameCandidate, GameCandidateGroup, GameLibraryComponent } from '@entities/game';
   import { presentComponentFiles } from '@entities/component';
-  import {
-    isD3d12ExecutableMutationAction,
-    type D3d12ExecutableMutationAction,
-  } from '@shared/model';
+  import { isD3d12ExecutableMutationAction } from '@shared/model';
   import { publishCommandErrorNotification } from '@shared/notifications';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import Undo2Icon from '@lucide/svelte/icons/undo-2';
@@ -37,7 +34,7 @@
   import { prepareD3d12Swap } from '../model/prepare-d3d12-operation';
   import { partitionD3d12Candidates } from '../model/candidate-partition';
   import type { SwapHandler } from '../model/create-game-details-page-model';
-  import D3d12ExecutableConfirmDialog from './D3d12ExecutableConfirmDialog.svelte';
+  import { d3d12PlanFingerprint, type PreparedSwapPresentation } from '../model/swap-request';
   import DeveloperModeRequirementDialog from './DeveloperModeRequirementDialog.svelte';
   import ComponentVersionOption from './ComponentVersionOption.svelte';
   import D3d12ExecutableStatusPanel from './D3d12ExecutableStatusPanel.svelte';
@@ -45,6 +42,7 @@
   type Props = {
     component: GameLibraryComponent;
     group: GameCandidateGroup | null;
+    installPath: string;
     busy: boolean;
     onSwap: SwapHandler;
     onRollback: (componentId: string) => void;
@@ -52,7 +50,10 @@
 
   type SwapOwner = {
     gameId: string;
+    installPath: string;
     componentId: string;
+    artifactId: string;
+    planFingerprint: string;
   };
 
   type PendingD3d12Swap = {
@@ -60,7 +61,7 @@
     owner: SwapOwner;
   };
 
-  const { component, group, busy, onSwap, onRollback }: Props = $props();
+  const { component, group, installPath, busy, onSwap, onRollback }: Props = $props();
 
   const filePresentation = $derived(presentComponentFiles(component));
   const fileName = $derived(filePresentation?.label ?? t('common.unknown'));
@@ -96,11 +97,6 @@
   // Track which artifact id the user actually clicked to download so the
   // progress bar appears only on the initiating control.
   let pendingArtifactId = $state<string | null>(null);
-  let confirmOpen = $state(false);
-  let pendingCandidate = $state<GameCandidate | null>(null);
-  let pendingConfirmationToken = $state<string | null>(null);
-  let pendingExecutableAction = $state<D3d12ExecutableMutationAction | null>(null);
-  let pendingSwapOwner = $state<SwapOwner | null>(null);
   const preflight = createD3d12PreflightFlow<PendingD3d12Swap, PreparedD3d12Swap>({
     prepare: (pending) =>
       prepareD3d12Swap(
@@ -165,41 +161,45 @@
         return;
       }
       if (requiresD3d12Preflight(component.technology)) {
-        void preflight.start({ candidate, owner: currentSwapOwner() });
+        void preflight.start({ candidate, owner: currentSwapOwner(candidate.artifact_id) });
         return;
       }
-      startSwap(candidate);
+      startSwap(
+        candidate,
+        { action: null, confirmationToken: null },
+        currentSwapOwner(candidate.artifact_id),
+      );
     }
   }
 
   function handlePreparedSwap(pending: PendingD3d12Swap, prepared: PreparedD3d12Swap): void {
-    const action = prepared.action;
-    if (!action?.requires_confirmation || !isD3d12ExecutableMutationAction(action)) {
-      startSwap(pending.candidate, undefined, pending.owner);
-      return;
-    }
-    pendingCandidate = pending.candidate;
-    pendingConfirmationToken = prepared.confirmationToken;
-    pendingExecutableAction = action;
-    pendingSwapOwner = pending.owner;
-    confirmOpen = true;
+    startSwap(pending.candidate, prepared, pending.owner);
   }
 
   function startSwap(
     candidate: GameCandidate,
-    confirmationToken?: string | null,
-    owner = currentSwapOwner(),
+    prepared: PreparedD3d12Swap,
+    owner: SwapOwner,
   ): void {
     if (!isCurrentSwapOwner(owner)) {
       return;
     }
     pendingArtifactId = candidate.artifact_id;
-    void onSwap({
-      componentId: owner.componentId,
-      artifactId: candidate.artifact_id,
-      isDownloaded: candidate.is_downloaded,
-      confirmationToken,
-    });
+    const action = prepared.action;
+    const presentation: PreparedSwapPresentation | undefined = isD3d12ExecutableMutationAction(
+      action,
+    )
+      ? { action, owner }
+      : undefined;
+    void onSwap(
+      {
+        componentId: owner.componentId,
+        artifactId: candidate.artifact_id,
+        isDownloaded: candidate.is_downloaded,
+        confirmationToken: prepared.confirmationToken,
+      },
+      presentation,
+    );
   }
 
   function handleRollback() {
@@ -209,41 +209,34 @@
     onRollback(component.id);
   }
 
-  function confirmExecutableAction(): void {
-    confirmOpen = false;
-    if (pendingCandidate && pendingSwapOwner) {
-      startSwap(pendingCandidate, pendingConfirmationToken, pendingSwapOwner);
-    }
-    clearPendingExecutableAction();
-  }
-
-  function clearPendingExecutableAction(): void {
-    pendingCandidate = null;
-    pendingConfirmationToken = null;
-    pendingExecutableAction = null;
-    pendingSwapOwner = null;
-  }
-
   function invalidatePendingSwap(): void {
     preflight.cancel();
-    confirmOpen = false;
-    clearPendingExecutableAction();
   }
 
-  function currentSwapOwner(): SwapOwner {
+  function currentSwapOwner(artifactId: string): SwapOwner {
+    const candidate = candidates.find((item) => item.artifact_id === artifactId);
     return {
       gameId: component.game_id,
+      installPath,
       componentId: component.id,
+      artifactId,
+      planFingerprint: d3d12PlanFingerprint(
+        component.d3d12_executable_status,
+        candidate?.d3d12_executable_action ?? null,
+      ),
     };
   }
 
   function isCurrentSwapOwner(owner: SwapOwner): boolean {
-    return component.game_id === owner.gameId && component.id === owner.componentId;
+    const currentOwner = currentSwapOwner(owner.artifactId);
+    return (
+      component.game_id === owner.gameId &&
+      installPath === owner.installPath &&
+      component.id === owner.componentId &&
+      candidates.some((candidate) => candidate.artifact_id === owner.artifactId) &&
+      currentOwner.planFingerprint === owner.planFingerprint
+    );
   }
-
-  const pendingExecutableActions = $derived.by((): D3d12ExecutableMutationAction[] => {
-    return pendingExecutableAction ? [pendingExecutableAction] : [];
-  });
 
   const progressIds = $derived(pendingArtifactId ? [pendingArtifactId] : []);
 </script>
@@ -362,21 +355,6 @@
     {/if}
   </ItemActions>
 </Item>
-
-<D3d12ExecutableConfirmDialog
-  open={confirmOpen}
-  {busy}
-  actions={pendingExecutableActions}
-  reason="swap"
-  onOpenChange={(open: boolean) => {
-    confirmOpen = open;
-    if (!open) {
-      clearPendingExecutableAction();
-      selected = currentValue;
-    }
-  }}
-  onConfirm={confirmExecutableAction}
-/>
 
 <DeveloperModeRequirementDialog
   open={preflight.developerModeOpen}

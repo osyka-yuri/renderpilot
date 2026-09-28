@@ -303,6 +303,9 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'gameDetails.updateAll.upToDate': 'Todas las versiones estables están actualizadas',
   'gameDetails.updateAll.partialFailure':
     'Algunas actualizaciones fallaron ({count}). Revisa los detalles e inténtalo de nuevo.',
+  'gameDetails.updateAll.prepareFailed':
+    'No se pudieron preparar las actualizaciones. Inténtalo de nuevo.',
+  'gameDetails.updateAll.running': 'Preparando o aplicando actualizaciones…',
   'gameDetails.updateAll.tooltip': plural('count', {
     one: 'Actualizar 1 componente a su última versión estable',
     many: 'Actualizar {count} componentes a sus últimas versiones estables',
@@ -346,22 +349,18 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'gameDetails.d3d12.action.blocked':
     'Esta versión de D3D12 no se puede aplicar en el estado actual.',
   'gameDetails.d3d12.action.planPatch': 'Se aplicará un parche: SDK {from} → {to}',
-  'gameDetails.d3d12.action.planRestore': 'Se restaurará el EXE original: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore': 'Se restaurará el ejecutable original: SDK {from} → {to}',
   'gameDetails.d3d12.select.compatible': 'Compatible con el EXE actual',
   'gameDetails.d3d12.select.changesExecutable': 'Requiere cambiar el EXE',
   'gameDetails.d3d12.select.unavailable': 'No disponible',
-  'gameDetails.d3d12.confirm.title': 'Confirmar cambio del EXE',
-  'gameDetails.d3d12.confirm.description':
-    'RenderPilot cambiará la exportación D3D12SDKVersion del ejecutable.',
-  'gameDetails.d3d12.confirm.updateAllDescription':
-    'Estas actualizaciones requieren cambiar la línea SDK de D3D12 de los ejecutables indicados. No se descargará ni cambiará nada hasta que confirmes.',
+  'gameDetails.d3d12.confirm.title': 'Cambiar el ejecutable del juego',
   'gameDetails.d3d12.confirm.backup': 'Ruta de la copia: {path}',
   'gameDetails.d3d12.confirm.backupWillCreate':
-    'Antes del cambio se creará una copia de seguridad del EXE original en: {path}',
+    'Se creará una copia de seguridad para revertir el cambio: {path}',
   'gameDetails.d3d12.confirm.backupExists':
-    'El EXE original ya está guardado en: {path}. Esta copia no se sobrescribirá.',
+    'Ya existe una copia de seguridad para revertir el cambio: {path}. No se sobrescribirá.',
   'gameDetails.d3d12.confirm.signatureWarning':
-    'Después del cambio, la firma digital del EXE puede considerarse no válida y las comprobaciones de integridad pueden detectar que el archivo fue modificado. Al revertir D3D12 por completo, RenderPilot restaurará el EXE original.',
+    'Tras aplicar el parche, la firma digital del archivo puede dejar de ser válida y las comprobaciones de integridad pueden indicar que el archivo ha cambiado.',
   'gameDetails.d3d12.confirm.accept': 'Cambiar',
   'gameDetails.d3d12.executableLockedTitle': 'Selección de EXE bloqueada',
   'gameDetails.d3d12.executableLocked':
@@ -919,15 +918,18 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.fileSafety.generic':
     'Modificar archivos de juegos multijugador puede provocar restricciones o el bloqueo de la cuenta.',
-  'gameDetails.fileSafety.detectedOne':
-    'Se detectó {engine}. Modificar archivos del juego puede provocar restricciones o el bloqueo de la cuenta.',
-  'gameDetails.fileSafety.detectedMany':
-    'Anti-cheat detectado: {engines}. Modificar archivos del juego puede provocar restricciones o el bloqueo de la cuenta.',
-  'gameDetails.fileSafety.loadError': 'No se pudieron comprobar los riesgos de cambiar archivos',
-  'gameDetails.fileSafety.installConfirmTitle': '¿Instalar el complemento en este juego?',
-  'gameDetails.fileSafety.installConfirmBody':
-    'Se detectó un sistema antitrampas. Instalar un complemento modifica archivos de la carpeta del juego.',
-  'gameDetails.fileSafety.installConfirmAction': 'Instalar',
+  'gameDetails.fileSafety.limitedDetail':
+    'La comprobación fue incompleta; es posible que no se hayan encontrado algunos marcadores antitrampas.',
+  'gameDetails.fileSafety.detectedEngines': 'Marcadores antitrampas encontrados',
+  'gameDetails.fileSafety.confirmTitle': 'Confirmar cambios en archivos del juego',
+  'gameDetails.fileSafety.confirmChangeAction': 'Confirmar cambio',
+  'gameDetails.fileSafety.confirmExePatchAction': 'Cambiar',
+  'gameDetails.fileSafety.confirmExeRestoreAction': 'Restaurar',
+  'gameDetails.fileSafety.confirmExeMixedAction': 'Cambiar y restaurar',
+  'gameDetails.fileSafety.skipGeneralRiskConfirmation':
+    'No volver a solicitar confirmación del riesgo general',
+  'gameDetails.fileSafety.preferenceSaveFailed':
+    'No se pudo guardar esta preferencia. Es posible que la advertencia vuelva a aparecer la próxima vez.',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     '{installedAddon} está instalado para este juego — desinstálalo antes de instalar {blockedAddon}.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':

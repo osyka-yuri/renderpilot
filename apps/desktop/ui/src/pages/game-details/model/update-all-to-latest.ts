@@ -1,7 +1,7 @@
 import { type GameCandidateGroup, type GameDetails } from '@entities/game';
 
 import { requiresD3d12Preflight } from './d3d12-preflight';
-import type { PlannedSwap } from './swap-request';
+import { d3d12PlanFingerprint, type PlannedSwap } from './swap-request';
 
 type GameCandidate = GameCandidateGroup['candidates'][number];
 
@@ -41,14 +41,23 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
   for (const component of details.components) {
     const candidate = resolveAutomaticCandidate(groupsById.get(component.id));
     if (candidate) {
-      items.push({
-        kind: requiresD3d12Preflight(component.technology) ? 'd3d12' : 'direct',
-        target: {
-          componentId: component.id,
-          artifactId: candidate.artifact_id,
-          isDownloaded: candidate.is_downloaded,
-        },
-      });
+      const target = {
+        componentId: component.id,
+        artifactId: candidate.artifact_id,
+        isDownloaded: candidate.is_downloaded,
+      };
+      if (requiresD3d12Preflight(component.technology)) {
+        items.push({
+          kind: 'd3d12',
+          target,
+          planFingerprint: d3d12PlanFingerprint(
+            component.d3d12_executable_status,
+            candidate.d3d12_executable_action,
+          ),
+        });
+      } else {
+        items.push({ kind: 'direct', target });
+      }
     }
   }
 

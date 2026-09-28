@@ -5,7 +5,13 @@ vi.mock('@shared/notifications', () => ({
 }));
 
 import { createRenoDxStore } from './create-renodx-store.svelte';
-import { fakeApi, INSTALLED, NOT_INSTALLED_SAFE } from './renodx-store-test-fixtures';
+import {
+  DLSS_FIX_INSTALLABLE,
+  DLSS_FIX_MANAGED,
+  fakeApi,
+  INSTALLED,
+  NOT_INSTALLED_SAFE,
+} from './renodx-store-test-fixtures';
 
 describe('createRenoDxStore', () => {
   it('notifies peers and invalidates details after capability-changing mutations', async () => {
@@ -54,12 +60,26 @@ describe('createRenoDxStore', () => {
           overall: 'available' as const,
         }),
       ),
+      dlssFixAvailability: vi
+        .fn()
+        .mockResolvedValueOnce(DLSS_FIX_INSTALLABLE)
+        .mockResolvedValueOnce(DLSS_FIX_INSTALLABLE)
+        .mockResolvedValueOnce(DLSS_FIX_MANAGED),
     });
     const store = createRenoDxStore({ api, onGameDetailsInvalidate });
 
     await store.load('steam:1091500');
+    expect(store.dlssFix).toMatchObject({
+      kind: 'component',
+      primaryAction: { kind: 'install' },
+    });
     expect(await store.update('steam:1091500')).toBe('ok');
+    expect(store.dlssFix).toMatchObject({
+      kind: 'component',
+      primaryAction: { kind: 'install' },
+    });
     expect(await store.installDlssFix('steam:1091500')).toBe('ok');
+    expect(store.dlssFix).toMatchObject({ kind: 'component', canRemove: true });
     expect(await store.uninstallDlssFix('steam:1091500')).toBe('ok');
 
     expect(onGameDetailsInvalidate).not.toHaveBeenCalled();

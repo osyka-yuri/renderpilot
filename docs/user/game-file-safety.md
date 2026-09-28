@@ -1,24 +1,28 @@
 # Game-file safety
 
-RenderPilot can replace rendering libraries, install optional components, and manage RenoDX, Luma, or OptiScaler. These features all change files that a game may load, so their safety guidance belongs to the game installation rather than to one component or add-on.
+RenderPilot can replace rendering libraries, install optional components, and manage RenoDX, Luma, or OptiScaler. These operations can change files a game loads. Before a file-changing action, Game Details checks the selected installation and asks for confirmation when a safety notice is due.
 
-## The Game Details notice
+## Confirmation before file changes
 
-Game Details shows one compact notice for file-changing features. The notice always explains that changing files used by a multiplayer game may result in account restrictions or a ban. It is not repeated beside every version, add-on, or action.
+Opening Game Details does not run an anti-cheat scan. Before each action that can increase managed game-file changes, RenderPilot obtains a fresh assessment and asks for confirmation if needed. You can choose **Don't ask me to confirm the general risk again** to skip that general confirmation in future sessions. The risk sentence still appears in executable-change confirmations. Confirmations for executable changes and notices about detected anti-cheat markers remain; the preference does not skip fresh assessments or change backend authorization.
 
-When RenderPilot detects a known anti-cheat engine, the same notice names it. When none is detected, the notice keeps the general multiplayer warning without claiming that anti-cheat is absent or that a modification is safe. A technical confirmation required for a particular operation, such as a D3D12 executable change, remains separate because it describes a different, operation-specific risk.
+When supported anti-cheat markers are detected, the confirmation shows the associated engine names. If the check is incomplete, the same confirmation explains that some markers may have gone undetected. Specific notices are shown again during the session when the installation or scan result changes. Canceling skips the requested change.
+
+When a prepared D3D12 plan patches or restores the executable, the same confirmation also shows the planned executable paths, backup details, and signature warning. Executable confirmation remains required even if the general warning was previously acknowledged or suppressed. Developer Mode recovery remains a separate prerequisite when needed.
+
+Update All prepares the batch first, then uses one confirmation and one captured assessment for the whole batch. If the selected game installation changes or the assessment becomes stale, the batch stops instead of silently refreshing authorization or continuing with later actions.
 
 ## What detection means
 
-Anti-cheat detection uses bounded filesystem heuristics against known markers in the selected game installation. A scan can be incomplete because the installation root, a directory, or an entry could not be read, or because the traversal limit was reached. Unknown and newly introduced anti-cheat systems may also have no known marker.
+The supplementary check searches selected file and directory names for supported Easy Anti-Cheat and BattlEye markers. It is limited and does not inventory every anti-cheat system; other systems and markers that do not match the supported names may not be detected. A limited result can also mean that part of the installation could not be read or the traversal limit was reached.
 
-Detection therefore provides additional context only. It does not determine whether a modification is permitted by the game, its anti-cheat provider, or its online service. The absence of a detected engine is never presented as proof of safety.
+Detection provides additional context only. It does not determine whether a modification is permitted by the game, its anti-cheat provider, or its online service. A scan that finds no markers does not prove a modification is safe.
 
-## Fresh context before a change
+## Fresh checks and recovery
 
-Risk-increasing operations use a fresh, uncached assessment of the selected game. Its opaque context token is bound to that game installation and its anti-cheat scan observation. RenderPilot validates it again while holding the final mutation lock, before durable mutation state is created or the first file is changed. The operation's own plan separately revalidates the files it intends to replace.
+The assessment shown during an action is freshly obtained and uncached. The backend validates its opaque context token again while holding the final mutation lock, before durable mutation state is created or files are changed. The operation separately revalidates the files it intends to replace.
 
-If the assessment is missing, belongs to another resource, or became stale while an archive was downloading, the operation stops and Game Details refreshes the assessment. RenderPilot does not automatically repeat the requested change. Rollback, uninstall, removal, recovery, and reconciliation remain available without this context so a user can restore or clean up files.
+If the assessment is missing, belongs to another installation, or becomes stale while an archive is downloading, the requested change stops and an error is shown. RenderPilot does not automatically repeat the change. Rollback, uninstall, removal, recovery, and reconciliation remain available so users can restore or clean up managed files.
 
 ## Before modifying a multiplayer game
 
@@ -26,7 +30,12 @@ Check the rules and support documentation for the game and its online service. C
 
 ## Sources of truth
 
+- [Game Details toolbar](../../apps/desktop/ui/src/pages/game-details/ui/GameDetailsToolbar.svelte)
+- [Confirmation behavior](../../apps/desktop/ui/src/pages/game-details/ui/FileSafetyConfirmationDialog.svelte)
+- [Assessment details](../../apps/desktop/ui/src/pages/game-details/ui/FileSafetyAssessmentDetails.svelte)
+- [Mutation confirmation coordinator](../../apps/desktop/ui/src/pages/game-details/model/create-mutation-confirmation.svelte.ts)
+- [Notice signature policy](../../apps/desktop/ui/src/pages/game-details/model/file-safety-notice-policy.ts)
+- [Session acknowledgments](../../apps/desktop/ui/src/pages/game-details/model/file-safety-notice-session.ts)
 - [Anti-cheat detection](../../crates/renderpilot-detection/src/anticheat.rs)
 - [File-safety authority](../../crates/renderpilot-orchestration/src/file_safety.rs)
 - [Mutation safety policy](../../crates/renderpilot-domain/src/mutation_features.rs)
-- [Game Details safety notice](../../apps/desktop/ui/src/entities/game/ui/GameFileSafetyRow.svelte)

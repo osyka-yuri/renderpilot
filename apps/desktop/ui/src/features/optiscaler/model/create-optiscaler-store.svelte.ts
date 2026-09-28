@@ -1,4 +1,9 @@
-import type { AddonMutationResult, MutationSafetyTokens } from '@entities/addon';
+import {
+  requestMutationSafetyTokens,
+  type AddonMutationResult,
+  type MutationSafetyCapture,
+  type MutationSafetyTokens,
+} from '@entities/addon';
 import { formatPresentedError } from '@shared/error-presentation';
 import { isFileSafetyContextError, reportClientError } from '@shared/errors';
 import { t, type MessageKeyWithoutParams } from '@shared/i18n';
@@ -16,12 +21,7 @@ export function createOptiScalerStore(
     api?: OptiScalerApi;
     onAddonStateChange?: (gameId: string) => void;
     onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
-    requireSafetyTokens?: (gameId: string, scope: 'game') => Promise<MutationSafetyTokens>;
-    requireInstallSafetyTokens?: (
-      gameId: string,
-      scope: 'game',
-    ) => Promise<MutationSafetyTokens | null>;
-    onSafetyContextError?: (error: unknown, scope: 'game') => void | Promise<void>;
+    requireSafetyTokens?: (gameId: string, scope: 'game') => Promise<MutationSafetyTokens | null>;
   } = {},
 ) {
   const api = options.api ?? optiscalerApi;
@@ -31,10 +31,22 @@ export function createOptiScalerStore(
   let checkingUpdates = $state(false);
   let loadError = $state<string | null>(null);
   let safetyContextError = $state<unknown>(null);
+  let safetyAttemptGeneration = 0;
   let requestId = 0;
   let mutationSequence = 0;
   let activeMutation: number | null = null;
   let loadedGameId: string | null = null;
+
+  function beginSafetyAttempt(): number {
+    safetyContextError = null;
+    return ++safetyAttemptGeneration;
+  }
+
+  function recordSafetyContextError(owner: number, error: unknown): void {
+    if (owner === safetyAttemptGeneration) {
+      safetyContextError = isFileSafetyContextError(error) ? error : null;
+    }
+  }
 
   async function load(gameId: string): Promise<void> {
     // Stores live for the lifetime of the game-details page. Reset local
@@ -43,6 +55,7 @@ export function createOptiScalerStore(
       loadedGameId = gameId;
       report = null;
       safetyContextError = null;
+      safetyAttemptGeneration += 1;
       checkingUpdates = false;
     }
     const token = ++requestId;
@@ -73,6 +86,7 @@ export function createOptiScalerStore(
     action: () => Promise<unknown>;
     reload: boolean;
     invalidatePeers: boolean;
+    safetyAttempt: number;
   }): Promise<AddonMutationResult> {
     if (activeMutation !== null) {
       return 'skipped';
@@ -81,7 +95,6 @@ export function createOptiScalerStore(
     activeMutation = mutationOwner;
     const mutationToken = ++requestId;
     busy = true;
-    safetyContextError = null;
     let backendCommitted = false;
     clearDownloadProgress([run.gameId]);
     try {
@@ -114,8 +127,7 @@ export function createOptiScalerStore(
       }
       publishPresentedErrorNotification(t(run.errorKey), error);
       if (isFileSafetyContextError(error)) {
-        safetyContextError = error;
-        void options.onSafetyContextError?.(error, 'game');
+        recordSafetyContextError(run.safetyAttempt, error);
       }
       return 'failed';
     } finally {
@@ -138,9 +150,46 @@ export function createOptiScalerStore(
     }
   }
 
-  async function gameSafetyToken(gameId: string): Promise<string | undefined> {
-    const tokens = await options.requireSafetyTokens?.(gameId, 'game');
-    return tokens?.gameContextToken;
+  function captureSafetyTokens(gameId: string): Promise<MutationSafetyCapture> {
+    if (activeMutation !== null) {
+      return Promise.resolve({ kind: 'cancelled' });
+    }
+
+    return requestMutationSafetyTokens(options.requireSafetyTokens, gameId, 'game');
+  }
+
+  function handleSafetyCaptureError(
+    error: unknown,
+    errorKey: MessageKeyWithoutParams,
+    safetyAttempt: number,
+  ): AddonMutationResult {
+    if (safetyAttempt !== safetyAttemptGeneration) {
+      return 'skipped';
+    }
+    publishPresentedErrorNotification(t(errorKey), error);
+    recordSafetyContextError(safetyAttempt, error);
+    return 'failed';
+  }
+
+  function runWithSafetyTokens(
+    gameId: string,
+    errorKey: MessageKeyWithoutParams,
+    safetyAttempt: number,
+    run: (tokens?: MutationSafetyTokens) => Promise<AddonMutationResult>,
+  ): Promise<AddonMutationResult> {
+    if (!options.requireSafetyTokens) {
+      return run();
+    }
+
+    return captureSafetyTokens(gameId).then(
+      (safety) => {
+        if (safetyAttempt !== safetyAttemptGeneration || safety.kind === 'cancelled') {
+          return 'skipped';
+        }
+        return run(safety.tokens);
+      },
+      (error: unknown) => handleSafetyCaptureError(error, errorKey, safetyAttempt),
+    );
   }
 
   /** Invalidates in-flight presentation work without cancelling backend work. */
@@ -152,28 +201,34 @@ export function createOptiScalerStore(
     checkingUpdates = false;
     loadError = null;
     safetyContextError = null;
+    safetyAttemptGeneration += 1;
   }
 
   async function install(gameId: string, modules: string[]): Promise<AddonMutationResult> {
-    // Do not introduce an extra scheduling turn when no page safety gate is
-    // configured. The mutation must claim its busy slot before another load
-    // can invalidate that game's presentation request.
-    const installTokens = options.requireInstallSafetyTokens
-      ? await options.requireInstallSafetyTokens(gameId, 'game')
-      : undefined;
-    if (options.requireInstallSafetyTokens && installTokens === null) {
-      return 'skipped';
-    }
-    return runMutation({
+    const safetyAttempt = beginSafetyAttempt();
+    const runInstall = (tokens?: MutationSafetyTokens): Promise<AddonMutationResult> =>
+      runMutation({
+        gameId,
+        errorKey: 'gameDetails.optiscaler.installError',
+        safetyAttempt,
+        action: () =>
+          tokens
+            ? api.install(gameId, modules, tokens.gameContextToken)
+            : api.install(gameId, modules),
+        reload: true,
+        invalidatePeers: true,
+      });
+
+    return runWithSafetyTokens(
       gameId,
-      errorKey: 'gameDetails.optiscaler.installError',
-      action: async () => {
-        const token = installTokens?.gameContextToken ?? (await gameSafetyToken(gameId));
-        return token ? api.install(gameId, modules, token) : api.install(gameId, modules);
-      },
-      reload: true,
-      invalidatePeers: true,
-    });
+      'gameDetails.optiscaler.installError',
+      safetyAttempt,
+      runInstall,
+    );
+  }
+
+  function isUpdateAvailable(): boolean {
+    return Boolean(report?.lifecycle.update_available && optiscalerManagedTargetAvailable(report));
   }
 
   return {
@@ -202,9 +257,7 @@ export function createOptiScalerStore(
       return safetyContextError;
     },
     get updateAvailable() {
-      return Boolean(
-        report?.lifecycle.update_available && optiscalerManagedTargetAvailable(report),
-      );
+      return isUpdateAvailable();
     },
     get repairRequired() {
       return report?.lifecycle.repair_required ?? false;
@@ -213,6 +266,7 @@ export function createOptiScalerStore(
     retry: load,
     deactivate,
     checkForUpdates: async (gameId: string) => {
+      const safetyAttempt = beginSafetyAttempt();
       if (activeMutation !== null) {
         return 'skipped';
       }
@@ -221,6 +275,7 @@ export function createOptiScalerStore(
         return await runMutation({
           gameId,
           errorKey: 'gameDetails.optiscaler.updateError',
+          safetyAttempt,
           action: () => api.checkUpdate(gameId),
           reload: true,
           invalidatePeers: false,
@@ -230,57 +285,99 @@ export function createOptiScalerStore(
       }
     },
     install,
-    update: (gameId: string) =>
-      runMutation({
+    update: async (gameId: string) => {
+      const safetyAttempt = beginSafetyAttempt();
+      if (!isUpdateAvailable()) {
+        return 'skipped';
+      }
+      return runWithSafetyTokens(
         gameId,
-        errorKey: 'gameDetails.optiscaler.updateError',
-        action: async () => {
-          const token = await gameSafetyToken(gameId);
-          return token ? api.update(gameId, token) : api.update(gameId);
+        'gameDetails.optiscaler.updateError',
+        safetyAttempt,
+        (tokens) => {
+          if (!isUpdateAvailable()) {
+            return Promise.resolve('skipped');
+          }
+          return runMutation({
+            gameId,
+            errorKey: 'gameDetails.optiscaler.updateError',
+            safetyAttempt,
+            action: () =>
+              tokens ? api.update(gameId, tokens.gameContextToken) : api.update(gameId),
+            reload: true,
+            invalidatePeers: true,
+          });
         },
-        reload: true,
-        invalidatePeers: true,
-      }),
-    repair: (gameId: string) =>
-      runMutation({
+      );
+    },
+    repair: async (gameId: string) => {
+      const safetyAttempt = beginSafetyAttempt();
+      return runWithSafetyTokens(
         gameId,
-        errorKey: 'gameDetails.optiscaler.repairError',
-        action: async () => {
-          const token = await gameSafetyToken(gameId);
-          return token ? api.repair(gameId, token) : api.repair(gameId);
-        },
-        reload: true,
-        invalidatePeers: true,
-      }),
-    setModules: (gameId: string, modules: string[]) =>
-      runMutation({
+        'gameDetails.optiscaler.repairError',
+        safetyAttempt,
+        (tokens) =>
+          runMutation({
+            gameId,
+            errorKey: 'gameDetails.optiscaler.repairError',
+            safetyAttempt,
+            action: () =>
+              tokens ? api.repair(gameId, tokens.gameContextToken) : api.repair(gameId),
+            reload: true,
+            invalidatePeers: true,
+          }),
+      );
+    },
+    setModules: async (gameId: string, modules: string[]) => {
+      const safetyAttempt = beginSafetyAttempt();
+      return runWithSafetyTokens(
         gameId,
-        errorKey: 'gameDetails.optiscaler.modulesError',
-        action: async () => {
-          const token = await gameSafetyToken(gameId);
-          return token ? api.setModules(gameId, modules, token) : api.setModules(gameId, modules);
-        },
-        reload: true,
-        invalidatePeers: true,
-      }),
-    relocate: (gameId: string, targetExe: string) =>
-      runMutation({
+        'gameDetails.optiscaler.modulesError',
+        safetyAttempt,
+        (tokens) =>
+          runMutation({
+            gameId,
+            errorKey: 'gameDetails.optiscaler.modulesError',
+            safetyAttempt,
+            action: () =>
+              tokens
+                ? api.setModules(gameId, modules, tokens.gameContextToken)
+                : api.setModules(gameId, modules),
+            reload: true,
+            invalidatePeers: true,
+          }),
+      );
+    },
+    relocate: async (gameId: string, targetExe: string) => {
+      const safetyAttempt = beginSafetyAttempt();
+      return runWithSafetyTokens(
         gameId,
-        errorKey: 'gameDetails.optiscaler.relocateError',
-        action: async () => {
-          const token = await gameSafetyToken(gameId);
-          return token ? api.relocate(gameId, targetExe, token) : api.relocate(gameId, targetExe);
-        },
-        reload: true,
-        invalidatePeers: true,
-      }),
-    uninstall: (gameId: string) =>
-      runMutation({
+        'gameDetails.optiscaler.relocateError',
+        safetyAttempt,
+        (tokens) =>
+          runMutation({
+            gameId,
+            errorKey: 'gameDetails.optiscaler.relocateError',
+            safetyAttempt,
+            action: () =>
+              tokens
+                ? api.relocate(gameId, targetExe, tokens.gameContextToken)
+                : api.relocate(gameId, targetExe),
+            reload: true,
+            invalidatePeers: true,
+          }),
+      );
+    },
+    uninstall: (gameId: string) => {
+      const safetyAttempt = beginSafetyAttempt();
+      return runMutation({
         gameId,
         errorKey: 'gameDetails.optiscaler.uninstallError',
+        safetyAttempt,
         action: () => api.uninstall(gameId),
         reload: true,
         invalidatePeers: true,
-      }),
+      });
+    },
   };
 }

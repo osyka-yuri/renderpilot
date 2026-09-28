@@ -5,6 +5,7 @@ vi.mock('@shared/notifications', () => ({
 }));
 
 import { publishPresentedErrorNotification } from '@shared/notifications';
+import type { LumaApi } from '../api/desktop';
 import { createLumaStore } from './create-luma-store.svelte';
 import type { LumaUpdateReport } from './types';
 import {
@@ -15,15 +16,30 @@ import {
   INSTALLED,
 } from './luma-store-test-fixtures';
 
+function apiWithAvailableUpdate(overrides: Partial<LumaApi> = {}): LumaApi {
+  return fakeApi({
+    getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+    checkUpdate: vi.fn(() =>
+      Promise.resolve({
+        addon: 'available',
+        host: 'current',
+        dgvoodoo: null,
+        overall: 'available',
+      } satisfies LumaUpdateReport),
+    ),
+    ...overrides,
+  });
+}
+
 describe('createLumaStore', () => {
   it('does not call the install command when the shared install warning is rejected', async () => {
     const api = fakeApi();
-    const requireInstallSafetyTokens = vi.fn(() => Promise.resolve(null));
-    const store = createLumaStore({ api, requireInstallSafetyTokens });
+    const requireSafetyTokens = vi.fn(() => Promise.resolve(null));
+    const store = createLumaStore({ api, requireSafetyTokens });
 
     await expect(store.install('steam:403640')).resolves.toBe('skipped');
 
-    expect(requireInstallSafetyTokens).toHaveBeenCalledWith('steam:403640', 'game');
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:403640', 'game');
     expect(api.install).not.toHaveBeenCalled();
   });
 
@@ -42,6 +58,23 @@ describe('createLumaStore', () => {
     expect(requireSafetyTokens).toHaveBeenCalledOnce();
     expect(requireSafetyTokens).toHaveBeenCalledWith('steam:403640', 'game');
     expect(api.install).toHaveBeenCalledWith('steam:403640', 'game-token');
+  });
+
+  it('does not start an install whose safety capture belongs to a previous game', async () => {
+    const safety = Promise.withResolvers<{ gameContextToken: string } | null>();
+    const requireSafetyTokens = vi.fn(() => safety.promise);
+    const api = fakeApi();
+    const store = createLumaStore({ api, requireSafetyTokens });
+    await store.load('steam:403640');
+
+    const installation = store.install('steam:403640');
+    expect(api.install).not.toHaveBeenCalled();
+    await store.load('steam:49520');
+    safety.resolve({ gameContextToken: 'stale-token' });
+
+    await expect(installation).resolves.toBe('skipped');
+    expect(api.install).not.toHaveBeenCalled();
+    expect(store.safetyContextError).toBeNull();
   });
 
   it('uses game safety for Engine.ini apply', async () => {
@@ -310,14 +343,171 @@ describe('createLumaStore', () => {
     expect(store.updateAvailable).toBe(false);
   });
 
+  it('claims the mutation slot synchronously when no safety gate is configured', async () => {
+    const pendingUpdate = Promise.withResolvers<Awaited<ReturnType<LumaApi['update']>>>();
+    const api = apiWithAvailableUpdate({
+      update: vi.fn<LumaApi['update']>(() => pendingUpdate.promise),
+    });
+    const store = createLumaStore({ api });
+    await store.load('steam:403640');
+
+    const update = store.update('steam:403640');
+
+    expect(store.busy).toBe(true);
+    expect(api.update).toHaveBeenCalledOnce();
+    await expect(store.repair('steam:403640')).resolves.toBe('skipped');
+
+    pendingUpdate.resolve(INSTALLED.state);
+    await expect(update).resolves.toBe('ok');
+  });
+
   it('update() no-ops when no update is available', async () => {
     const api = fakeApi();
-    const store = createLumaStore({ api });
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'unused' }));
+    const store = createLumaStore({ api, requireSafetyTokens });
 
     const ok = await store.update('steam:403640');
 
     expect(ok).toBe('skipped');
+    expect(requireSafetyTokens).not.toHaveBeenCalled();
     expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it('clears a capture error when the next update is cancelled', async () => {
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const requireSafetyTokens = vi.fn().mockRejectedValueOnce(failure).mockResolvedValueOnce(null);
+    const store = createLumaStore({
+      api: apiWithAvailableUpdate(),
+      requireSafetyTokens,
+    });
+    await store.load('steam:403640');
+
+    await expect(store.update('steam:403640')).resolves.toBe('failed');
+    expect(store.safetyContextError).toBe(failure);
+
+    await expect(store.update('steam:403640')).resolves.toBe('skipped');
+    expect(store.safetyContextError).toBeNull();
+  });
+
+  it('masks an old core safety error after a later update is cancelled', async () => {
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const requireSafetyTokens = vi
+      .fn()
+      .mockResolvedValueOnce({ gameContextToken: 'game-token' })
+      .mockResolvedValueOnce(null);
+    const api = apiWithAvailableUpdate({
+      update: vi.fn(() => Promise.reject(failure)),
+    });
+    const store = createLumaStore({ api, requireSafetyTokens });
+    await store.load('steam:403640');
+
+    await expect(store.update('steam:403640')).resolves.toBe('failed');
+    expect(store.safetyContextError).toBe(failure);
+
+    await expect(store.update('steam:403640')).resolves.toBe('skipped');
+    expect(store.safetyContextError).toBeNull();
+  });
+
+  it('clears an update safety error when a later install is cancelled', async () => {
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    const requireSafetyTokens = vi
+      .fn()
+      .mockResolvedValueOnce({ gameContextToken: 'game-token' })
+      .mockResolvedValueOnce(null);
+    const api = apiWithAvailableUpdate({
+      update: vi.fn(() => Promise.reject(failure)),
+    });
+    const store = createLumaStore({ api, requireSafetyTokens });
+    await store.load('steam:403640');
+
+    await expect(store.update('steam:403640')).resolves.toBe('failed');
+    expect(store.safetyContextError).toBe(failure);
+
+    await expect(store.install('steam:403640')).resolves.toBe('skipped');
+    expect(store.safetyContextError).toBeNull();
+  });
+
+  it('does not expose an older capture failure after a newer update is cancelled', async () => {
+    const oldCapture = Promise.withResolvers<{ gameContextToken: string } | null>();
+    const failure = Object.assign(new Error('safety context is stale'), {
+      code: 'safety_context_stale',
+    });
+    let captureCount = 0;
+    const requireSafetyTokens = vi.fn(() => {
+      captureCount += 1;
+      return captureCount === 1 ? oldCapture.promise : Promise.resolve(null);
+    });
+    const store = createLumaStore({
+      api: apiWithAvailableUpdate(),
+      requireSafetyTokens,
+    });
+    await store.load('steam:403640');
+
+    vi.mocked(publishPresentedErrorNotification).mockClear();
+    const olderUpdate = store.update('steam:403640');
+    await expect(store.update('steam:403640')).resolves.toBe('skipped');
+    oldCapture.reject(failure);
+
+    await expect(olderUpdate).resolves.toBe('skipped');
+    expect(store.safetyContextError).toBeNull();
+    expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
+  });
+
+  it('does not run an update with tokens captured by an older attempt', async () => {
+    const oldCapture = Promise.withResolvers<{ gameContextToken: string } | null>();
+    let captureCount = 0;
+    const requireSafetyTokens = vi.fn(() => {
+      captureCount += 1;
+      return captureCount === 1 ? oldCapture.promise : Promise.resolve(null);
+    });
+    const update = vi.fn(() => Promise.resolve(INSTALLED.state));
+    const api = apiWithAvailableUpdate({ update });
+    const store = createLumaStore({ api, requireSafetyTokens });
+    await store.load('steam:403640');
+
+    const olderUpdate = store.update('steam:403640');
+    await expect(store.update('steam:403640')).resolves.toBe('skipped');
+    oldCapture.resolve({ gameContextToken: 'stale-token' });
+
+    await expect(olderUpdate).resolves.toBe('skipped');
+    expect(update).not.toHaveBeenCalled();
+    expect(store.safetyContextError).toBeNull();
+  });
+
+  it('does not capture safety tokens while an update is already running', async () => {
+    const pendingUpdate = Promise.withResolvers<typeof INSTALLED.state>();
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'game-token' }));
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
+      checkUpdate: vi.fn(() =>
+        Promise.resolve({
+          addon: 'available',
+          host: 'current',
+          dgvoodoo: null,
+          overall: 'available',
+        } satisfies LumaUpdateReport),
+      ),
+      update: vi.fn(() => pendingUpdate.promise),
+    });
+    const store = createLumaStore({ api, requireSafetyTokens });
+    await store.load('steam:403640');
+
+    const firstUpdate = store.update('steam:403640');
+    await vi.waitFor(() => {
+      expect(api.update).toHaveBeenCalledOnce();
+    });
+    await expect(store.update('steam:403640')).resolves.toBe('skipped');
+
+    expect(requireSafetyTokens).toHaveBeenCalledOnce();
+
+    pendingUpdate.resolve(INSTALLED.state);
+    await expect(firstUpdate).resolves.toBe('ok');
   });
 
   it('update() resolves false and leaves state untouched when the backend fails', async () => {

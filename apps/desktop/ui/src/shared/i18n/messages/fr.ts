@@ -304,6 +304,8 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'gameDetails.updateAll.upToDate': 'Toutes les versions stables sont à jour',
   'gameDetails.updateAll.partialFailure':
     'Certaines mises à jour ont échoué ({count}). Vérifiez les détails et réessayez.',
+  'gameDetails.updateAll.prepareFailed': 'Impossible de préparer les mises à jour. Réessayez.',
+  'gameDetails.updateAll.running': 'Préparation ou application des mises à jour…',
   'gameDetails.updateAll.tooltip': plural('count', {
     one: 'Mettre à jour 1 composant vers sa dernière version stable',
     many: 'Mettre à jour {count} composants vers leur dernière version stable',
@@ -347,22 +349,19 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'gameDetails.d3d12.action.blocked':
     'Cette version de D3D12 ne peut pas être appliquée dans l’état actuel.',
   'gameDetails.d3d12.action.planPatch': 'Un patch sera appliqué : SDK {from} → {to}',
-  'gameDetails.d3d12.action.planRestore': 'L’EXE original sera restauré : SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore':
+    'Le fichier exécutable d’origine sera restauré : SDK {from} → {to}',
   'gameDetails.d3d12.select.compatible': 'Compatible avec l’EXE actuel',
   'gameDetails.d3d12.select.changesExecutable': 'Nécessite une modification de l’EXE',
   'gameDetails.d3d12.select.unavailable': 'Indisponible',
-  'gameDetails.d3d12.confirm.title': 'Confirmer la modification de l’EXE',
-  'gameDetails.d3d12.confirm.description':
-    'RenderPilot modifiera l’export D3D12SDKVersion de l’exécutable.',
-  'gameDetails.d3d12.confirm.updateAllDescription':
-    'Ces mises à jour exigent que les exécutables indiqués changent de ligne SDK D3D12. Aucun téléchargement ni changement n’aura lieu avant confirmation.',
+  'gameDetails.d3d12.confirm.title': 'Modifier l’exécutable du jeu',
   'gameDetails.d3d12.confirm.backup': 'Chemin de sauvegarde : {path}',
   'gameDetails.d3d12.confirm.backupWillCreate':
-    'Avant la modification, une copie de sauvegarde de l’EXE original sera créée ici : {path}',
+    'Une copie de sauvegarde pour annuler la modification sera créée : {path}',
   'gameDetails.d3d12.confirm.backupExists':
-    'L’EXE original est déjà enregistré ici : {path}. Cette copie ne sera pas écrasée.',
+    'Une copie de sauvegarde pour annuler la modification existe déjà : {path}. Elle ne sera pas écrasée.',
   'gameDetails.d3d12.confirm.signatureWarning':
-    'Après la modification, la signature numérique de l’EXE peut être considérée comme non valide et les contrôles d’intégrité peuvent signaler que le fichier a été modifié. Lors d’une restauration complète de D3D12, RenderPilot restaure l’EXE original.',
+    'Après la modification, la signature numérique du fichier peut devenir invalide et les contrôles d’intégrité peuvent signaler que le fichier a été modifié.',
   'gameDetails.d3d12.confirm.accept': 'Modifier',
   'gameDetails.d3d12.executableLockedTitle': 'Sélection de l’EXE verrouillée',
   'gameDetails.d3d12.executableLocked':
@@ -921,15 +920,18 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.fileSafety.generic':
     'Modifier les fichiers de jeux multijoueurs peut entraîner des restrictions ou le blocage du compte.',
-  'gameDetails.fileSafety.detectedOne':
-    '{engine} détecté. Modifier les fichiers du jeu peut entraîner des restrictions ou le blocage du compte.',
-  'gameDetails.fileSafety.detectedMany':
-    'Anti-triche détecté : {engines}. Modifier les fichiers du jeu peut entraîner des restrictions ou le blocage du compte.',
-  'gameDetails.fileSafety.loadError': 'Impossible de vérifier les risques liés aux fichiers',
-  'gameDetails.fileSafety.installConfirmTitle': 'Installer le module dans ce jeu ?',
-  'gameDetails.fileSafety.installConfirmBody':
-    'Un système anti-triche a été détecté. L’installation d’un module modifie les fichiers du dossier du jeu.',
-  'gameDetails.fileSafety.installConfirmAction': 'Installer',
+  'gameDetails.fileSafety.limitedDetail':
+    'La vérification était incomplète ; certains marqueurs anti-triche peuvent ne pas avoir été trouvés.',
+  'gameDetails.fileSafety.detectedEngines': 'Marqueurs anti-triche trouvés',
+  'gameDetails.fileSafety.confirmTitle': 'Confirmer les modifications des fichiers du jeu',
+  'gameDetails.fileSafety.confirmChangeAction': 'Confirmer la modification',
+  'gameDetails.fileSafety.confirmExePatchAction': 'Modifier',
+  'gameDetails.fileSafety.confirmExeRestoreAction': 'Restaurer',
+  'gameDetails.fileSafety.confirmExeMixedAction': 'Modifier et restaurer',
+  'gameDetails.fileSafety.skipGeneralRiskConfirmation':
+    'Ne plus demander de confirmer le risque général',
+  'gameDetails.fileSafety.preferenceSaveFailed':
+    'Impossible d’enregistrer cette préférence. L’avertissement peut réapparaître au prochain lancement.',
   'gameDetails.addon.blockedByOtherAddon.tracked':
     '{installedAddon} est installé pour ce jeu — désinstallez-le avant d’installer {blockedAddon}.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
