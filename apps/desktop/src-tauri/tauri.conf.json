@@ -51,8 +51,8 @@
         "title": "RenderPilot",
         "width": 1280,
         "height": 900,
-        "minWidth": 960,
-        "minHeight": 720,
+        "minWidth": 860,
+        "minHeight": 600,
         "resizable": true
       }
     ],

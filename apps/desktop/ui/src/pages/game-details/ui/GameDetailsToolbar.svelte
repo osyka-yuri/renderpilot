@@ -72,21 +72,53 @@
 
   const updateBusy = $derived(updatingAll || capturingUpdateAllSafety || planningUpdateAll);
   const updateDisabled = $derived(updateBusy || busy || addonsBusy || nothingToUpdate);
+  const updateRunningLabel = $derived(t('gameDetails.updateAll.running'));
+  const updateAccessibleName = $derived(
+    updateBusy
+      ? updateRunningLabel
+      : nothingToUpdate
+        ? t('gameDetails.updateAll.upToDate')
+        : t('gameDetails.updateAll.actionCount', { count: totalUpdateCount }),
+  );
+  const updateVisibleLabel = $derived(
+    updateBusy
+      ? updateRunningLabel
+      : nothingToUpdate
+        ? t('gameDetails.updateAll.action')
+        : t('gameDetails.updateAll.actionCount', { count: totalUpdateCount }),
+  );
+  const updateTooltip = $derived(
+    updateBusy
+      ? updateRunningLabel
+      : nothingToUpdate
+        ? t('gameDetails.updateAll.upToDate')
+        : t('gameDetails.updateAll.tooltip', { count: totalUpdateCount }),
+  );
+
+  function guardUpdateClick(event: MouseEvent): void {
+    if (updateDisabled) {
+      event.preventDefault();
+      return;
+    }
+    void onUpdateAll();
+  }
 </script>
 
-<div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
+<div class="flex min-w-0 shrink-0 items-center gap-3">
   {#if vendorTabs.length > 0 || hasAddonsTab}
-    <TabsList aria-label={title}>
-      {#each vendorTabs as tab (tab.key)}
-        <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
-      {/each}
-      {#if hasAddonsTab}
-        <TabsTrigger value={ADDONS_TAB_VALUE}>{t('gameDetails.addonsTab')}</TabsTrigger>
-      {/if}
-    </TabsList>
+    <div class="min-w-0 flex-1 overflow-x-auto">
+      <TabsList aria-label={title} class="w-max">
+        {#each vendorTabs as tab (tab.key)}
+          <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
+        {/each}
+        {#if hasAddonsTab}
+          <TabsTrigger value={ADDONS_TAB_VALUE}>{t('gameDetails.addonsTab')}</TabsTrigger>
+        {/if}
+      </TabsList>
+    </div>
   {/if}
 
-  <div class="ms-auto flex flex-wrap items-center gap-2">
+  <div class="ms-auto flex shrink-0 items-center gap-2">
     {#if showProgress && downloadCount > 0}
       <div class="w-16">
         <Progress
@@ -104,39 +136,46 @@
             {...props}
             variant="default"
             size="sm"
-            disabled={updateDisabled}
+            class="aria-disabled:pointer-events-auto"
+            aria-disabled={updateDisabled}
             aria-busy={updateBusy}
-            onclick={onUpdateAll}
+            aria-label={updateAccessibleName}
+            onclick={guardUpdateClick}
           >
-            {#if updatingAll || planningUpdateAll}
+            {#if updateBusy}
               <Loader2Icon class="animate-spin" aria-hidden="true" />
             {:else}
               <ArrowUpToLineIcon aria-hidden="true" />
             {/if}
-            {nothingToUpdate
-              ? t('gameDetails.updateAll.action')
-              : t('gameDetails.updateAll.actionCount', { count: totalUpdateCount })}
+            <span class="max-lg:hidden">{updateVisibleLabel}</span>
           </Button>
         {/snippet}
       </TooltipTrigger>
       <TooltipContent>
-        {nothingToUpdate
-          ? t('gameDetails.updateAll.upToDate')
-          : t('gameDetails.updateAll.tooltip', { count: totalUpdateCount })}
+        {updateTooltip}
       </TooltipContent>
     </Tooltip>
 
     {#if onOpenOperations}
-      <Button
-        variant="secondary"
-        size="sm"
-        onclick={onOpenOperations}
-        onpointerenter={onPreloadOperations}
-        onfocus={onPreloadOperations}
-      >
-        <HistoryIcon aria-hidden="true" />
-        {t('operations.title')}
-      </Button>
+      <Tooltip>
+        <TooltipTrigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="secondary"
+              size="sm"
+              aria-label={t('operations.title')}
+              onclick={onOpenOperations}
+              onpointerenter={onPreloadOperations}
+              onfocus={onPreloadOperations}
+            >
+              <HistoryIcon aria-hidden="true" />
+              <span class="max-xl:hidden">{t('operations.title')}</span>
+            </Button>
+          {/snippet}
+        </TooltipTrigger>
+        <TooltipContent>{t('operations.title')}</TooltipContent>
+      </Tooltip>
     {/if}
 
     <GameExecutablePopover

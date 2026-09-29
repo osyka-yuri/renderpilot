@@ -337,6 +337,7 @@
   {/if}
 
   <TooltipContent side="bottom" align="end" sideOffset={6} class="max-w-80 whitespace-normal">
+    <span class="block font-medium">{executableLabel}</span>
     {#if lockReason}
       <span class="block font-medium">{t('gameDetails.d3d12.executableLockedTitle')}</span>
       <span class="mt-1 block">{tooltipText}</span>
