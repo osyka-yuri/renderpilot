@@ -38,6 +38,27 @@ describe('buildGamesVirtualRows', () => {
     expect(threeColumns[1]?.key).toBe('cards:Steam:a');
   });
 
+  it('creates one stable virtual item per game in list mode', () => {
+    const rows = buildGamesVirtualRows(
+      [group('Steam', ['a', 'b']), group('Epic', ['c'])],
+      4,
+      'list',
+    );
+
+    expect(rows.map((row) => row.key)).toEqual([
+      'header:Steam',
+      'game:Steam:a',
+      'game:Steam:b',
+      'header:Epic',
+      'game:Epic:c',
+    ]);
+    expect(rows.filter((row) => row.kind === 'list').map((row) => row.card.id)).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+  });
+
   it('bounds materialized row count independently of the virtualizer viewport', () => {
     const cardIds = Array.from({ length: 1_000 }, (_, index) => `game-${index}`);
     const rows = buildGamesVirtualRows([group('Steam', cardIds)], 5);
@@ -80,6 +101,55 @@ describe('buildGamesVirtualRows', () => {
     ).toEqual({ gameId: 'a', offsetWithinRow: 55 });
     expect(findGameVirtualRowIndex(rows, 'b')).toBe(1);
     expect(findGameVirtualRowIndex(rows, 'missing')).toBe(-1);
+  });
+
+  it('keeps a launcher heading visible when anchoring the first game at scroll top', () => {
+    const rows = buildGamesVirtualRows([group('Steam', ['a'])], 1);
+
+    expect(
+      findVisibleGamesAnchor(
+        rows,
+        [
+          { index: 0, start: 0, end: 44 },
+          { index: 1, start: 44, end: 300 },
+        ],
+        0,
+      ),
+    ).toEqual({ gameId: 'a', offsetWithinRow: -44 });
+  });
+
+  it('keeps game identity as the anchor when switching between list and card rows', () => {
+    const groups = [group('Steam', ['a', 'b', 'c'])];
+    const cardRows = buildGamesVirtualRows(groups, 2, 'cards');
+    const listRows = buildGamesVirtualRows(groups, 2, 'list');
+
+    const cardAnchor = findVisibleGamesAnchor(
+      cardRows,
+      [
+        { index: 0, start: 0, end: 30 },
+        { index: 1, start: 30, end: 230 },
+        { index: 2, start: 230, end: 430 },
+      ],
+      250,
+    );
+    const listAnchor = findVisibleGamesAnchor(
+      listRows,
+      [
+        { index: 0, start: 0, end: 30 },
+        { index: 1, start: 30, end: 130 },
+        { index: 2, start: 130, end: 230 },
+        { index: 3, start: 230, end: 330 },
+      ],
+      250,
+    );
+
+    expect(cardAnchor).toEqual({ gameId: 'c', offsetWithinRow: 20 });
+    expect(listAnchor).toEqual({ gameId: 'c', offsetWithinRow: 20 });
+    if (cardAnchor === null || listAnchor === null) {
+      throw new Error('Expected a visible game row anchor in both views.');
+    }
+    expect(findGameVirtualRowIndex(listRows, cardAnchor.gameId)).toBe(3);
+    expect(findGameVirtualRowIndex(cardRows, listAnchor.gameId)).toBe(2);
   });
 });
 

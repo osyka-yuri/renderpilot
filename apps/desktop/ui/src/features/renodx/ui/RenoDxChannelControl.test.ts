@@ -33,12 +33,12 @@ describe('RenoDxChannelControl accessibility', () => {
     document.body.replaceChildren();
   });
 
-  it('keeps tooltip behavior on the real toggle buttons without adding a group tab stop', async () => {
+  it('keeps tooltip behavior on the radio items without adding a group tab stop', async () => {
     component = mount(RenoDxChannelControlTestHost, { target });
     flushSync();
 
-    const group = target.querySelector<HTMLElement>('[role="group"]');
-    const buttons = [...target.querySelectorAll<HTMLButtonElement>('button')];
+    const group = target.querySelector<HTMLElement>('[role="radiogroup"]');
+    const buttons = [...target.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
     const descriptionId = group?.getAttribute('aria-describedby');
 
     expect(group?.getAttribute('aria-label')).toBe('Release channel');

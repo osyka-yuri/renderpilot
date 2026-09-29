@@ -21,8 +21,8 @@
     SelectItem,
     SelectTrigger,
     Spinner,
-    ToggleGroup,
-    ToggleGroupItem,
+    SegmentedControl,
+    SegmentedControlItem,
   } from '@shared/ui';
   import type { ThemeMode } from '@shared/theme';
   import type { LanguageMode } from '@shared/i18n';
@@ -105,25 +105,24 @@
           </ItemDescription>
         </ItemContent>
         <ItemActions>
-          <ToggleGroup
-            type="single"
-            variant="outline"
+          <SegmentedControl
             value={themeMode}
             onValueChange={handleThemeChange}
             aria-label={t('settings.appearance.theme.triggerLabel')}
           >
             {#each themeOptions as option (option.value)}
               {@const Icon = themeIcons[option.value]}
-              <ToggleGroupItem
+              <SegmentedControlItem
                 value={option.value}
                 disabled={option.disabled}
                 aria-label={option.label}
+                class="max-sm:px-2 max-sm:text-xs"
               >
-                <Icon aria-hidden="true" />
+                <Icon class="max-sm:hidden" aria-hidden="true" />
                 {option.label}
-              </ToggleGroupItem>
+              </SegmentedControlItem>
             {/each}
-          </ToggleGroup>
+          </SegmentedControl>
         </ItemActions>
       </Item>
 

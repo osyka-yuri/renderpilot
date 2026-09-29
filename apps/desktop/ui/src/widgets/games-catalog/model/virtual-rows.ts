@@ -8,7 +8,10 @@ export type GamesVirtualRow =
       kind: 'cards';
       key: string;
       cards: readonly GameCardState[];
-    };
+    }
+  | { kind: 'list'; key: string; card: GameCardState };
+
+export type GamesViewMode = 'cards' | 'list';
 
 export type IndexedVirtualRow = {
   index: number;
@@ -24,16 +27,24 @@ export type RenderedGamesVirtualRow<TVirtualRow extends IndexedVirtualRow> = {
   row: GamesVirtualRow;
 };
 
-/** Flattens launcher groups into stable header/card rows for virtualization. */
+/** Flattens launcher groups into stable virtual rows for the selected view. */
 export function buildGamesVirtualRows(
   groups: readonly LauncherGroup[],
   columnCount: number,
+  viewMode: GamesViewMode = 'cards',
 ): GamesVirtualRow[] {
   const safeColumnCount = Math.max(1, Math.trunc(columnCount));
   const rows: GamesVirtualRow[] = [];
 
   for (const group of groups) {
     rows.push({ kind: 'header', key: `header:${group.launcher}`, label: group.label });
+    if (viewMode === 'list') {
+      for (const card of group.cards) {
+        rows.push({ kind: 'list', key: `game:${group.launcher}:${card.id}`, card });
+      }
+      continue;
+    }
+
     for (let index = 0; index < group.cards.length; index += safeColumnCount) {
       const cards = group.cards.slice(index, index + safeColumnCount);
       rows.push({
@@ -95,24 +106,28 @@ export function findVisibleGamesAnchor(
   const measurement = measurements.find((candidate) => {
     const row = gameVirtualRowAt(rows, candidate.index);
     return (
-      row !== undefined && candidate.end > scrollTop && row.kind === 'cards' && row.cards.length > 0
+      row !== undefined &&
+      candidate.end > scrollTop &&
+      ((row.kind === 'cards' && row.cards.length > 0) || row.kind === 'list')
     );
   });
   if (!measurement) {
     return null;
   }
   const row = gameVirtualRowAt(rows, measurement.index);
-  if (row?.kind !== 'cards' || row.cards.length === 0) {
+  if (!row || row.kind === 'header') {
     return null;
   }
   return {
-    gameId: row.cards[0].id,
+    gameId: row.kind === 'list' ? row.card.id : row.cards[0].id,
     offsetWithinRow: scrollTop - measurement.start,
   };
 }
 
 export function findGameVirtualRowIndex(rows: readonly GamesVirtualRow[], gameId: string): number {
   return rows.findIndex(
-    (row) => row.kind === 'cards' && row.cards.some((card) => card.id === gameId),
+    (row) =>
+      (row.kind === 'cards' && row.cards.some((card) => card.id === gameId)) ||
+      (row.kind === 'list' && row.card.id === gameId),
   );
 }

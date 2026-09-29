@@ -152,6 +152,7 @@ export {
   type SortableTableFeatures,
 } from './data-table';
 export { RadioGroup, RadioGroupItem } from './radio-group';
+export { SegmentedControl, SegmentedControlItem } from './segmented-control';
 export {
   AlertDialog,
   AlertDialogAction,

@@ -186,7 +186,8 @@
 
   [data-slot='switch'][data-state='checked'],
   [data-slot='toggle'][data-state='on'],
-  [data-slot='toggle-group-item'][data-state='on'] {
+  [data-slot='toggle-group-item'][data-state='on'],
+  [data-slot='segmented-control-item'][data-state='checked'] {
     border-color: Highlight;
     background-color: Highlight;
     color: HighlightText;
@@ -199,7 +200,8 @@
   }
 
   [data-slot='sidebar-menu-button'][data-active='true']:not(:focus-visible),
-  [data-slot='toggle-group-item'][data-state='on']:not(:focus-visible) {
+  [data-slot='toggle-group-item'][data-state='on']:not(:focus-visible),
+  [data-slot='segmented-control-item'][data-state='checked']:not(:focus-visible) {
     outline: 1px solid CanvasText;
     outline-offset: -1px;
   }

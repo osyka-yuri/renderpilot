@@ -145,7 +145,7 @@ test('Libraries table viewport keeps an opaque focus outline in light and dark t
 
     await primaryNavigation(page).getByRole('link', { name: 'Libraries' }).click();
 
-    const beforeViewport = page.locator('[data-slot="toggle-group-item"][tabindex="0"]');
+    const beforeViewport = page.locator('[data-slot="segmented-control-item"][tabindex="0"]');
     const viewport = libraryTableRegion(page);
     await expect(beforeViewport).toHaveCount(1);
     await expect(viewport).toHaveCount(1);

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import RenoDxChannelToggleGroup from './RenoDxChannelToggleGroup.svelte';
+  import RenoDxChannelSelector from './RenoDxChannelSelector.svelte';
 
   import type { ReshadeChannel } from '@entities/addon';
 
@@ -26,7 +26,7 @@
   }: Props = $props();
 </script>
 
-<RenoDxChannelToggleGroup
+<RenoDxChannelSelector
   {value}
   {stableSupported}
   {busy}

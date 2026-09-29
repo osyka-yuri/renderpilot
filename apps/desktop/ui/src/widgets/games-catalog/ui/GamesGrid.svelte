@@ -9,6 +9,7 @@
   } from '@entities/game';
   import GamesFilterEmptyState from './GamesFilterEmptyState.svelte';
   import GamesCardRow from './GamesCardRow.svelte';
+  import GameListRow from './GameListRow.svelte';
   import {
     buildGamesVirtualRows,
     findGameVirtualRowIndex,
@@ -16,6 +17,7 @@
     gamesGridColumnCount,
     pairExistingVirtualRows,
     shouldLoadMoreRows,
+    type GamesViewMode,
     type GamesVirtualRow,
   } from '../model/virtual-rows';
   import {
@@ -31,6 +33,7 @@
   type MenuOpenChangeHandler = (gameId: GameId, next: boolean) => void;
   type Props = {
     games?: readonly GameCardViewModel[];
+    viewMode?: GamesViewMode;
     launcherOrder?: readonly Launcher[];
     scrollElement?: HTMLElement | null;
     busy?: boolean;
@@ -71,6 +74,7 @@
 
   const {
     games = EMPTY_GAMES,
+    viewMode = 'cards',
     launcherOrder = EMPTY_LAUNCHER_ORDER,
     scrollElement = null,
     busy = false,
@@ -116,7 +120,9 @@
     isCoverOperationBusy,
   });
   const launcherGroups = $derived(createLauncherGroups(games, launcherOrder, cardStateContext));
-  const rows = $derived<GamesVirtualRow[]>(buildGamesVirtualRows(launcherGroups, columnCount));
+  const rows = $derived<GamesVirtualRow[]>(
+    buildGamesVirtualRows(launcherGroups, columnCount, viewMode),
+  );
   const rowVirtualizer = createVirtualizer<HTMLElement, HTMLElement>({
     count: 0,
     getScrollElement: () => scrollElement,
@@ -125,6 +131,13 @@
   });
   const virtualRows = $derived($rowVirtualizer.getVirtualItems());
   const renderedRows = $derived(pairExistingVirtualRows(virtualRows, rows));
+  let rowsForAnchorCapture: readonly GamesVirtualRow[] = [];
+  let previousViewMode: GamesViewMode = 'cards';
+  let viewModeInitialized = false;
+  let modeChangePending = false;
+  let modeChangeRestoreRunning = false;
+  let modeChangeAnchor: GamesCatalogScrollAnchor | null = null;
+  let modeChangeFocus: { gameId: GameId; target: GameCardFocusTarget } | null = null;
 
   $effect(() => {
     const currentRows = rows;
@@ -132,10 +145,52 @@
     untrack(() => $rowVirtualizer).setOptions({
       count: currentRows.length,
       getScrollElement: () => viewport,
-      estimateSize: (index) => (currentRows[index]?.kind === 'header' ? 44 : 280),
+      estimateSize: (index) => {
+        const row = currentRows[index];
+        return row.kind === 'header' ? 44 : row.kind === 'list' ? 128 : 280;
+      },
       getItemKey: (index) => currentRows[index]?.key ?? index,
       overscan: 4,
     });
+  });
+
+  $effect.pre(() => {
+    const nextViewMode = viewMode;
+    if (!viewModeInitialized) {
+      previousViewMode = nextViewMode;
+      viewModeInitialized = true;
+      return;
+    }
+    if (nextViewMode === previousViewMode) {
+      return;
+    }
+
+    previousViewMode = nextViewMode;
+    modeChangePending = true;
+    if (!modeChangeRestoreRunning) {
+      const viewport = scrollElement;
+      const visibleAnchor = viewport
+        ? findVisibleGamesAnchor(
+            rowsForAnchorCapture,
+            $rowVirtualizer.getVirtualItems(),
+            viewport.scrollTop,
+          )
+        : null;
+      modeChangeAnchor = visibleAnchor
+        ? { ...visibleAnchor, offsetWithinRow: Math.min(0, visibleAnchor.offsetWithinRow) }
+        : null;
+      modeChangeFocus = captureFocusedGame(rootElement);
+    }
+  });
+
+  $effect(() => {
+    const currentRows = rows;
+    rowsForAnchorCapture = currentRows;
+    if (!modeChangePending || modeChangeRestoreRunning) {
+      return;
+    }
+
+    void restorePendingViewModeChanges();
   });
 
   $effect(() => {
@@ -158,6 +213,11 @@
       columnCount = nextColumnCount;
       await tick();
       $rowVirtualizer.measure();
+      if (viewMode === 'list') {
+        await tick();
+        remeasureRenderedRows();
+        await tick();
+      }
       if (anchor) {
         await restoreAnchor(anchor);
       }
@@ -192,7 +252,14 @@
 
   $effect(() => {
     const visibleRowCount = renderedRows.length;
-    if (!layoutInitialized || restoringAnchor || !scrollElement || visibleRowCount === 0) {
+    if (
+      !layoutInitialized ||
+      restoringAnchor ||
+      modeChangePending ||
+      modeChangeRestoreRunning ||
+      !scrollElement ||
+      visibleRowCount === 0
+    ) {
       return;
     }
     const anchor = captureVisibleAnchor();
@@ -211,7 +278,13 @@
     const gameId = focusedGameId;
     const focusKey = gameId ? `${gameId}:${focusedTarget}` : null;
     const root = rootElement;
-    if (!gameId || !root || visibleRowCount === 0) {
+    if (
+      !gameId ||
+      !root ||
+      visibleRowCount === 0 ||
+      modeChangePending ||
+      modeChangeRestoreRunning
+    ) {
       return;
     }
     const gameIsRendered = Array.from(root.querySelectorAll<HTMLElement>('[data-game-id]')).some(
@@ -247,6 +320,50 @@
     return findVisibleGamesAnchor(rows, $rowVirtualizer.getVirtualItems(), scrollTop);
   }
 
+  async function restorePendingViewModeChanges(): Promise<void> {
+    if (modeChangeRestoreRunning) {
+      return;
+    }
+
+    modeChangeRestoreRunning = true;
+    try {
+      while (modeChangePending) {
+        modeChangePending = false;
+        const anchor = modeChangeAnchor;
+        const focus = modeChangeFocus;
+
+        await tick();
+        $rowVirtualizer.measure();
+        if (anchor) {
+          await restoreAnchor(anchor);
+        }
+        if (focus) {
+          await restoreModeFocus(focus);
+        }
+      }
+
+      const restoredAnchor = captureVisibleAnchor();
+      if (restoredAnchor) {
+        const key = `${restoredAnchor.gameId}:${Math.round(restoredAnchor.offsetWithinRow)}`;
+        lastPublishedAnchorKey = key;
+        onScrollAnchorChange(restoredAnchor);
+      }
+    } finally {
+      modeChangeRestoreRunning = false;
+    }
+  }
+
+  function remeasureRenderedRows(): void {
+    const root = rootElement;
+    if (!root) {
+      return;
+    }
+    const virtualizer = untrack(() => $rowVirtualizer);
+    for (const element of root.querySelectorAll<HTMLElement>('[data-index]')) {
+      virtualizer.measureElement(element);
+    }
+  }
+
   async function restoreAnchor(anchor: GamesCatalogScrollAnchor): Promise<void> {
     const viewport = scrollElement;
     const rowIndex = findGameVirtualRowIndex(rows, anchor.gameId);
@@ -269,11 +386,42 @@
     );
     restoringAnchor = false;
   }
+
+  async function restoreModeFocus(focus: {
+    gameId: GameId;
+    target: GameCardFocusTarget;
+  }): Promise<void> {
+    await tick();
+    const element = Array.from(
+      rootElement?.querySelectorAll<HTMLElement>('[data-game-id]') ?? [],
+    ).find((candidate) => candidate.dataset.gameId === focus.gameId);
+    const trigger = element?.querySelector<HTMLElement>(
+      `[data-game-focus-target="${focus.target}"]`,
+    );
+    if (trigger) {
+      trigger.focus({ preventScroll: true });
+      restoredFocusKey = `${focus.gameId}:${focus.target}`;
+    }
+  }
+
+  function captureFocusedGame(
+    root: HTMLElement | null,
+  ): { gameId: GameId; target: GameCardFocusTarget } | null {
+    const activeElement = document.activeElement;
+    if (!(activeElement instanceof HTMLElement) || !root?.contains(activeElement)) {
+      return null;
+    }
+    const gameElement = activeElement.closest<HTMLElement>('[data-game-id]');
+    const focusTarget = activeElement.closest<HTMLElement>('[data-game-focus-target]')?.dataset
+      .gameFocusTarget;
+    const gameId = gameElement?.dataset.gameId;
+    return gameId ? { gameId, target: focusTarget === 'menu' ? 'menu' : 'details' } : null;
+  }
 </script>
 
 <div bind:this={rootElement} class="min-h-full w-full" aria-busy={busy}>
   {#if hasGames}
-    <div class="relative w-full" style:height={`${$rowVirtualizer.getTotalSize()}px`}>
+    <div class="@container relative w-full" style:height={`${$rowVirtualizer.getTotalSize()}px`}>
       {#each renderedRows as { virtualRow, row } (row.key)}
         <div
           use:$rowVirtualizer.measureElement
@@ -283,10 +431,24 @@
         >
           {#if row.kind === 'header'}
             <h2 class="pt-1 text-lg font-semibold text-foreground">{row.label}</h2>
-          {:else}
+          {:else if row.kind === 'cards'}
             <GamesCardRow
               cards={row.cards}
               {columnCount}
+              {onMenuOpenChange}
+              {onFetchCover}
+              {onPickCover}
+              {onClearCover}
+              {onToggleFavorite}
+              {onToggleHidden}
+              {onRemoveGame}
+              {onOpenDetails}
+              {onPreloadDetails}
+              {onCardFocus}
+            />
+          {:else}
+            <GameListRow
+              card={row.card}
               {onMenuOpenChange}
               {onFetchCover}
               {onPickCover}

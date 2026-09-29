@@ -16,8 +16,8 @@
     TabsContent,
     TabsList,
     TabsTrigger,
-    ToggleGroup,
-    ToggleGroupItem,
+    SegmentedControl,
+    SegmentedControlItem,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
   import { useSelector } from '@tanstack/svelte-store';
@@ -158,18 +158,15 @@
             type: activeTypeLabel,
           })}
 
-          <ToggleGroup
-            type="single"
-            spacing={0}
-            variant="outline"
-            class="shrink-0 flex-wrap"
+          <SegmentedControl
+            class="h-auto min-h-9 max-w-full shrink-0 flex-wrap"
             bind:value={model.activeType}
             aria-label={t('libraries.filters.typeLabel')}
           >
             {#each typeOptionsByVendor[vendor.value] as type (type.value)}
-              <ToggleGroupItem value={type.value}>{type.label}</ToggleGroupItem>
+              <SegmentedControlItem value={type.value}>{type.label}</SegmentedControlItem>
             {/each}
-          </ToggleGroup>
+          </SegmentedControl>
 
           <ScrollArea
             bind:viewportRef={tableModel.scrollViewportRef}

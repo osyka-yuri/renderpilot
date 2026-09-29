@@ -17,16 +17,24 @@
     EmptyTitle,
     Input,
     ScrollArea,
+    SegmentedControl,
+    SegmentedControlItem,
     Spinner,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
   } from '@shared/ui';
   import { cn } from '@shared/classnames';
   import StarIcon from '@lucide/svelte/icons/star';
   import EyeOffIcon from '@lucide/svelte/icons/eye-off';
-  import { GamesEmptyState, GamesGrid } from '@widgets/games-catalog';
+  import LayoutGridIcon from '@lucide/svelte/icons/layout-grid';
+  import ListIcon from '@lucide/svelte/icons/list';
+  import { GamesEmptyState, GamesGrid, type GamesViewMode } from '@widgets/games-catalog';
   import { GamesHeaderBar } from '@widgets/games-header';
   import { GamesFilterDialog } from '@features/filter-games';
   import { t } from '@shared/i18n';
   import type { GamesCatalogSession } from '../model/create-games-page-model.svelte';
+  import { persistGamesViewMode, readStoredGamesViewMode } from '../model/games-view-mode-storage';
 
   type Props = {
     busy?: boolean;
@@ -81,6 +89,7 @@
 
   const hasManualCoverAction = $derived(model.manualCoverBusyFor !== null);
   let scrollViewportRef = $state<HTMLElement | null>(null);
+  let viewMode = $state<GamesViewMode>(readStoredGamesViewMode());
 
   onMount(() => {
     void tick().then(() => {
@@ -99,6 +108,17 @@
 
   function handleSearchInput(event: Event & { currentTarget: HTMLInputElement }): void {
     model.setSearchQuery(event.currentTarget.value);
+  }
+
+  function handleViewModeChange(value: string): void {
+    if (value !== 'cards' && value !== 'list') {
+      return;
+    }
+    if (value === viewMode) {
+      return;
+    }
+    viewMode = value;
+    persistGamesViewMode(value);
   }
 </script>
 
@@ -126,15 +146,13 @@
       {onAddGame}
     />
 
-    <div class="grid shrink-0 gap-2 px-1">
+    <div class="flex shrink-0 flex-wrap items-center justify-end gap-2 px-1 max-sm:justify-between">
       <div
-        class="flex items-center justify-end gap-2 max-md:justify-stretch"
+        class="max-w-88 min-w-48 flex-1 max-sm:max-w-none max-sm:basis-full"
         role="search"
         aria-label={t('games.search')}
       >
-        <label
-          class="block max-w-88 min-w-48 shrink grow basis-88 max-md:max-w-none max-md:min-w-0"
-        >
+        <label class="block w-full">
           <span class="sr-only">{t('games.search')}</span>
 
           <Input
@@ -144,67 +162,97 @@
             oninput={handleSearchInput}
           />
         </label>
-
-        <div class="flex flex-none items-center gap-1">
-          <Button
-            aria-label={favoritesButtonLabel}
-            variant={model.filtersState.appliedFavoritesOnly ? 'default' : 'secondary'}
-            size="icon-sm"
-            onclick={model.quickToggleFavoritesOnly}
-          >
-            <StarIcon
-              class={cn(
-                'size-4.5',
-                model.filtersState.appliedFavoritesOnly && 'fill-current text-yellow-300',
-              )}
-              aria-hidden="true"
-            />
-          </Button>
-
-          <div class="relative inline-flex">
-            <Button
-              aria-label={hiddenButtonLabel}
-              variant={model.filtersState.appliedShowHidden ? 'default' : 'secondary'}
-              size="icon-sm"
-              onclick={model.quickToggleShowHidden}
-            >
-              <EyeOffIcon class="size-4.5" aria-hidden="true" />
-            </Button>
-            {#if model.hiddenCount > 0}
-              <span
-                class="pointer-events-none absolute -inset-e-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground ring-2 ring-background"
-                aria-hidden="true"
-              >
-                {model.hiddenCount > 9 ? '9+' : model.hiddenCount}
-              </span>
-            {/if}
-          </div>
-
-          <GamesFilterDialog
-            open={model.filtersState.isDialogOpen}
-            onOpenChange={model.handleDialogOpenChange}
-            hasFilterIndicator={model.hasFilterIndicator}
-            {filtersButtonLabel}
-            groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
-            draftLibraries={model.filtersState.draftLibraries}
-            onDraftLibrariesChange={model.handleDraftLibrariesChange}
-            addonOptions={normalizeAddonCapabilities(model.filtersState.availableAddons)}
-            draftAddons={model.filtersState.draftAddons}
-            onDraftAddonsChange={model.handleDraftAddonsChange}
-            launcherFilterOptions={model.launcherFilterOptions}
-            draftLaunchers={model.filtersState.draftLaunchers}
-            onDraftLaunchersChange={model.handleDraftLaunchersChange}
-            draftLauncherOrder={model.filtersState.draftLauncherOrder}
-            onDraftLauncherOrderChange={model.handleDraftLauncherOrderChange}
-            onCancel={model.cancelFilterSelection}
-            onApply={model.applyFilterSelection}
-          />
-        </div>
       </div>
+
+      <div class="flex flex-none items-center gap-1">
+        <Button
+          aria-label={favoritesButtonLabel}
+          variant={model.filtersState.appliedFavoritesOnly ? 'default' : 'secondary'}
+          size="icon-sm"
+          onclick={model.quickToggleFavoritesOnly}
+        >
+          <StarIcon
+            class={cn(
+              'size-4.5',
+              model.filtersState.appliedFavoritesOnly && 'fill-current text-yellow-300',
+            )}
+            aria-hidden="true"
+          />
+        </Button>
+
+        <div class="relative inline-flex">
+          <Button
+            aria-label={hiddenButtonLabel}
+            variant={model.filtersState.appliedShowHidden ? 'default' : 'secondary'}
+            size="icon-sm"
+            onclick={model.quickToggleShowHidden}
+          >
+            <EyeOffIcon class="size-4.5" aria-hidden="true" />
+          </Button>
+          {#if model.hiddenCount > 0}
+            <span
+              class="pointer-events-none absolute -inset-e-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground ring-2 ring-background"
+              aria-hidden="true"
+            >
+              {model.hiddenCount > 9 ? '9+' : model.hiddenCount}
+            </span>
+          {/if}
+        </div>
+
+        <GamesFilterDialog
+          open={model.filtersState.isDialogOpen}
+          onOpenChange={model.handleDialogOpenChange}
+          hasFilterIndicator={model.hasFilterIndicator}
+          {filtersButtonLabel}
+          groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
+          draftLibraries={model.filtersState.draftLibraries}
+          onDraftLibrariesChange={model.handleDraftLibrariesChange}
+          addonOptions={normalizeAddonCapabilities(model.filtersState.availableAddons)}
+          draftAddons={model.filtersState.draftAddons}
+          onDraftAddonsChange={model.handleDraftAddonsChange}
+          launcherFilterOptions={model.launcherFilterOptions}
+          draftLaunchers={model.filtersState.draftLaunchers}
+          onDraftLaunchersChange={model.handleDraftLaunchersChange}
+          draftLauncherOrder={model.filtersState.draftLauncherOrder}
+          onDraftLauncherOrderChange={model.handleDraftLauncherOrderChange}
+          onCancel={model.cancelFilterSelection}
+          onApply={model.applyFilterSelection}
+        />
+      </div>
+
+      <SegmentedControl
+        size="sm"
+        value={viewMode}
+        onValueChange={handleViewModeChange}
+        aria-label={t('games.viewMode.label')}
+        class="shrink-0"
+      >
+        <Tooltip ignoreNonKeyboardFocus>
+          <TooltipTrigger>
+            {#snippet child({ props })}
+              <SegmentedControlItem {...props} value="cards" aria-label={t('games.viewMode.cards')}>
+                <LayoutGridIcon aria-hidden="true" />
+              </SegmentedControlItem>
+            {/snippet}
+          </TooltipTrigger>
+          <TooltipContent>{t('games.viewMode.cards')}</TooltipContent>
+        </Tooltip>
+        <Tooltip ignoreNonKeyboardFocus>
+          <TooltipTrigger>
+            {#snippet child({ props })}
+              <SegmentedControlItem {...props} value="list" aria-label={t('games.viewMode.list')}>
+                <ListIcon aria-hidden="true" />
+              </SegmentedControlItem>
+            {/snippet}
+          </TooltipTrigger>
+          <TooltipContent>{t('games.viewMode.list')}</TooltipContent>
+        </Tooltip>
+      </SegmentedControl>
     </div>
 
     <ScrollArea class="min-h-0 flex-1" bind:viewportRef={scrollViewportRef}>
       <GamesGrid
+        {viewMode}
         scrollElement={scrollViewportRef}
         games={model.gameItems}
         launcherOrder={model.appliedLauncherOrder}

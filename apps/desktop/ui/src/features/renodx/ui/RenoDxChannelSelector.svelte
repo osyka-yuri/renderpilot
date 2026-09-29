@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
-    ToggleGroup,
-    ToggleGroupItem,
+    SegmentedControl,
+    SegmentedControlItem,
     Tooltip,
     TooltipContent,
     TooltipTrigger,
@@ -66,14 +66,10 @@
   }
 </script>
 
-<ToggleGroup
-  type="single"
-  variant="outline"
-  spacing={0}
+<SegmentedControl
   {value}
   disabled={busy}
   onValueChange={handleValueChange}
-  class="w-fit"
   aria-label={ariaLabel}
   aria-describedby={describedBy}
 >
@@ -82,21 +78,21 @@
       <Tooltip>
         <TooltipTrigger>
           {#snippet child({ props })}
-            <ToggleGroupItem
+            <SegmentedControlItem
               {...props}
               value={option.value}
               disabled={isChannelDisabled(option.value)}
             >
               {t(option.labelKey)}
-            </ToggleGroupItem>
+            </SegmentedControlItem>
           {/snippet}
         </TooltipTrigger>
         <TooltipContent>{tooltipText}</TooltipContent>
       </Tooltip>
     {:else}
-      <ToggleGroupItem value={option.value} disabled={isChannelDisabled(option.value)}>
+      <SegmentedControlItem value={option.value} disabled={isChannelDisabled(option.value)}>
         {t(option.labelKey)}
-      </ToggleGroupItem>
+      </SegmentedControlItem>
     {/if}
   {/each}
-</ToggleGroup>
+</SegmentedControl>
