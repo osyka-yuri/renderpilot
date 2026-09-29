@@ -255,7 +255,7 @@
               <span class="block wrap-break-word">{exe.changeError}</span>
             </p>
           {:else if exe.refreshError}
-            <p role="status" class="text-xs text-warning">
+            <p role="status" class="text-xs text-warning-foreground">
               <span class="font-medium">{t('gameDetails.executable.refreshFailed')}</span>
               <span class="block wrap-break-word">{exe.refreshError}</span>
             </p>

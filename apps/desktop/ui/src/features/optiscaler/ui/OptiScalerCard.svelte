@@ -153,7 +153,9 @@
           <AddonFieldLabel label={t('gameDetails.optiscaler.statusLabel')}>
             <Badge
               variant={installed ? 'secondary' : 'outline'}
-              class={cardState === 'unmanaged' ? 'border-warning/40 bg-warning/10' : ''}
+              class={cardState === 'unmanaged'
+                ? 'border-warning-border bg-warning text-warning-foreground'
+                : ''}
             >
               {t(
                 installed

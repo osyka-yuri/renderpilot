@@ -162,7 +162,7 @@
       {/if}
 
       {#if pendingWarning}
-        <p class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
+        <p class="flex items-center gap-1 text-xs text-warning-foreground">
           <TriangleAlertIcon class="size-3.5 shrink-0" aria-hidden="true" />
           {translateMessageRef(pendingWarning)}
         </p>

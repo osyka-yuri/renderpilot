@@ -193,7 +193,7 @@
 
         {#if showDiagnostics}
           <Item>
-            <ItemContent class="text-amber-600 dark:text-amber-500">
+            <ItemContent class="text-warning-foreground">
               {#if loaderVisibilityNote}
                 <div class="mt-1 flex items-start gap-2 text-sm font-medium">
                   <AlertTriangleIcon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />

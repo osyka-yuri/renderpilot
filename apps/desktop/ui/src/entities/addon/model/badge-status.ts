@@ -18,8 +18,8 @@ export type AddonBadgeStatus =
 export type StatusIcon = 'success' | 'update' | 'checking' | 'info';
 
 const MUTED_TINT = 'text-muted-foreground';
-const SUCCESS_TINT = 'border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
-const WARNING_TINT = 'border-transparent bg-warning/10 text-warning';
+const SUCCESS_TINT = 'border-success-border bg-success text-success-foreground';
+const WARNING_TINT = 'border-warning-border bg-warning text-warning-foreground';
 
 export const ICON_BY_STATUS = {
   current: 'success',

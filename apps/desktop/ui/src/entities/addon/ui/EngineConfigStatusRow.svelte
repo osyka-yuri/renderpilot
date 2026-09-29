@@ -90,10 +90,13 @@
 </script>
 
 {#if shouldShowEngineConfigRow(availability?.status)}
-  <Item size="sm" class={isWarning ? 'border-warning/40 bg-warning/10' : undefined}>
+  <Item
+    size="sm"
+    class={cn(isWarning && 'border-warning-border bg-warning text-warning-foreground')}
+  >
     <ItemMedia>
       <FileCode2Icon
-        class={`size-4 ${isWarning ? 'text-warning' : 'text-muted-foreground'}`}
+        class={cn('size-4', isWarning ? 'text-warning-foreground' : 'text-muted-foreground')}
         aria-hidden="true"
       />
     </ItemMedia>

@@ -18,7 +18,7 @@
     {id}
     class={cn(
       'flex items-center gap-1.5 text-xs',
-      kind === 'success' && 'text-emerald-600 dark:text-emerald-400',
+      kind === 'success' && 'text-success-foreground',
       kind === 'error' && 'text-destructive',
       kind === null && 'text-muted-foreground',
     )}

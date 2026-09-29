@@ -3,6 +3,7 @@
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
+  import { cn } from '@shared/classnames';
   import {
     Alert,
     AlertDescription,
@@ -285,7 +286,7 @@
           aria-hidden="true"
         />
       {:else if isWarning}
-        <TriangleAlertIcon class="size-4 shrink-0 text-warning" aria-hidden="true" />
+        <TriangleAlertIcon class="size-4 shrink-0 text-warning-foreground" aria-hidden="true" />
       {/if}
 
       <ItemContent class="min-w-0">
@@ -296,9 +297,10 @@
           </div>
         {:else}
           <p
-            class="truncate text-sm"
-            class:text-muted-foreground={!isWarning}
-            class:text-warning={isWarning}
+            class={cn(
+              'truncate text-sm',
+              isWarning ? 'text-warning-foreground' : 'text-muted-foreground',
+            )}
             role={profile.loadError !== null ? undefined : isWarning ? 'alert' : 'status'}
           >
             {statusText}

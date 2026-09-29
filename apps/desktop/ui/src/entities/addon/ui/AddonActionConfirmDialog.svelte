@@ -3,6 +3,8 @@
 
   import { t } from '@shared/i18n';
   import {
+    Alert,
+    AlertDescription,
     Button,
     Dialog,
     DialogContent,
@@ -53,15 +55,10 @@
     </DialogHeader>
 
     {#if warning}
-      <div
-        role="alert"
-        class:border-destructive={tone === 'destructive'}
-        class:text-destructive={tone === 'destructive'}
-        class="flex gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
-      >
-        <TriangleAlertIcon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <p class="min-w-0 whitespace-pre-line">{warning}</p>
-      </div>
+      <Alert variant={tone === 'destructive' ? 'destructive' : 'warning'} size="sm">
+        <TriangleAlertIcon aria-hidden="true" />
+        <AlertDescription class="whitespace-pre-line">{warning}</AlertDescription>
+      </Alert>
     {/if}
 
     <DialogFooter>

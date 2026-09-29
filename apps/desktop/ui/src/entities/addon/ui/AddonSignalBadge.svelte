@@ -24,11 +24,11 @@
 
   const BADGE_VIEW = {
     verified: {
-      tint: 'border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      tint: 'border-success-border bg-success text-success-foreground',
       Icon: CircleCheckIcon,
     },
     experimental: {
-      tint: 'border-transparent bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      tint: 'border-warning-border bg-warning text-warning-foreground',
       Icon: FlaskConicalIcon,
     },
     untested: {

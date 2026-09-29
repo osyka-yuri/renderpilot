@@ -6,9 +6,11 @@ export const alertVariants = tv({
     variant: {
       default: 'bg-card text-card-foreground',
       destructive:
-        'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
+        'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current',
       warning:
-        'border-warning/40 bg-warning/10 text-warning *:data-[slot=alert-description]:text-warning/90',
+        'border-warning-border bg-warning text-warning-foreground *:data-[slot=alert-description]:text-warning-foreground/90',
+      success:
+        'border-success-border bg-success text-success-foreground *:data-[slot=alert-description]:text-success-foreground/90',
     },
     size: {
       default:
