@@ -14,6 +14,7 @@ describe('mock addon-tools IPC', () => {
   it('resolves renodx_availability without throwing', async () => {
     const report = await mockInvoker('renodx_availability', { gameId: 'steam:1' });
     expect(report).toMatchObject({
+      has_persisted_record: false,
       state: { status: 'not_installed' },
       outcome: { kind: 'unsupported' },
       vulkan_layer: { layer_detection: 'not_installed' },

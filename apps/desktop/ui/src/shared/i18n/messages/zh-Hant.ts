@@ -648,6 +648,8 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.renodx.statusInstalled': '已安裝',
   'gameDetails.renodx.actionInstall': '安裝',
   'gameDetails.renodx.actionUninstall': '移除 RenoDX',
+  'gameDetails.renodx.inactiveInstallRecovery':
+    '先前的 RenoDX 安裝已失效。請先將其移除，再重新安裝。',
   'gameDetails.renodx.actionRepair': '修復',
   'gameDetails.renodx.actionRepairDlssFix': '修復 DLSS-Fix',
   'gameDetails.renodx.actionFinishDlssFixRecovery': '完成復原',

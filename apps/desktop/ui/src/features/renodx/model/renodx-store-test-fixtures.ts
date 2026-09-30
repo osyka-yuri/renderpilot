@@ -100,6 +100,7 @@ export function availability(
     Partial<AvailabilityReport>,
 ): AvailabilityReport {
   return {
+    has_persisted_record: false,
     host_detection: 'absent',
     host_facts: DEFAULT_HOST_FACTS,
     actions: {
@@ -128,6 +129,7 @@ export const NOT_INSTALLED_SAFE: AvailabilityReport = availability({
 });
 
 export const INSTALLED: AvailabilityReport = availability({
+  has_persisted_record: true,
   state: {
     status: 'installed',
     host_kind: 'proxy',

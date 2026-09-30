@@ -17,6 +17,7 @@ const DEFAULT_ENGINE_CONFIG: EngineConfigAvailability = {
 };
 
 export type AvailabilitySnapshot = {
+  hasPersistedRecord: boolean;
   engineConfig: NonNullable<AvailabilityReport['engine_config']>;
   hostDetection: HostDetection;
   hostFacts: HostFacts;
@@ -35,6 +36,7 @@ export type AvailabilitySnapshotSource = Pick<
   | 'reshade_stable_supported'
   | 'renodx_addon'
   | 'install_torn'
+  | 'has_persisted_record'
 >;
 
 /** RenoDX defaults to the stable ReShade channel until an availability report
@@ -51,6 +53,7 @@ export function availabilitySnapshotFromReport(
     reshadeStableSupported: report.reshade_stable_supported,
     renodxAddon: report.renodx_addon,
     installTorn: report.install_torn,
+    hasPersistedRecord: report.has_persisted_record,
   });
 }
 

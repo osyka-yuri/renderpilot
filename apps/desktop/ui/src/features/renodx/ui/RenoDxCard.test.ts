@@ -8,7 +8,13 @@ import { flushSync, mount, unmount } from 'svelte';
 import { defaultHostFacts } from '@entities/addon';
 
 import { createRenoDxStore, type RenoDxStore } from '../model/create-renodx-store.svelte';
-import { availability, fakeApi, INSTALLED } from '../model/renodx-store-test-fixtures';
+import {
+  availability,
+  DLSS_FIX_PENDING_RECOVERY,
+  fakeApi,
+  INSTALLED,
+  NOT_INSTALLED_SAFE,
+} from '../model/renodx-store-test-fixtures';
 import RenoDxCardTestHost from './RenoDxCard.test-host.svelte';
 
 describe('RenoDxCard', () => {
@@ -105,6 +111,53 @@ describe('RenoDxCard', () => {
     expect(retryDlssFixRecovery).toHaveBeenCalledWith('renodx-game');
   });
 
+  it('keeps DLSS-Fix recovery ahead of inactive persisted-record cleanup', async () => {
+    const persistedRecord = availability({
+      ...NOT_INSTALLED_SAFE,
+      has_persisted_record: true,
+    });
+    const retryDlssFixRecovery = vi.fn(() => Promise.resolve(INSTALLED.state));
+    const uninstall = vi.fn(() => Promise.resolve(NOT_INSTALLED_SAFE.state));
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(persistedRecord)),
+      dlssFixAvailability: vi.fn(() => Promise.resolve(DLSS_FIX_PENDING_RECOVERY)),
+      retryDlssFixRecovery,
+      uninstall,
+    });
+    const store = createRenoDxStore({ api });
+    await store.load('renodx-game');
+
+    expect(store.hasPersistedRecord).toBe(true);
+    expect(store.dlssFix.kind).toBe('recovery_pending');
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'renodx-game',
+        store,
+        onOpenRenoDxSettings: vi.fn(),
+      },
+    });
+    flushSync();
+
+    expect(target.textContent).toContain('A previous DLSS-Fix operation needs recovery.');
+    const recovery = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent.trim() === 'Finish recovery',
+    );
+    expect(recovery).toBeDefined();
+    expect(
+      [...target.querySelectorAll<HTMLButtonElement>('button')].some(
+        (button) => button.textContent.trim() === 'Remove RenoDX',
+      ),
+    ).toBe(false);
+
+    recovery?.click();
+    await vi.waitFor(() => {
+      expect(retryDlssFixRecovery).toHaveBeenCalledWith('renodx-game');
+    });
+    expect(uninstall).not.toHaveBeenCalled();
+  });
+
   it('keeps normal installed DLSS-Fix update and remove actions in the installed panel', () => {
     const updateDlssFix = vi.fn(() => Promise.resolve('ok'));
     const uninstallDlssFix = vi.fn(() => Promise.resolve('ok'));
@@ -181,6 +234,138 @@ describe('RenoDxCard', () => {
 
     expect(target.textContent).toContain('Installed');
     expect(target.textContent).toContain('Confirmed');
+  });
+
+  it('shows cleanup for an inactive RenoDX record and hides install offers', async () => {
+    const persistedRecord = availability({
+      state: { status: 'not_installed' },
+      has_persisted_record: true,
+      outcome: {
+        kind: 'installable',
+        confidence: 'verified',
+        generic_profile: null,
+        profile_id: null,
+        host_kind: 'proxy',
+        guidance: [],
+        launch: null,
+      },
+      manual_install: {
+        host_kind: 'proxy',
+        expected_addon_name: 'renodx-borderlands2',
+        game_arch: 'x86',
+      },
+    });
+    let ownerExists = true;
+    const api = fakeApi({
+      getAvailability: vi.fn(() =>
+        Promise.resolve(
+          ownerExists
+            ? persistedRecord
+            : availability({
+                ...persistedRecord,
+                has_persisted_record: false,
+              }),
+        ),
+      ),
+      uninstall: vi.fn(() => {
+        ownerExists = false;
+        return Promise.resolve(
+          availability({ ...persistedRecord, has_persisted_record: false }).state,
+        );
+      }),
+    });
+    const store = createRenoDxStore({ api });
+    await store.load('renodx-game');
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'renodx-game',
+        store,
+        onOpenRenoDxSettings: vi.fn(),
+      },
+    });
+    flushSync();
+
+    expect(target.textContent).toContain(
+      'A previous RenoDX installation is inactive. Remove it before installing again.',
+    );
+    expect(target.textContent).not.toContain('Install from file');
+    expect(
+      [...target.querySelectorAll<HTMLButtonElement>('button')].some(
+        (button) => button.textContent.trim() === 'Install',
+      ),
+    ).toBe(false);
+
+    const uninstall = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent.trim() === 'Remove RenoDX',
+    );
+    expect(uninstall).toBeDefined();
+    uninstall?.click();
+    flushSync();
+
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent.trim() === 'Remove',
+    );
+    expect(confirm).toBeDefined();
+    confirm?.click();
+
+    await vi.waitFor(() => {
+      expect(api.uninstall).toHaveBeenCalledWith('renodx-game');
+      expect(store.hasPersistedRecord).toBe(false);
+    });
+  });
+
+  it('disables inactive-owner removal while the game card is busy', async () => {
+    const store = createRenoDxStore({
+      api: fakeApi({
+        getAvailability: vi.fn(() =>
+          Promise.resolve(availability({ ...NOT_INSTALLED_SAFE, has_persisted_record: true })),
+        ),
+      }),
+    });
+    await store.load('renodx-game');
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'renodx-game',
+        busy: true,
+        store,
+        onOpenRenoDxSettings: vi.fn(),
+      },
+    });
+    flushSync();
+
+    const uninstall = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent.trim() === 'Remove RenoDX',
+    );
+    expect(uninstall?.disabled).toBe(true);
+  });
+
+  it('keeps the regular install view when there is no persisted RenoDX owner', async () => {
+    const store = createRenoDxStore({
+      api: fakeApi({ getAvailability: vi.fn(() => Promise.resolve(NOT_INSTALLED_SAFE)) }),
+    });
+    await store.load('renodx-game');
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'renodx-game',
+        store,
+        onOpenRenoDxSettings: vi.fn(),
+      },
+    });
+    flushSync();
+
+    expect(store.hasPersistedRecord).toBe(false);
+    expect(target.textContent).not.toContain('previous RenoDX installation is inactive');
+    expect(
+      [...target.querySelectorAll<HTMLButtonElement>('button')].some(
+        (button) => button.textContent.trim() === 'Install',
+      ),
+    ).toBe(true);
   });
 
   it('displays clean profile badge and unverified confidence for a generic profile', async () => {

@@ -88,6 +88,9 @@ pub struct AvailabilityReport {
     pub engine_config: EngineConfigAvailability,
     /// Current install state for the game.
     pub state: RenoDxInstallState,
+    /// Whether a RenoDX install record exists in persistence, whether active or
+    /// inactive for this game's current loading chain.
+    pub has_persisted_record: bool,
     /// Detection state of the Direct3D ReShade proxy host.
     pub host_detection: HostDetection,
     /// Observable Direct3D ReShade host facts, without private install records.

@@ -761,6 +761,8 @@ export const en = defineSourceCatalog({
   'gameDetails.renodx.statusInstalled': 'Installed',
   'gameDetails.renodx.actionInstall': 'Install',
   'gameDetails.renodx.actionUninstall': 'Remove RenoDX',
+  'gameDetails.renodx.inactiveInstallRecovery':
+    'A previous RenoDX installation is inactive. Remove it before installing again.',
   'gameDetails.renodx.actionRepair': 'Repair',
   'gameDetails.renodx.actionRepairDlssFix': 'Repair DLSS-Fix',
   'gameDetails.renodx.actionFinishDlssFixRecovery': 'Finish recovery',

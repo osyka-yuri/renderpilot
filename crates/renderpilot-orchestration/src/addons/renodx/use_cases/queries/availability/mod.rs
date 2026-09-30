@@ -88,6 +88,11 @@ fn build_report(
         record.as_ref(),
         guidance_for_resolution(&resolution),
     )?;
+    // Active status is deliberately stricter than persisted ownership. Read
+    // this raw record independently from `preflight.record` so the report
+    // preserves whether persistence still contains the RenoDX record.
+    let has_persisted_record =
+        crate::addons::records::record_of_kind(context, game_id, AddonKind::RenoDx)?.is_some();
     let mut host_report =
         host_report::reshade_report(&analysis, &resolution, record.as_ref(), reshade_sources);
     if blocked.is_none() && matches!(&resolution, RenoDxResolution::UnsupportedSettings) {
@@ -171,6 +176,7 @@ fn build_report(
         host_detection: host_report.detection,
         host_facts: host_report.facts,
         actions: host_report.actions,
+        has_persisted_record,
         reshade_stable_supported: reshade_sources.supports_channel(ReshadeChannel::Stable),
         renodx_addon: host_report.addon,
         install_torn,

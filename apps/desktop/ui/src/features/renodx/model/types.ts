@@ -273,6 +273,7 @@ export type ManualFileInstall = {
 
 /** Read-only preview returned by `renodx_availability`. */
 export type AvailabilityReport = {
+  has_persisted_record: boolean;
   engine_config?: EngineConfigAvailability;
   state: RenoDxInstallState;
   host_detection: HostDetection;

@@ -759,6 +759,8 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.renodx.statusInstalled': 'Installiert',
   'gameDetails.renodx.actionInstall': 'Installieren',
   'gameDetails.renodx.actionUninstall': 'RenoDX entfernen',
+  'gameDetails.renodx.inactiveInstallRecovery':
+    'Eine frühere RenoDX-Installation ist inaktiv. Entfernen Sie sie, bevor Sie RenoDX erneut installieren.',
   'gameDetails.renodx.actionRepair': 'Reparieren',
   'gameDetails.renodx.actionRepairDlssFix': 'DLSS-Fix reparieren',
   'gameDetails.renodx.actionFinishDlssFixRecovery': 'Wiederherstellung abschließen',

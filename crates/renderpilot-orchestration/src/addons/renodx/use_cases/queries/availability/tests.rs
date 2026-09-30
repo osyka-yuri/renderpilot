@@ -152,6 +152,65 @@ fn availability_reports_the_framework_install_sentinel() {
     let clean =
         availability(&context, &manifest, &reshade_sources, &game_id).expect("clean availability");
     assert!(!clean.install_torn);
+    assert!(
+        !clean.has_persisted_record,
+        "there is no persisted RenoDX record"
+    );
+}
+
+#[test]
+#[cfg(windows)]
+fn availability_reports_architecture_incompatible_persisted_record_without_promoting_install_state()
+{
+    let db_dir = tempdir().expect("db dir");
+    let game_dir = tempdir().expect("game dir");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("steam:49520").expect("game id");
+    let exe_path = game_dir.path().join("Borderlands2.exe");
+    let host_path = game_dir.path().join("d3d9.dll");
+    let addon_path = game_dir.path().join("renodx-borderlands2.addon64");
+
+    // Borderlands 2 is a 32-bit game, while the old local receipt points to
+    // its 64-bit RenoDX add-on and 64-bit ReShade host.
+    std::fs::write(&exe_path, build_pe_with_exports(0x014c, 0x010b, &[])).expect("write x86 exe");
+    std::fs::write(&host_path, full_reshade_host_bytes()).expect("write x64 ReShade host");
+    std::fs::write(&addon_path, b"persisted x64 RenoDX add-on").expect("write add-on");
+    seed_availability_game(&context, &game_id, "49520", game_dir.path(), &exe_path);
+
+    let host_path_ref =
+        PathRef::new(host_path.to_string_lossy().replace('\\', "/")).expect("host path");
+    let addon_record = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new(addon_path.to_string_lossy().replace('\\', "/")).expect("add-on path"),
+    )
+    .with_host_kind(InstalledAddonHostKind::Proxy)
+    .with_created_file(host_path_ref);
+    context
+        .storage()
+        .upsert_installed_addon(&addon_record)
+        .expect("persist inactive local owner");
+
+    assert!(
+        records::active_record_of_kind(&context, &game_id, AddonKind::RenoDx)
+            .expect("active record query")
+            .is_none(),
+        "the x64 host cannot be active for this x86 game"
+    );
+
+    let report = availability(
+        &context,
+        &manifest(Vec::new()),
+        &crate::addons::renodx::test_support::reshade_sources(),
+        &game_id,
+    )
+    .expect("availability");
+
+    assert_eq!(report.state, RenoDxInstallState::NotInstalled);
+    assert!(
+        report.has_persisted_record,
+        "the RenoDX record is persisted"
+    );
 }
 
 #[tokio::test]
@@ -223,6 +282,10 @@ async fn availability_auto_adopts_proxy_install_after_db_loss() {
         .expect("availability");
 
     assert_matches!(report.state, RenoDxInstallState::Installed { .. });
+    assert!(
+        report.has_persisted_record,
+        "an active install also has a persisted record"
+    );
     assert!(report.actions.install.is_none());
     assert!(report.actions.use_existing.is_some());
     let record = records::record_of_kind(&context, &game_id, AddonKind::RenoDx)

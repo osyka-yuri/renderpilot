@@ -13,6 +13,7 @@
   import RenoDxDlssRecoveryView from './RenoDxDlssRecoveryView.svelte';
   import RenoDxInstallableView from './RenoDxInstallableView.svelte';
   import RenoDxInstalledPanel from './RenoDxInstalledPanel.svelte';
+  import RenoDxInactiveRecoveryView from './RenoDxInactiveRecoveryView.svelte';
   import RenoDxManualFallbackView from './RenoDxManualFallbackView.svelte';
   import { RENODX_ATTRIBUTION } from '../model/attribution';
 
@@ -153,6 +154,8 @@
 
   {#if showDlssFixRecovery}
     <RenoDxDlssRecoveryView {gameId} {store} busy={combinedBusy} />
+  {:else if !store.isInstalled && store.hasPersistedRecord}
+    <RenoDxInactiveRecoveryView {gameId} {store} busy={combinedBusy} />
   {:else if view === 'installed'}
     <RenoDxInstalledPanel {gameId} {store} busy={combinedBusy} {launcher} />
   {:else if view === 'blocked-by-other-addon'}

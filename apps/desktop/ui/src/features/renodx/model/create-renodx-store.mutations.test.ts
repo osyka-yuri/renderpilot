@@ -725,6 +725,49 @@ describe('createRenoDxStore', () => {
     expect(store.isInstalled).toBe(true);
   });
 
+  it('keeps persisted-record presence when uninstall fails', async () => {
+    const persistedRecord = availability({
+      ...NOT_INSTALLED_SAFE,
+      has_persisted_record: true,
+    });
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(persistedRecord)),
+      uninstall: vi.fn(() => Promise.reject(new Error('boom'))),
+    });
+    const store = createRenoDxStore({ api });
+    await store.load('steam:1091500');
+
+    expect(store.isInstalled).toBe(false);
+    expect(store.hasPersistedRecord).toBe(true);
+    await expect(store.uninstall('steam:1091500')).resolves.toBe('failed');
+    expect(store.hasPersistedRecord).toBe(true);
+  });
+
+  it('clears persisted-record presence after successful uninstall refresh', async () => {
+    const persistedRecord = availability({
+      ...NOT_INSTALLED_SAFE,
+      has_persisted_record: true,
+    });
+    let ownerExists = true;
+    const api = fakeApi({
+      getAvailability: vi.fn(() =>
+        Promise.resolve(ownerExists ? persistedRecord : NOT_INSTALLED_SAFE),
+      ),
+      uninstall: vi.fn(() => {
+        ownerExists = false;
+        return Promise.resolve(NOT_INSTALLED_SAFE.state);
+      }),
+    });
+    const store = createRenoDxStore({ api });
+    await store.load('steam:1091500');
+    expect(store.hasPersistedRecord).toBe(true);
+
+    await expect(store.uninstall('steam:1091500')).resolves.toBe('ok');
+
+    expect(store.hasPersistedRecord).toBe(false);
+    expect(vi.mocked(api.getAvailability)).toHaveBeenCalledTimes(2);
+  });
+
   it('does not notify peer exclusivity when uninstall fails', async () => {
     const onExclusivityChange = vi.fn();
     const api = fakeApi({

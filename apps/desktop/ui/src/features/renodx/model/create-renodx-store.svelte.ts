@@ -62,6 +62,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
   const requireSafetyTokens = options.requireSafetyTokens;
 
   let availabilitySnapshot = $state<AvailabilitySnapshot>({
+    hasPersistedRecord: false,
     engineConfig: {
       status: 'not_applicable',
       path: null,
@@ -93,6 +94,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
 
   function resetAvailabilityPresentation(): void {
     availabilitySnapshot = {
+      hasPersistedRecord: false,
       engineConfig: {
         status: 'not_applicable',
         path: null,
@@ -356,6 +358,9 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       },
       get installTorn() {
         return availabilitySnapshot.installTorn;
+      },
+      get hasPersistedRecord() {
+        return availabilitySnapshot.hasPersistedRecord;
       },
       get manualInstall() {
         return manualInstall;

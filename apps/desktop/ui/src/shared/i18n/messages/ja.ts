@@ -717,6 +717,8 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.renodx.statusInstalled': 'インストール済み',
   'gameDetails.renodx.actionInstall': 'インストール',
   'gameDetails.renodx.actionUninstall': 'RenoDX を削除',
+  'gameDetails.renodx.inactiveInstallRecovery':
+    '以前の RenoDX インストールは無効です。再インストールする前に削除してください。',
   'gameDetails.renodx.actionRepair': '修復',
   'gameDetails.renodx.actionRepairDlssFix': 'DLSS-Fix を修復',
   'gameDetails.renodx.actionFinishDlssFixRecovery': '復旧を完了',

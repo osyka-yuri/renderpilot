@@ -59,6 +59,32 @@ describe('createRenoDxStore', () => {
     expect(store.loaded).toBe(false);
     expect(store.isInstalled).toBe(false);
     expect(store.isInstallable).toBe(false);
+    expect(store.hasPersistedRecord).toBe(false);
+  });
+
+  it('projects persisted-record presence and clears it when the record disappears or the store deactivates', async () => {
+    const persistedRecord = availability({
+      ...NOT_INSTALLED_SAFE,
+      has_persisted_record: true,
+    });
+    const getAvailability = vi
+      .fn()
+      .mockResolvedValueOnce(persistedRecord)
+      .mockResolvedValueOnce(NOT_INSTALLED_SAFE)
+      .mockResolvedValueOnce(persistedRecord);
+    const store = createRenoDxStore({ api: fakeApi({ getAvailability }) });
+
+    await store.load('steam:1091500');
+    expect(store.isInstalled).toBe(false);
+    expect(store.hasPersistedRecord).toBe(true);
+
+    await store.load('steam:1091500');
+    expect(store.hasPersistedRecord).toBe(false);
+
+    await store.load('steam:1091500');
+    expect(store.hasPersistedRecord).toBe(true);
+    store.deactivate();
+    expect(store.hasPersistedRecord).toBe(false);
   });
 
   it('load() reflects an installable, safe game', async () => {
