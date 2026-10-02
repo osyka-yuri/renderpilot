@@ -117,6 +117,14 @@ impl GameInstallation {
         self.identity.id()
     }
 
+    /// Replaces the identity while retaining the freshly discovered
+    /// installation metadata.
+    #[must_use]
+    pub fn with_identity(mut self, identity: GameIdentity) -> Self {
+        self.identity = identity;
+        self
+    }
+
     /// Returns the installation platform.
     pub fn platform(&self) -> Platform {
         self.platform

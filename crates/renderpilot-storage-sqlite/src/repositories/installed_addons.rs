@@ -14,7 +14,7 @@ use renderpilot_domain::{
     InstalledAddonParts, ManagedAddonFile, PathRef, TrackedSource,
 };
 #[cfg(test)]
-use renderpilot_domain::{EngineConfigContribution, EngineConfigReceipt, EngineConfigTransition};
+use renderpilot_domain::{EngineConfigContribution, EngineConfigTransition};
 use rusqlite::{OptionalExtension, Row, Transaction, named_params};
 
 use crate::error::{invalid_row, storage_error};
@@ -23,46 +23,45 @@ use crate::{mapping, sqlite_clock};
 
 use super::{SqliteStorage, peer_aggregate_reservations};
 
+/// Standalone Engine.ini journal owner, including the exact persisted CAS token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineConfigJournalOwner {
+    /// Add-on kind that owns the journal.
+    pub kind: AddonKind,
+    /// Validated typed journal; stable receipt and pending stage are preserved.
+    pub journal: EngineConfigJournal,
+    /// Exact canonical JSON token stored in SQLite for null-safe CAS.
+    pub raw_token: String,
+}
+
 impl SqliteStorage {
     /// Reads the exact persisted Engine.ini journal token.  The raw token is
     /// intentionally exposed for the compare-and-swap boundary; callers must
     /// not deserialize and reserialize it between the read and CAS.
-    pub fn engine_config_journal_token(&self, game_id: &GameId) -> AppResult<Option<String>> {
+    pub fn engine_config_journal_owner(
+        &self,
+        game_id: &GameId,
+    ) -> AppResult<Option<EngineConfigJournalOwner>> {
         self.with_connection(|connection| {
-            let row = connection
-                .query_row(
-                    "SELECT kind, engine_config_journal_json
-                       FROM installed_addons WHERE game_id = :game_id",
-                    named_params! { ":game_id": game_id.as_str() },
-                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
-                )
-                .optional()
-                .map_err(storage_error)?;
-            let Some((kind, Some(raw))) = row else {
-                return Ok(None);
-            };
-            let kind: AddonKind = mapping::enum_from_text(&kind)?;
-            let journal: EngineConfigJournal = mapping::deserialize_json(&raw)?;
-            if journal.is_empty() {
-                return Err(AppError::storage_failed(
-                    "empty Engine.ini journal must be stored as SQL NULL",
-                ));
-            }
-            journal
-                .validate_for_kind(kind)
-                .map_err(|error| AppError::storage_failed(error.to_string()))?;
-            if mapping::serialize_json(&journal)? != raw {
-                return Err(AppError::storage_failed(
-                    "Engine.ini journal token is not canonical",
-                ));
-            }
-            Ok(Some(raw))
+            engine_config_journal_owner_on_connection(connection, game_id)
         })
     }
 
+    /// Reads a journal token only when the standalone owner has the requested kind.
+    pub fn engine_config_journal_token(
+        &self,
+        game_id: &GameId,
+        kind: AddonKind,
+    ) -> AppResult<Option<String>> {
+        Ok(self
+            .engine_config_journal_owner(game_id)?
+            .filter(|owner| owner.kind == kind)
+            .map(|owner| owner.raw_token))
+    }
+
     /// Atomically replaces the Engine.ini journal only when the row still has
-    /// the exact expected raw token.  Ordinary add-on upserts deliberately do
-    /// not include this column in their update projection.
+    /// the exact expected raw token. This owner is independent from the local
+    /// add-on row, and a NULL expectation can create a new owner.
     pub fn compare_and_swap_engine_config_journal(
         &self,
         game_id: &GameId,
@@ -80,25 +79,90 @@ impl SqliteStorage {
             .map(mapping::serialize_json)
             .transpose()?;
         self.with_transaction(|transaction| {
-            let changed = transaction
-                .execute(
-                    "UPDATE installed_addons
-                        SET engine_config_journal_json = :replacement
-                      WHERE game_id = :game_id
-                        AND kind = :kind
-                        AND ((engine_config_journal_json IS NULL AND :expected IS NULL)
-                             OR engine_config_journal_json = :expected)",
-                    named_params! {
-                        ":replacement": replacement,
-                        ":game_id": game_id.as_str(),
-                        ":kind": kind.as_str(),
-                        ":expected": expected_raw,
-                    },
+            let current: Option<(String, String)> = transaction
+                .query_row(
+                    "SELECT addon_kind, journal_json
+                       FROM game_engine_config_journals WHERE game_id = ?1",
+                    [game_id.as_str()],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
                 )
+                .optional()
                 .map_err(storage_error)?;
-            Ok(changed == 1)
+            match current {
+                Some((current_kind, current_raw)) => {
+                    if current_kind != kind.as_str() || expected_raw != Some(current_raw.as_str()) {
+                        return Ok(false);
+                    }
+                    let current_typed = decode_engine_journal_owner(&current_kind, current_raw)?;
+                    let replacement = replacement.as_deref();
+                    if let Some(replacement) = replacement {
+                        let updated = transaction
+                            .execute(
+                                "UPDATE game_engine_config_journals
+                                    SET journal_json = ?1,
+                                        updated_at = max(CAST(unixepoch('subsec') * 1000 AS INTEGER), created_at)
+                                  WHERE game_id = ?2 AND addon_kind = ?3 AND journal_json = ?4",
+                                rusqlite::params![replacement, game_id.as_str(), kind.as_str(), current_typed.raw_token],
+                            )
+                            .map_err(storage_error)?;
+                        Ok(updated == 1)
+                    } else {
+                        let deleted = transaction
+                            .execute(
+                                "DELETE FROM game_engine_config_journals
+                                  WHERE game_id = ?1 AND addon_kind = ?2 AND journal_json = ?3",
+                                rusqlite::params![game_id.as_str(), kind.as_str(), current_typed.raw_token],
+                            )
+                            .map_err(storage_error)?;
+                        Ok(deleted == 1)
+                    }
+                }
+                None => {
+                    if expected_raw.is_some() {
+                        return Ok(false);
+                    }
+                    let Some(replacement) = replacement.as_deref() else {
+                        return Ok(true);
+                    };
+                    let now = crate::sqlite_clock::now_ms(transaction)?;
+                    match transaction.execute(
+                        "INSERT INTO game_engine_config_journals
+                            (game_id, addon_kind, journal_json, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?4)",
+                        rusqlite::params![game_id.as_str(), kind.as_str(), replacement, now],
+                    ) {
+                        Ok(changed) => Ok(changed == 1),
+                        Err(error) if error.sqlite_error_code() == Some(rusqlite::ErrorCode::ConstraintViolation) => Ok(false),
+                        Err(error) => Err(storage_error(error)),
+                    }
+                }
+            }
         })
     }
+}
+
+pub(super) fn engine_config_journal_owner_on_connection(
+    connection: &rusqlite::Connection,
+    game_id: &GameId,
+) -> AppResult<Option<EngineConfigJournalOwner>> {
+    let row = connection
+        .query_row(
+            "SELECT addon_kind, journal_json
+               FROM game_engine_config_journals WHERE game_id = :game_id",
+            named_params! { ":game_id": game_id.as_str() },
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(storage_error)?;
+    row.map(|(kind, raw)| decode_engine_journal_owner(&kind, raw))
+        .transpose()
+}
+
+pub(super) fn engine_config_journal_owner_within_transaction(
+    transaction: &Transaction<'_>,
+    game_id: &GameId,
+) -> AppResult<Option<EngineConfigJournalOwner>> {
+    engine_config_journal_owner_on_connection(transaction, game_id)
 }
 
 const EXISTING_KIND_SQL: &str = "SELECT kind FROM installed_addons WHERE game_id = :game_id";
@@ -108,13 +172,11 @@ const UPSERT_SQL: &str = "
         (game_id, kind, addon_file, addon_version,
          created_files_json, backed_up_files_json, managed_files_json, tracked_sources_json,
          host_kind, reshade_channel, registered_exe_path, renodx_config_receipt_json,
-         engine_config_journal_json,
          created_at, updated_at)
     VALUES
         (:game_id, :kind, :addon_file, :addon_version,
          :created_files, :backed_up_files, :managed_files, :tracked_sources,
          :host_kind, :reshade_channel, :registered_exe_path, :renodx_config_receipt,
-         NULL,
          :now_ms, :now_ms)
     ON CONFLICT(game_id) DO UPDATE SET
         kind                 = excluded.kind,
@@ -132,23 +194,47 @@ const UPSERT_SQL: &str = "
 ";
 
 const GET_SQL: &str = "
-    SELECT game_id, kind, addon_file, addon_version,
-           created_files_json, backed_up_files_json, managed_files_json, tracked_sources_json,
-           host_kind, reshade_channel, registered_exe_path, renodx_config_receipt_json,
-           engine_config_journal_json,
-           created_at, updated_at
+    SELECT installed_addons.game_id AS game_id, installed_addons.kind AS kind,
+           installed_addons.addon_file AS addon_file,
+           installed_addons.addon_version AS addon_version,
+           installed_addons.created_files_json AS created_files_json,
+           installed_addons.backed_up_files_json AS backed_up_files_json,
+           installed_addons.managed_files_json AS managed_files_json,
+           installed_addons.tracked_sources_json AS tracked_sources_json,
+           installed_addons.host_kind AS host_kind,
+           installed_addons.reshade_channel AS reshade_channel,
+           installed_addons.registered_exe_path AS registered_exe_path,
+           installed_addons.renodx_config_receipt_json AS renodx_config_receipt_json,
+           game_engine_config_journals.journal_json AS engine_config_journal_json,
+           installed_addons.created_at AS created_at,
+           installed_addons.updated_at AS updated_at
     FROM installed_addons
-    WHERE game_id = :game_id
+    LEFT JOIN game_engine_config_journals
+      ON game_engine_config_journals.game_id = installed_addons.game_id
+     AND game_engine_config_journals.addon_kind = installed_addons.kind
+    WHERE installed_addons.game_id = :game_id
 ";
 
 const LIST_SQL: &str = "
-    SELECT game_id, kind, addon_file, addon_version,
-           created_files_json, backed_up_files_json, managed_files_json, tracked_sources_json,
-           host_kind, reshade_channel, registered_exe_path, renodx_config_receipt_json,
-           engine_config_journal_json,
-           created_at, updated_at
+    SELECT installed_addons.game_id AS game_id, installed_addons.kind AS kind,
+           installed_addons.addon_file AS addon_file,
+           installed_addons.addon_version AS addon_version,
+           installed_addons.created_files_json AS created_files_json,
+           installed_addons.backed_up_files_json AS backed_up_files_json,
+           installed_addons.managed_files_json AS managed_files_json,
+           installed_addons.tracked_sources_json AS tracked_sources_json,
+           installed_addons.host_kind AS host_kind,
+           installed_addons.reshade_channel AS reshade_channel,
+           installed_addons.registered_exe_path AS registered_exe_path,
+           installed_addons.renodx_config_receipt_json AS renodx_config_receipt_json,
+           game_engine_config_journals.journal_json AS engine_config_journal_json,
+           installed_addons.created_at AS created_at,
+           installed_addons.updated_at AS updated_at
     FROM installed_addons
-    ORDER BY game_id
+    LEFT JOIN game_engine_config_journals
+      ON game_engine_config_journals.game_id = installed_addons.game_id
+     AND game_engine_config_journals.addon_kind = installed_addons.kind
+    ORDER BY installed_addons.game_id
 ";
 
 const DELETE_SQL: &str = "DELETE FROM installed_addons WHERE game_id = :game_id";
@@ -282,6 +368,47 @@ pub(crate) fn upsert_within_transaction(
     Ok(())
 }
 
+/// Replaces one exact typed file owner inside the final prepared mutation
+/// transaction. The canonical standalone Engine.ini row is intentionally
+/// untouched, including when the replacement changes add-on kind.
+pub(crate) fn replace_expected_within_transaction(
+    transaction: &Transaction<'_>,
+    game_id: &GameId,
+    expected: &InstalledAddon,
+    replacement: &InstalledAddon,
+) -> AppResult<()> {
+    if expected.game_id() != game_id || replacement.game_id() != game_id {
+        return Err(AppError::invalid_input(
+            "expected owner and replacement belong to a different game",
+        ));
+    }
+    if expected.kind() == AddonKind::OptiScaler || replacement.kind() == AddonKind::OptiScaler {
+        return Err(AppError::invalid_input(
+            "OptiScaler cannot use expected-owner add-on replacement",
+        ));
+    }
+    let current = get_within_transaction(transaction, game_id)?;
+    if current.as_ref() != Some(expected) {
+        return Err(AppError::storage_failed(format!(
+            "installed add-on owner changed before expected replacement for {}",
+            game_id.as_str()
+        )));
+    }
+    let deleted = transaction
+        .execute(
+            "DELETE FROM installed_addons WHERE game_id = ?1",
+            [game_id.as_str()],
+        )
+        .map_err(storage_error)?;
+    if deleted != 1 {
+        return Err(AppError::storage_failed(format!(
+            "installed add-on owner disappeared before expected replacement for {}",
+            game_id.as_str()
+        )));
+    }
+    upsert_within_transaction(transaction, replacement)
+}
+
 pub(crate) fn delete_within_transaction(
     transaction: &Transaction<'_>,
     game_id: &GameId,
@@ -316,9 +443,9 @@ pub(crate) fn delete_within_transaction(
     // no durable owner capable of recovering it.
     let has_engine_config_journal: bool = transaction
         .query_row(
-            "SELECT engine_config_journal_json IS NOT NULL
-               FROM installed_addons WHERE game_id = :game_id",
-            named_params! { ":game_id": game_id.as_str() },
+            "SELECT EXISTS(SELECT 1 FROM game_engine_config_journals
+                            WHERE game_id = :game_id AND addon_kind = :kind)",
+            named_params! { ":game_id": game_id.as_str(), ":kind": kind.as_str() },
             |row| row.get(0),
         )
         .optional()
@@ -338,6 +465,32 @@ pub(crate) fn delete_within_transaction(
         })
         .map_err(storage_error)?;
     Ok(())
+}
+
+fn decode_engine_journal_owner(
+    kind_text: &str,
+    raw: String,
+) -> AppResult<EngineConfigJournalOwner> {
+    let kind: AddonKind = mapping::enum_from_text(kind_text)?;
+    let journal: EngineConfigJournal = mapping::deserialize_json(&raw)?;
+    if journal.is_empty() {
+        return Err(AppError::storage_failed(
+            "empty Engine.ini journal must be stored as SQL NULL",
+        ));
+    }
+    journal
+        .validate_for_kind(kind)
+        .map_err(|error| AppError::storage_failed(error.to_string()))?;
+    if mapping::serialize_json(&journal)? != raw {
+        return Err(AppError::storage_failed(
+            "Engine.ini journal token is not canonical",
+        ));
+    }
+    Ok(EngineConfigJournalOwner {
+        kind,
+        journal,
+        raw_token: raw,
+    })
 }
 
 fn observe_on_connection(

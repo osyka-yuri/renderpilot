@@ -58,6 +58,28 @@ impl GameParticipantPlan {
     pub(crate) fn config_receipt(&self) -> Option<&renderpilot_domain::RenoDxConfigReceipt> {
         self.config_receipt.as_ref()
     }
+
+    /// Combines independently rooted RenoDX participants while preserving the
+    /// engine receipt ordering and the single typed config receipt invariant.
+    pub(crate) fn merge(mut self, mut other: Self) -> Result<Self, ServiceError> {
+        if self.config_receipt.is_some() && other.config_receipt.is_some() {
+            return Err(crate::addons::renodx::errors::invalid(
+                "RenoDX install plan contains duplicate config operations".to_owned(),
+            ));
+        }
+        self.files.append(&mut other.files);
+        self.created_dirs.append(&mut other.created_dirs);
+        self.receipt
+            .created_files
+            .append(&mut other.receipt.created_files);
+        self.receipt
+            .backed_up_files
+            .append(&mut other.receipt.backed_up_files);
+        if self.config_receipt.is_none() {
+            self.config_receipt = other.config_receipt.take();
+        }
+        Ok(self)
+    }
 }
 
 /// Plans the exact before/after bytes for the touched files in `plan`.

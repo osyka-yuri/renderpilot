@@ -11,20 +11,20 @@ use std::path::Path;
 
 use renderpilot_domain::{AddonKind, InstalledAddon};
 
-use crate::ServiceError;
-use crate::addons::progress::emit_tool_finalizing;
-use crate::addons::renodx::fetch::{LocalAddonSource, prepare_install, prepare_install_from_file};
-use crate::addons::renodx::use_cases::commands::install::InstallRequest;
-use crate::addons::reshade::proxy::HostKind;
-
 use self::commit::{
-    CombinedVulkanInstallRequest, authorize_combined_vulkan_install, authorize_install_commit,
+    CombinedRenoDxInstallRequest, authorize_combined_install, authorize_install_commit,
 };
 use self::local_file::read_addon_file;
 use self::phase::{
     ensure_catalog_install_snapshot_matches, ensure_requested_channel,
     resolve_catalog_install_snapshot, resolve_file_install_snapshot,
 };
+use crate::ServiceError;
+use crate::addons::external_proxy_owner::augment_external_owner_targets;
+use crate::addons::external_proxy_owner::prepared_release::PreparedExternalOwnerRelease;
+use crate::addons::progress::emit_tool_finalizing;
+use crate::addons::renodx::fetch::{LocalAddonSource, prepare_install, prepare_install_from_file};
+use crate::addons::renodx::use_cases::commands::install::InstallRequest;
 
 /// Executes the established inactive catalogue install flow.
 pub(super) async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, ServiceError> {
@@ -59,7 +59,7 @@ pub(super) async fn install(request: InstallRequest<'_>) -> Result<InstalledAddo
     .await?;
 
     let shared_change =
-        crate::addons::renodx::use_cases::commands::shared_vulkan_layer::prepare_for_install(
+        crate::addons::renodx::use_cases::commands::shared_vulkan_layer::prepare_for_inactive_install(
             crate::addons::renodx::use_cases::commands::shared_vulkan_layer::PrepareInstallRequest {
                 plan: &snapshot.plan,
                 reshade_config: reshade_sources,
@@ -68,8 +68,24 @@ pub(super) async fn install(request: InstallRequest<'_>) -> Result<InstalledAddo
                 exe_path: snapshot.registered_exe_path.as_deref(),
                 progress,
             },
+            snapshot
+                .previous_owner
+                .as_ref()
+                .and_then(|owner| owner.shared_vulkan_exe_path()),
         )
         .await?;
+
+    if snapshot.external_owner.as_ref().is_some_and(|owner| {
+        shared_change.mutates_shared_resource()
+            && (!matches!(owner.record.kind(), AddonKind::RenoDx | AddonKind::Luma)
+                || owner.record.host_kind()
+                    != Some(renderpilot_domain::InstalledAddonHostKind::Proxy)
+                || snapshot.plan.host_kind != crate::addons::reshade::proxy::HostKind::Vulkan)
+    }) {
+        return Err(crate::ServiceError::invalid_input(
+            "shared owner replacement requires an explicit inactive Proxy RenoDX or Luma owner and a Vulkan target",
+        ));
+    }
 
     // Phase 3: acquire the final boundary, revalidate, then begin one
     // synchronous shared+game commit with no safety checks after first write.
@@ -84,18 +100,22 @@ pub(super) async fn install(request: InstallRequest<'_>) -> Result<InstalledAddo
     ensure_catalog_install_snapshot_matches(&snapshot, &revalidated)?;
 
     emit_tool_finalizing(progress, AddonKind::RenoDx);
-    let targets = crate::addons::renodx::mutation_targets::install_targets(
+    let mut targets = crate::addons::renodx::mutation_targets::install_targets(
         &revalidated.target_dir,
         &prepared,
     )?;
+    let receipt_release = prepare_revalidated_owner_release(context, game_id, &revalidated)?;
+    if let (Some(owner), Some(release)) = (
+        revalidated.external_owner.as_ref(),
+        receipt_release.as_ref(),
+    ) {
+        augment_external_owner_targets(&mut targets, owner, release.affected_paths());
+        targets.roots.extend(release.roots(&owner.record));
+        deduplicate_targets(&mut targets);
+    }
     let source_last_modified = prepared.source_last_modified.as_deref();
     if shared_change.mutates_shared_resource() {
-        if !matches!(revalidated.plan.host_kind, HostKind::Vulkan) {
-            return Err(ServiceError::command_failed(
-                "a shared Vulkan plan was produced for a non-Vulkan install",
-            ));
-        }
-        return authorize_combined_vulkan_install(CombinedVulkanInstallRequest {
+        return authorize_combined_install(CombinedRenoDxInstallRequest {
             context,
             feature: crate::addons::mutation_features::RENODX_INSTALL,
             guards,
@@ -108,6 +128,11 @@ pub(super) async fn install(request: InstallRequest<'_>) -> Result<InstalledAddo
             source_last_modified,
             source_mtime: None,
             targets,
+            expected_owner: revalidated
+                .external_owner
+                .as_ref()
+                .map(|owner| &owner.record),
+            receipt_release,
         });
     }
     authorize_install_commit(
@@ -116,31 +141,57 @@ pub(super) async fn install(request: InstallRequest<'_>) -> Result<InstalledAddo
         guards,
         &safety,
         |guard| {
-            crate::addons::durable::run_install_mutation(
-                context,
-                guard,
-                targets,
-                crate::addons::mutation_features::RENODX_INSTALL,
-                game_id,
-                || {
-                    let (record, commit) = crate::addons::renodx::install::install(
-                        &revalidated.target_dir,
-                        &prepared,
-                    )?;
-                    let record = phase::annotate_install_record(
-                        record,
-                        revalidated.plan.host_kind,
-                        revalidated.channel,
-                        revalidated.registered_exe_path.as_deref(),
-                    )?;
-                    crate::fs::stamp_mtime_best_effort(
-                        Path::new(record.addon_file().as_str()),
-                        source_last_modified,
-                        None,
-                    );
-                    Ok((record, commit))
-                },
-            )
+            let install = || {
+                let (record, commit) =
+                    crate::addons::renodx::install::install(&revalidated.target_dir, &prepared)?;
+                let record = phase::annotate_install_record(
+                    record,
+                    revalidated.plan.host_kind,
+                    revalidated.channel,
+                    revalidated.registered_exe_path.as_deref(),
+                )?;
+                crate::fs::stamp_mtime_best_effort(
+                    Path::new(record.addon_file().as_str()),
+                    source_last_modified,
+                    None,
+                );
+                Ok((record, commit))
+            };
+            match (
+                revalidated.external_owner.as_ref(),
+                receipt_release.as_ref(),
+            ) {
+                (Some(owner), Some(release)) => {
+                    let (component_set, baseline_mutations) =
+                        release.file_only_catalog_projection();
+                    crate::addons::durable::run_replace_expected_install_mutation(
+                        crate::addons::durable::TargetsMutation {
+                            context,
+                            guard,
+                            targets,
+                            feature: crate::addons::mutation_features::RENODX_INSTALL,
+                            game_id,
+                        },
+                        &owner.record,
+                        component_set,
+                        &baseline_mutations,
+                        || release.apply_filesystem_only(),
+                        install,
+                        |_| release.journal_after_commit(context, game_id),
+                    )
+                }
+                (Some(_), None) => Err(ServiceError::command_failed(
+                    "external owner replacement has no receipt-only release plan",
+                )),
+                (None, _) => crate::addons::durable::run_install_mutation(
+                    context,
+                    guard,
+                    targets,
+                    crate::addons::mutation_features::RENODX_INSTALL,
+                    game_id,
+                    install,
+                ),
+            }
         },
     )
 }
@@ -193,7 +244,7 @@ pub(super) async fn install_from_file(
     .await?;
 
     let shared_change =
-        crate::addons::renodx::use_cases::commands::shared_vulkan_layer::prepare_for_install(
+        crate::addons::renodx::use_cases::commands::shared_vulkan_layer::prepare_for_inactive_install(
             crate::addons::renodx::use_cases::commands::shared_vulkan_layer::PrepareInstallRequest {
                 plan: &snapshot.plan,
                 reshade_config: reshade_sources,
@@ -202,8 +253,24 @@ pub(super) async fn install_from_file(
                 exe_path: snapshot.registered_exe_path.as_deref(),
                 progress,
             },
+            snapshot
+                .previous_owner
+                .as_ref()
+                .and_then(|owner| owner.shared_vulkan_exe_path()),
         )
         .await?;
+
+    if snapshot.external_owner.as_ref().is_some_and(|owner| {
+        shared_change.mutates_shared_resource()
+            && (!matches!(owner.record.kind(), AddonKind::RenoDx | AddonKind::Luma)
+                || owner.record.host_kind()
+                    != Some(renderpilot_domain::InstalledAddonHostKind::Proxy)
+                || snapshot.plan.host_kind != crate::addons::reshade::proxy::HostKind::Vulkan)
+    }) {
+        return Err(crate::ServiceError::invalid_input(
+            "shared owner replacement requires an explicit inactive Proxy RenoDX or Luma owner and a Vulkan target",
+        ));
+    }
 
     // Phase 3: final combined boundary and one synchronous commit.
     let guards = crate::mutation_boundary::enter_mutation_boundary_async(
@@ -217,17 +284,21 @@ pub(super) async fn install_from_file(
     ensure_catalog_install_snapshot_matches(&snapshot, &revalidated)?;
 
     emit_tool_finalizing(progress, AddonKind::RenoDx);
-    let targets = crate::addons::renodx::mutation_targets::install_targets(
+    let mut targets = crate::addons::renodx::mutation_targets::install_targets(
         &revalidated.target_dir,
         &prepared,
     )?;
+    let receipt_release = prepare_revalidated_owner_release(context, game_id, &revalidated)?;
+    if let (Some(owner), Some(release)) = (
+        revalidated.external_owner.as_ref(),
+        receipt_release.as_ref(),
+    ) {
+        augment_external_owner_targets(&mut targets, owner, release.affected_paths());
+        targets.roots.extend(release.roots(&owner.record));
+        deduplicate_targets(&mut targets);
+    }
     if shared_change.mutates_shared_resource() {
-        if !matches!(revalidated.plan.host_kind, HostKind::Vulkan) {
-            return Err(ServiceError::command_failed(
-                "a shared Vulkan plan was produced for a non-Vulkan install",
-            ));
-        }
-        return authorize_combined_vulkan_install(CombinedVulkanInstallRequest {
+        return authorize_combined_install(CombinedRenoDxInstallRequest {
             context,
             feature: crate::addons::mutation_features::RENODX_INSTALL_FROM_FILE,
             guards,
@@ -240,6 +311,11 @@ pub(super) async fn install_from_file(
             source_last_modified: None,
             source_mtime,
             targets,
+            expected_owner: revalidated
+                .external_owner
+                .as_ref()
+                .map(|owner| &owner.record),
+            receipt_release,
         });
     }
     authorize_install_commit(
@@ -248,31 +324,94 @@ pub(super) async fn install_from_file(
         guards,
         &safety,
         |guard| {
-            crate::addons::durable::run_install_mutation(
-                context,
-                guard,
-                targets,
-                crate::addons::mutation_features::RENODX_INSTALL_FROM_FILE,
-                game_id,
-                || {
-                    let (record, commit) = crate::addons::renodx::install::install(
-                        &revalidated.target_dir,
-                        &prepared,
-                    )?;
-                    let record = phase::annotate_install_record(
-                        record,
-                        revalidated.plan.host_kind,
-                        revalidated.channel,
-                        revalidated.registered_exe_path.as_deref(),
-                    )?;
-                    crate::fs::stamp_mtime_best_effort(
-                        Path::new(record.addon_file().as_str()),
-                        None,
-                        source_mtime,
-                    );
-                    Ok((record, commit))
-                },
-            )
+            let install = || {
+                let (record, commit) =
+                    crate::addons::renodx::install::install(&revalidated.target_dir, &prepared)?;
+                let record = phase::annotate_install_record(
+                    record,
+                    revalidated.plan.host_kind,
+                    revalidated.channel,
+                    revalidated.registered_exe_path.as_deref(),
+                )?;
+                crate::fs::stamp_mtime_best_effort(
+                    Path::new(record.addon_file().as_str()),
+                    None,
+                    source_mtime,
+                );
+                Ok((record, commit))
+            };
+            match (
+                revalidated.external_owner.as_ref(),
+                receipt_release.as_ref(),
+            ) {
+                (Some(owner), Some(release)) => {
+                    let (component_set, baseline_mutations) =
+                        release.file_only_catalog_projection();
+                    crate::addons::durable::run_replace_expected_install_mutation(
+                        crate::addons::durable::TargetsMutation {
+                            context,
+                            guard,
+                            targets,
+                            feature: crate::addons::mutation_features::RENODX_INSTALL_FROM_FILE,
+                            game_id,
+                        },
+                        &owner.record,
+                        component_set,
+                        &baseline_mutations,
+                        || release.apply_filesystem_only(),
+                        install,
+                        |_| release.journal_after_commit(context, game_id),
+                    )
+                }
+                (Some(_), None) => Err(ServiceError::command_failed(
+                    "external owner replacement has no receipt-only release plan",
+                )),
+                (None, _) => crate::addons::durable::run_install_mutation(
+                    context,
+                    guard,
+                    targets,
+                    crate::addons::mutation_features::RENODX_INSTALL_FROM_FILE,
+                    game_id,
+                    install,
+                ),
+            }
         },
     )
+}
+
+fn deduplicate_targets(targets: &mut crate::addons::mutation_targets::MutationTargets) {
+    let mut seen = std::collections::HashSet::new();
+    targets
+        .paths
+        .retain(|path| seen.insert(crate::paths::normalized_key(path)));
+    let mut seen = std::collections::HashSet::new();
+    targets
+        .roots
+        .retain(|path| seen.insert(crate::paths::normalized_key(path)));
+}
+
+fn prepare_revalidated_owner_release(
+    context: &crate::Context,
+    game_id: &renderpilot_domain::GameId,
+    snapshot: &phase::CatalogInstallSnapshot,
+) -> Result<Option<PreparedExternalOwnerRelease>, ServiceError> {
+    let release =
+        PreparedExternalOwnerRelease::prepare(context, game_id, snapshot.external_owner.as_ref())?;
+    if let (Some(owner), Some(release)) = (snapshot.external_owner.as_ref(), release.as_ref()) {
+        if !phase::same_ordered_paths(&release.affected_paths(), &snapshot.receipt_release_paths)
+            || !phase::same_ordered_paths(
+                &release.roots(&owner.record),
+                &snapshot.receipt_release_roots,
+            )
+        {
+            return Err(crate::ServiceError::invalid_input(
+                "external owner release changed during install preparation; retry the install",
+            ));
+        }
+    } else if snapshot.external_owner.is_some() != release.is_some() {
+        return Err(crate::ServiceError::invalid_input(
+            "external owner release changed during install preparation; retry the install",
+        ));
+    }
+    Ok(release)
 }

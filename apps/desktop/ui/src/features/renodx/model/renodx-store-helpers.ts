@@ -18,6 +18,7 @@ const DEFAULT_ENGINE_CONFIG: EngineConfigAvailability = {
 
 export type AvailabilitySnapshot = {
   hasPersistedRecord: boolean;
+  installRequiresSharedVulkan: boolean;
   engineConfig: NonNullable<AvailabilityReport['engine_config']>;
   hostDetection: HostDetection;
   hostFacts: HostFacts;
@@ -37,6 +38,7 @@ export type AvailabilitySnapshotSource = Pick<
   | 'renodx_addon'
   | 'install_torn'
   | 'has_persisted_record'
+  | 'install_requires_shared_vulkan'
 >;
 
 /** RenoDX defaults to the stable ReShade channel until an availability report
@@ -48,13 +50,16 @@ export function defaultHostFacts(): HostFacts {
 export function availabilitySnapshotFromReport(
   report: AvailabilitySnapshotSource,
 ): AvailabilitySnapshot {
-  return mapAvailabilitySnapshot(report, {
-    engineConfig: report.engine_config ?? DEFAULT_ENGINE_CONFIG,
-    reshadeStableSupported: report.reshade_stable_supported,
-    renodxAddon: report.renodx_addon,
-    installTorn: report.install_torn,
+  return {
+    ...mapAvailabilitySnapshot(report, {
+      engineConfig: report.engine_config ?? DEFAULT_ENGINE_CONFIG,
+      reshadeStableSupported: report.reshade_stable_supported,
+      renodxAddon: report.renodx_addon,
+      installTorn: report.install_torn,
+    }),
+    installRequiresSharedVulkan: report.install_requires_shared_vulkan,
     hasPersistedRecord: report.has_persisted_record,
-  });
+  };
 }
 
 export function currentHostChannel(snapshot: AvailabilitySnapshot): ReshadeChannel | null {

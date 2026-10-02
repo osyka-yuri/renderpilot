@@ -1,11 +1,13 @@
 //! Shared availability preflight: record lookup, game load, exclusivity check,
 //! and manifest resolution — the common front half of every addon availability query.
 
+use renderpilot_application::ProxyTopologyRepository;
 use renderpilot_domain::{AddonKind, GameId, GameInstallation, InstalledAddon};
 
 use crate::addons::engine_config::EngineIniResolution;
 use crate::addons::engine_config::service;
 use crate::addons::exclusivity::{self, ExclusivityBlock, ExclusivityBlockKind};
+use crate::addons::external_proxy_owner;
 use crate::addons::game_analysis::{GameAnalysis, install_roots_for_analysis};
 use crate::addons::game_context::{executable_override, require_game};
 use crate::addons::records;
@@ -75,9 +77,25 @@ where
     let local_app_data = std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from);
     let engine_config_resolution =
         service::resolve_for_analysis(&analysis, local_app_data.as_deref());
+    let external_owner =
+        if record.is_none() && context.storage().get_proxy_topology(game_id)?.is_none() {
+            external_proxy_owner::resolve_inactive_external_proxy_owner(
+                context,
+                game_id,
+                std::path::Path::new(game.install_path().as_str()),
+            )?
+        } else {
+            None
+        };
     let blocked = {
         let scan_dirs = roots.as_ref().map(InstallRoots::scan_dir_paths);
-        exclusivity::check_blocked(context, game_id, kind, scan_dirs.as_deref())?
+        exclusivity::check_blocked_with_external_owner(
+            context,
+            game_id,
+            kind,
+            scan_dirs.as_deref(),
+            external_owner.as_ref(),
+        )?
     };
     Ok(AvailabilityPreflight {
         record,

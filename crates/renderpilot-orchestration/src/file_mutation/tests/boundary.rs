@@ -103,11 +103,12 @@ fn active_optiscaler_topology_blocks_peer_torn_recovery_before_live_writes() {
     crate::addons::engine::write_sentinel(&marker).expect("sentinel");
     let roots = crate::addons::reshade::InstallRoots::resolve_from_ini(game_root.path());
 
-    let error = crate::addons::install_guard::guard_exclusivity_and_torn(
+    let error = crate::addons::install_guard::guard_exclusivity_and_torn_with_external_owner(
         &context,
         &game_id,
         AddonKind::RenoDx,
         &roots,
+        None,
     )
     .expect_err("active topology must fence before recovery");
 

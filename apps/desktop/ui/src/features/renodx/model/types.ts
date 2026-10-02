@@ -274,6 +274,7 @@ export type ManualFileInstall = {
 /** Read-only preview returned by `renodx_availability`. */
 export type AvailabilityReport = {
   has_persisted_record: boolean;
+  install_requires_shared_vulkan: boolean;
   engine_config?: EngineConfigAvailability;
   state: RenoDxInstallState;
   host_detection: HostDetection;

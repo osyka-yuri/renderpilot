@@ -36,6 +36,8 @@ pub(super) const REQUIRED_TABLES: &[&str] = &[
     "game_ui_state",
     "profile_addon_capabilities",
     "portable_path_tags",
+    "installation_availability",
+    "game_engine_config_journals",
 ];
 
 /// Every named index created by the baseline (excluding auto-indexes).
@@ -71,6 +73,7 @@ pub(super) const REQUIRED_INDEXES: &[&str] = &[
     "idx_nvapi_game_claim_refs_target",
     "idx_nvapi_owned_profiles_binding_path",
     "idx_pending_drs_operations_phase_target",
+    "idx_installation_availability_state",
 ];
 
 /// Every named trigger created by the baseline.
@@ -85,6 +88,7 @@ pub(super) const REQUIRED_TRIGGERS: &[&str] = &[
     "trg_operation_items_touch_updated_at",
     "trg_settings_touch_updated_at",
     "trg_games_create_scan_authority",
+    "trg_games_create_installation_availability",
     "trg_nvapi_executable_overrides_touch_updated_at",
     "trg_game_ui_state_touch_updated_at",
     "trg_installed_addons_touch_updated_at",
@@ -141,4 +145,6 @@ pub(super) const CONSOLIDATION_POLICIES: &[(&str, &str)] = &[
     ("profile_addon_capabilities", "destination_wins_per_kind"),
     ("catalog_scan_authority", "cascade_game"),
     ("file_observations", "cascade_owner"),
+    ("installation_availability", "preserve_registration_state"),
+    ("game_engine_config_journals", "rekey_canonical_journal"),
 ];

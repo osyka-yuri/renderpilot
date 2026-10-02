@@ -19,8 +19,10 @@
 
 use std::cell::RefCell;
 
-use renderpilot_domain::{GameId, InstalledAddon};
-use renderpilot_storage_sqlite::{GameMutationCommit, InstalledAddonMutation};
+use renderpilot_domain::{GameId, InstalledAddon, LibraryComponent};
+use renderpilot_storage_sqlite::{
+    ComponentBaselineMutation, GameMutationCommit, InstalledAddonMutation,
+};
 
 use crate::addons::engine::{OperationSentinel, PendingInstallCommit};
 use crate::addons::mutation_targets::{DurableWorkset, MutationTargets};
@@ -66,6 +68,54 @@ pub(crate) fn run_install_mutation(
             if let Some(commit) = pending_commit.borrow_mut().take() {
                 commit.finish_committed();
             }
+        },
+        || {
+            if let Some(commit) = pending_commit.borrow_mut().take() {
+                commit.finish_rolled_back();
+            }
+        },
+    )
+}
+
+/// Replaces one exact inactive file owner after its prepared filesystem release
+/// and the new install both succeed under one existing durable transaction.
+/// The old canonical owner stays persisted until `ReplaceExpected` commits with
+/// this transaction's mutation id; the pending engine sentinel follows the
+/// same finish hooks as an ordinary install.
+pub(crate) fn run_replace_expected_install_mutation(
+    req: TargetsMutation<'_>,
+    expected: &InstalledAddon,
+    component_set: Option<&[LibraryComponent]>,
+    baseline_mutations: &[ComponentBaselineMutation<'_>],
+    release: impl FnOnce() -> Result<(), ServiceError>,
+    install: impl FnOnce() -> Result<(InstalledAddon, PendingInstallCommit), ServiceError>,
+    on_committed: impl FnOnce(&InstalledAddon),
+) -> Result<InstalledAddon, ServiceError> {
+    let pending_commit = RefCell::new(None);
+    let context = req.context;
+    run_targets_mutation(
+        req,
+        |mutation_id| -> Result<InstalledAddon, ServiceError> {
+            release()?;
+            let (record, commit) = install()?;
+            *pending_commit.borrow_mut() = Some(commit);
+            context.storage().commit_game_mutation(GameMutationCommit {
+                game_id: record.game_id(),
+                component_set,
+                baseline_mutations,
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected,
+                    replacement: &record,
+                },
+                mutation_id: Some(mutation_id),
+            })?;
+            Ok(record)
+        },
+        |record| {
+            if let Some(commit) = pending_commit.borrow_mut().take() {
+                commit.finish_committed();
+            }
+            on_committed(record);
         },
         || {
             if let Some(commit) = pending_commit.borrow_mut().take() {

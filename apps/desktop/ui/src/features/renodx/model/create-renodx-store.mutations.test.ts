@@ -80,6 +80,86 @@ describe('createRenoDxStore', () => {
     expect(api.install).toHaveBeenCalledWith('steam:1091500', 'stable', 'game-token', undefined);
   });
 
+  it('includes the shared boundary for a proxy install with a retained Shared Vulkan owner', async () => {
+    const retainedOwner = availability({
+      ...NOT_INSTALLED_SAFE,
+      install_requires_shared_vulkan: true,
+    });
+    const requireSafetyTokens = vi.fn(() =>
+      Promise.resolve({
+        gameContextToken: 'game-token',
+        sharedVulkanContextToken: 'shared-token',
+      }),
+    );
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(retainedOwner)),
+    });
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+    await store.load('steam:1091500');
+
+    await expect(store.install('steam:1091500', 'stable')).resolves.toBe('ok');
+
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:1091500', 'game_and_shared');
+    expect(api.install).toHaveBeenCalledWith(
+      'steam:1091500',
+      'stable',
+      'game-token',
+      'shared-token',
+    );
+  });
+
+  it('includes the shared boundary for file install with a retained Shared Vulkan owner', async () => {
+    const retainedOwner = availability({
+      ...NOT_INSTALLED_SAFE,
+      install_requires_shared_vulkan: true,
+    });
+    const requireSafetyTokens = vi.fn(() =>
+      Promise.resolve({
+        gameContextToken: 'game-token',
+        sharedVulkanContextToken: 'shared-token',
+      }),
+    );
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(retainedOwner)),
+    });
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+    await store.load('steam:1091500');
+
+    await expect(
+      store.installFromFile('steam:1091500', 'C:\\dl\\renodx-x.addon64', 'stable'),
+    ).resolves.toBe('ok');
+
+    expect(requireSafetyTokens).toHaveBeenCalledWith('steam:1091500', 'game_and_shared');
+    expect(api.installFromFile).toHaveBeenCalledWith(
+      'steam:1091500',
+      'C:\\dl\\renodx-x.addon64',
+      'stable',
+      'game-token',
+      'shared-token',
+    );
+  });
+
+  it('clears retained Shared Vulkan install scope after switching games', async () => {
+    const retainedOwner = availability({
+      ...NOT_INSTALLED_SAFE,
+      install_requires_shared_vulkan: true,
+    });
+    const requireSafetyTokens = vi.fn(() => Promise.resolve({ gameContextToken: 'game-token' }));
+    const api = fakeApi({
+      getAvailability: vi.fn((gameId: string) =>
+        Promise.resolve(gameId === 'game1' ? retainedOwner : NOT_INSTALLED_SAFE),
+      ),
+    });
+    const store = createRenoDxStore({ api, requireSafetyTokens });
+    await store.load('game1');
+    await store.load('game2');
+
+    await expect(store.install('game2', 'stable')).resolves.toBe('ok');
+
+    expect(requireSafetyTokens).toHaveBeenCalledWith('game2', 'game');
+    expect(api.install).toHaveBeenCalledWith('game2', 'stable', 'game-token', undefined);
+  });
+
   it('uses only game safety for Engine.ini apply', async () => {
     const requireSafetyTokens = vi.fn(() =>
       Promise.resolve({

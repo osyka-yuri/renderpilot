@@ -93,6 +93,88 @@ pub(crate) fn scan_explicit_install(
     )
 }
 
+/// Scans an installation under the game lock without running file/shared
+/// recovery or legacy managed-file reconciliation.
+#[cfg(windows)]
+pub(crate) fn scan_explicit_install_observational(
+    context: &crate::Context,
+    game: &renderpilot_domain::GameInstallation,
+) -> Result<Option<ScanFolderCatalogResult>, ServiceError> {
+    let guard = crate::mutation_boundary::enter_game_observation_boundary(game.id());
+    let current_game = context
+        .storage()
+        .find_game(game.id())?
+        .ok_or_else(|| AppError::game_not_found(game.id().as_str()))?;
+    if current_game.install_key() != game.install_key() {
+        return Err(ServiceError::command_failed(
+            "installation root changed before registered-root refresh",
+        ));
+    }
+    let reactivating = match super::installation_lifecycle::coordinator::
+        observe_registered_root_under_lock(context, &guard, &current_game)?
+    {
+        super::installation_lifecycle::coordinator::RegisteredRootObservation::Present {
+            was_absent,
+        } => was_absent,
+        super::installation_lifecycle::coordinator::RegisteredRootObservation::ConfirmedAbsent {
+            collection_error,
+            ..
+        } => {
+            if let Some(error) = collection_error {
+                return Err(ServiceError::command_failed(format!(
+                    "installation root is absent; local metadata collection failed: {error}"
+                )));
+            }
+            return Ok(None);
+        }
+        super::installation_lifecycle::coordinator::RegisteredRootObservation::Indeterminate {
+            reason,
+        } => {
+            return Err(ServiceError::command_failed(format!(
+                "installation root presence is indeterminate: {reason}"
+            )));
+        }
+    };
+
+    let detector = LibraryPatternComponentDetector::windows_default()
+        .map_err(|error| AppError::detection_failed(error.to_string()))?;
+    let explicit_executable = if reactivating {
+        None
+    } else {
+        current_game.confirmed_executable().map(|relative| {
+            PathBuf::from(current_game.install_path().as_str()).join(relative.as_str())
+        })
+    };
+    let source = ManualFolderGameSource::new(current_game.install_path().as_str())
+        .with_game_id(current_game.id().clone())
+        .with_root_authority(current_game.root_authority());
+    let source = match explicit_executable {
+        Some(executable) => source.with_explicit_executable(executable),
+        None => source,
+    };
+    let storage = context.storage();
+    let catalog_index = reconcile::CatalogInstallIndex::load(storage)?;
+    let discovered = source.discover_game()?;
+    let selected_game = if reactivating {
+        reconcile::reconcile_reappeared_game_with_catalog(&catalog_index, discovered)
+    } else {
+        reconcile::reconcile_game_with_catalog(&catalog_index, discovered)
+    };
+    let result = scan_source_impl_locked(
+        ScanInputs {
+            context,
+            detector: &detector,
+        },
+        selected_game,
+        &catalog_index,
+        ExplicitRootChange::Unchanged,
+        &[],
+        Some(&guard),
+        reactivating,
+    )?;
+    Ok(Some(result))
+}
+
 /// Borrowed storage + detector for one [`scan_impl`] invocation.
 #[derive(Clone, Copy)]
 struct ScanInputs<'a> {
@@ -104,18 +186,49 @@ struct ScanInputs<'a> {
 /// by the caller.
 pub(super) fn scan_explicit_install_locked(
     context: &crate::Context,
-    _guard: &crate::game_mutation_lock::GameMutationGuard,
+    guard: &crate::game_mutation_lock::GameMutationGuard,
     path: PathBuf,
     game_id: GameId,
     root_authority: RootAuthority,
     explicit_executable: Option<PathBuf>,
 ) -> Result<ScanFolderCatalogResult, ServiceError> {
+    if guard.game_id() != &game_id {
+        return Err(ServiceError::invalid_input(
+            "observation guard does not match the requested installation scan",
+        ));
+    }
+    let registered_game = context.storage().find_game(&game_id)?;
+    let reactivating_from_absence = if let Some(registered_game) = &registered_game {
+        let requested_key = super::install_paths::install_path_match_key(
+            &path.to_string_lossy().replace('\\', "/"),
+        );
+        if requested_key.as_ref() != Some(registered_game.install_key()) {
+            return Err(ServiceError::command_failed(
+                "installation root changed before registered-root refresh",
+            ));
+        }
+        require_present_observation(
+            super::installation_lifecycle::coordinator::observe_registered_root_under_lock(
+                context,
+                guard,
+                registered_game,
+            )?,
+            registered_game.install_path().as_str(),
+        )?
+    } else {
+        false
+    };
+
     let detector = LibraryPatternComponentDetector::windows_default()
         .map_err(|error| AppError::detection_failed(error.to_string()))?;
     let source = ManualFolderGameSource::new(path)
         .with_game_id(game_id)
         .with_root_authority(root_authority);
-    let source = match explicit_executable {
+    let source = match if reactivating_from_absence {
+        None
+    } else {
+        explicit_executable
+    } {
         Some(executable) => source.with_explicit_executable(executable),
         None => source,
     };
@@ -134,7 +247,15 @@ pub(super) fn scan_explicit_install_locked(
         &catalog_index,
         ExplicitRootChange::Unchanged,
         &[],
+        Some(guard),
+        reactivating_from_absence,
     )
+}
+
+#[derive(Clone, Copy)]
+enum ScanBoundaryMode {
+    Mutation,
+    Observation,
 }
 
 fn scan_source_impl(
@@ -144,29 +265,141 @@ fn scan_source_impl(
     root_change: ExplicitRootChange,
     consolidation_candidates: &[GameId],
 ) -> Result<ScanFolderCatalogResult, ServiceError> {
+    let boundary_mode = if root_change == ExplicitRootChange::Unchanged {
+        ScanBoundaryMode::Observation
+    } else {
+        ScanBoundaryMode::Mutation
+    };
+    scan_source_impl_with_boundary(
+        inputs,
+        source,
+        catalog_index,
+        root_change,
+        consolidation_candidates,
+        boundary_mode,
+    )
+}
+
+#[cfg(any(windows, test))]
+fn scan_source_impl_observational(
+    inputs: ScanInputs<'_>,
+    source: &ManualFolderGameSource,
+    catalog_index: Option<&reconcile::CatalogInstallIndex>,
+    root_change: ExplicitRootChange,
+    consolidation_candidates: &[GameId],
+) -> Result<ScanFolderCatalogResult, ServiceError> {
+    scan_source_impl_with_boundary(
+        inputs,
+        source,
+        catalog_index,
+        root_change,
+        consolidation_candidates,
+        ScanBoundaryMode::Observation,
+    )
+}
+
+fn scan_source_impl_with_boundary(
+    inputs: ScanInputs<'_>,
+    source: &ManualFolderGameSource,
+    catalog_index: Option<&reconcile::CatalogInstallIndex>,
+    root_change: ExplicitRootChange,
+    consolidation_candidates: &[GameId],
+    boundary_mode: ScanBoundaryMode,
+) -> Result<ScanFolderCatalogResult, ServiceError> {
     let storage = inputs.context.storage();
 
     let owned_catalog_index;
-    let catalog_index = if let Some(index) = catalog_index {
+    let prefetched_catalog_index = if let Some(index) = catalog_index {
         index
     } else {
         owned_catalog_index = reconcile::CatalogInstallIndex::load(storage)?;
         &owned_catalog_index
     };
-    let selected_game =
-        reconcile::reconcile_game_with_catalog(catalog_index, source.discover_game()?);
-    let mut affected_ids = consolidation_candidates.to_vec();
-    affected_ids.push(selected_game.id().clone());
-    let _guards =
-        crate::mutation_boundary::enter_game_mutation_boundaries(inputs.context, affected_ids)?;
+    let discovered = source.discover_game()?;
+    let prefetched_selected_game =
+        reconcile::reconcile_game_with_catalog(prefetched_catalog_index, discovered);
 
-    scan_source_impl_locked(
-        inputs,
-        selected_game,
-        catalog_index,
-        root_change,
-        consolidation_candidates,
-    )
+    match boundary_mode {
+        ScanBoundaryMode::Mutation => {
+            let mut affected_ids = consolidation_candidates.to_vec();
+            affected_ids.push(prefetched_selected_game.id().clone());
+            let _guards = crate::mutation_boundary::enter_game_mutation_boundaries(
+                inputs.context,
+                affected_ids,
+            )?;
+            scan_source_impl_locked(
+                inputs,
+                prefetched_selected_game,
+                prefetched_catalog_index,
+                root_change,
+                consolidation_candidates,
+                None,
+                false,
+            )
+        }
+        ScanBoundaryMode::Observation => {
+            // Retain every affected game's lock, but keep ordinary scans on
+            // the observation-only boundary so pending native/file work is
+            // never recovered as a side effect of catalog discovery.
+            let mut affected_ids = consolidation_candidates.to_vec();
+            affected_ids.push(prefetched_selected_game.id().clone());
+            affected_ids.sort();
+            affected_ids.dedup();
+            let guards = affected_ids
+                .iter()
+                .map(crate::mutation_boundary::enter_game_observation_boundary)
+                .collect::<Vec<_>>();
+            let guard = guards
+                .iter()
+                .find(|guard| guard.game_id() == prefetched_selected_game.id())
+                .ok_or_else(|| {
+                    ServiceError::invalid_input(
+                        "observation lock set does not include the selected installation",
+                    )
+                })?;
+
+            // Batch discovery can hand this scan a catalog snapshot taken
+            // before it waited for the per-game lock. Re-read under the lock
+            // so current root authority and executable confirmation win.
+            let fresh_catalog_index = reconcile::CatalogInstallIndex::load(storage)?;
+            let selected_game = reconcile::reconcile_game_with_catalog(
+                &fresh_catalog_index,
+                source.discover_game()?,
+            );
+            if selected_game.id() != prefetched_selected_game.id() {
+                return Err(ServiceError::command_failed(
+                    "installation identity changed while waiting for its observation lock",
+                ));
+            }
+
+            let observation =
+                super::installation_lifecycle::coordinator::observe_registered_root_under_lock(
+                    inputs.context,
+                    guard,
+                    &selected_game,
+                )?;
+            let reactivating_from_absence =
+                require_present_observation(observation, selected_game.install_path().as_str())?;
+            let selected_game = if reactivating_from_absence {
+                reconcile::reconcile_reappeared_game_with_catalog(
+                    &fresh_catalog_index,
+                    source.discover_game()?,
+                )
+            } else {
+                selected_game
+            };
+
+            scan_source_impl_locked(
+                inputs,
+                selected_game,
+                &fresh_catalog_index,
+                root_change,
+                consolidation_candidates,
+                Some(guard),
+                reactivating_from_absence,
+            )
+        }
+    }
 }
 
 fn scan_source_impl_locked(
@@ -175,6 +408,8 @@ fn scan_source_impl_locked(
     catalog_index: &reconcile::CatalogInstallIndex,
     root_change: ExplicitRootChange,
     consolidation_candidates: &[GameId],
+    observation_guard: Option<&crate::game_mutation_lock::GameMutationGuard>,
+    mut reactivating_from_absence: bool,
 ) -> Result<ScanFolderCatalogResult, ServiceError> {
     let storage = inputs.context.storage();
     let detector = inputs.detector;
@@ -189,8 +424,11 @@ fn scan_source_impl_locked(
     let authority = AuthorityCas::new(initial_readiness.authority_epoch());
     let libraries = detect_libraries(storage, detector, &selected_game)?;
     let components = reconcile::build_library_components(&selected_game, &libraries)?;
-    let components =
-        xiph_lineage::reconcile_managed_xiph_successor_ids(storage, &selected_game, components)?;
+    let components = if reactivating_from_absence {
+        components
+    } else {
+        xiph_lineage::reconcile_managed_xiph_successor_ids(storage, &selected_game, components)?
+    };
     if root_change != ExplicitRootChange::Unchanged {
         ensure_root_change_preserves_state(inputs.context, &selected_game, &components)?;
     }
@@ -199,6 +437,17 @@ fn scan_source_impl_locked(
     } else {
         None
     };
+
+    if let Some(guard) = observation_guard {
+        let observation =
+            super::installation_lifecycle::coordinator::observe_registered_root_under_lock(
+                inputs.context,
+                guard,
+                &selected_game,
+            )?;
+        reactivating_from_absence |=
+            require_present_observation(observation, selected_game.install_path().as_str())?;
+    }
 
     persist_scan_result(
         storage,
@@ -212,8 +461,38 @@ fn scan_source_impl_locked(
             root_correction_recovery_bundle_path,
             prefetched_catalog_index: Some(catalog_index),
             consolidation_candidates,
+            reactivating_from_absence,
         },
     )
+}
+
+fn require_present_observation(
+    observation: super::installation_lifecycle::coordinator::RegisteredRootObservation,
+    root: &str,
+) -> Result<bool, ServiceError> {
+    match observation {
+        super::installation_lifecycle::coordinator::RegisteredRootObservation::Present {
+            was_absent,
+        } => Ok(was_absent),
+        super::installation_lifecycle::coordinator::RegisteredRootObservation::ConfirmedAbsent {
+            collection_error,
+            ..
+        } => {
+            if let Some(error) = collection_error {
+                return Err(ServiceError::command_failed(format!(
+                    "installation root is confirmed absent at {root}; local metadata collection failed: {error}"
+                )));
+            }
+            Err(ServiceError::command_failed(format!(
+                "installation root is confirmed absent at {root}"
+            )))
+        }
+        super::installation_lifecycle::coordinator::RegisteredRootObservation::Indeterminate {
+            reason,
+        } => Err(ServiceError::command_failed(format!(
+            "installation root presence is indeterminate at {root}: {reason}"
+        ))),
+    }
 }
 
 fn archive_pruned_operation_history(
@@ -319,10 +598,17 @@ fn assess_root_change(
 mod tests {
     use std::{fs, fs::FileTimes, time::SystemTime};
 
-    use renderpilot_domain::{GameId, RootAuthority};
+    use renderpilot_application::GameRepository;
+    use renderpilot_detection::LibraryPatternComponentDetector;
+    use renderpilot_domain::{
+        GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+        RootAuthority,
+    };
     use renderpilot_nvapi::{DlssDllKind, DlssVersion};
 
-    use super::{ExplicitRootChange, scan_explicit_install};
+    use super::{
+        ExplicitRootChange, ScanInputs, scan_explicit_install, scan_source_impl_observational,
+    };
 
     fn assert_catalogued_sr_version(
         context: &crate::Context,
@@ -469,5 +755,84 @@ mod tests {
             .expect("list components");
         assert!(cleared_components.is_empty());
         assert!(context.storage().catalog_generation() > generation_before_removal);
+    }
+
+    #[test]
+    fn waiting_observation_scan_uses_confirmation_from_the_locked_catalog_snapshot() {
+        let root = tempfile::tempdir().expect("game root");
+        let game_id = GameId::new("manual:locked-confirmation-refresh").expect("game id");
+        let game = GameInstallation::new(
+            GameIdentity::new(game_id.clone(), "Game", Launcher::Manual).expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(root.path().to_string_lossy().replace('\\', "/")).expect("root"),
+        )
+        .with_root_authority(RootAuthority::UserConfirmed)
+        .with_confirmed_executable(PathRef::new("Old.exe").expect("old executable"));
+        let context = std::sync::Arc::new(crate::Context::from_storage(
+            renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("storage"),
+        ));
+        context
+            .storage()
+            .upsert_game(&game)
+            .expect("seed old registration");
+
+        // This models a batch snapshot taken before another command's lock
+        // was released. The queued scan must reload the row after acquiring
+        // that lock rather than publishing the older confirmation.
+        let stale_index = super::reconcile::CatalogInstallIndex::load(context.storage())
+            .expect("prefetched catalog index");
+        let held = crate::mutation_boundary::enter_game_observation_boundary(&game_id);
+        fs::write(root.path().join("New.exe"), b"game executable")
+            .expect("create current executable before registration");
+        let current_game =
+            game.with_confirmed_executable(PathRef::new("New.exe").expect("new executable"));
+        context
+            .storage()
+            .upsert_game(&current_game)
+            .expect("publish current confirmation");
+
+        let source = renderpilot_platform_windows::ManualFolderGameSource::new(root.path())
+            .with_game_id(game_id.clone())
+            .with_root_authority(RootAuthority::UserConfirmed);
+        let (attempt_tx, attempt_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        crate::game_mutation_lock::set_lock_attempt_hook(&game_id, attempt_tx);
+        let worker_context = std::sync::Arc::clone(&context);
+        let worker = std::thread::spawn(move || {
+            let detector =
+                LibraryPatternComponentDetector::windows_default().expect("test detector");
+            let result = scan_source_impl_observational(
+                ScanInputs {
+                    context: &worker_context,
+                    detector: &detector,
+                },
+                &source,
+                Some(&stale_index),
+                ExplicitRootChange::Unchanged,
+                &[],
+            )
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+            done_tx.send(result).expect("send scan result");
+        });
+
+        attempt_rx.recv().expect("scan waits for game lock");
+        drop(held);
+        done_rx
+            .recv()
+            .expect("scan result")
+            .expect("scan completes");
+        worker.join().expect("worker joins");
+
+        let persisted = context
+            .storage()
+            .find_game(&game_id)
+            .expect("read current row")
+            .expect("game remains registered");
+        assert_eq!(
+            persisted.confirmed_executable().map(PathRef::as_str),
+            Some("New.exe")
+        );
     }
 }

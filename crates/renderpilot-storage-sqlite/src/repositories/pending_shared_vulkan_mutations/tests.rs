@@ -1,11 +1,13 @@
+use super::super::game_mutations::InstalledAddonMutation;
 use super::*;
 
 use crate::repositories::SqliteStorage;
 use renderpilot_application::{GameRepository, InstalledAddonRepository, SharedArtifactRepository};
 use renderpilot_domain::{
-    AddonKind, GameIdentity, GameInstallation, GameProxyTopology, GameRuntime, InstalledAddon,
-    Launcher, PathRef, Platform, ProxyImplementation, ProxyLink, ProxyRootPrestate, Sha256Hash,
-    SharedArtifactKind, SharedArtifactOrigin, SharedArtifactRecord,
+    AddonKind, EngineConfigJournal, EngineConfigReceipt, GameIdentity, GameInstallation,
+    GameProxyTopology, GameRuntime, InstalledAddon, InstalledAddonHostKind, Launcher, PathRef,
+    Platform, ProxyImplementation, ProxyLink, ProxyRootPrestate, Sha256Hash, SharedArtifactKind,
+    SharedArtifactOrigin, SharedArtifactRecord,
 };
 use std::{
     fs,
@@ -84,6 +86,90 @@ fn begin_shared(
         initial_manifest_json: "{}".to_owned(),
         root_capabilities_json: "{}".to_owned(),
     }
+}
+
+fn game_shared_replacement(
+    storage: &SqliteStorage,
+    game: &GameInstallation,
+    id: &str,
+) -> (BeginSharedVulkanMutation, InstalledAddon, InstalledAddon) {
+    let expected = InstalledAddon::new(
+        game.id().clone(),
+        AddonKind::Luma,
+        PathRef::new("D:/External/Luma.addon").expect("external payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::Proxy);
+    storage
+        .upsert_installed_addon(&expected)
+        .expect("old Proxy owner");
+    let expected = storage
+        .get_installed_addon(game.id())
+        .expect("old owner read")
+        .expect("old owner persisted");
+    let replacement = InstalledAddon::new(
+        game.id().clone(),
+        AddonKind::RenoDx,
+        PathRef::new("C:/Games/Shared-Test/renodx.addon64").expect("new payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+    let begin = begin_shared(
+        id,
+        SharedVulkanMutationScope::GameShared,
+        Some(game.id().clone()),
+    );
+    storage
+        .try_begin_shared_vulkan_mutation(&begin)
+        .expect("reserve");
+    storage
+        .finish_preparing_shared_vulkan_mutation(
+            &begin.id,
+            begin.scope,
+            begin.game_id.as_ref(),
+            r#"{"snapshots":[]}"#,
+        )
+        .expect("prepare and invalidate catalog");
+    (begin, expected, replacement)
+}
+
+fn stable_engine_journal() -> EngineConfigJournal {
+    EngineConfigJournal {
+        stable: Some(EngineConfigReceipt {
+            schema_version: 1,
+            path: "C:/Users/Shared/Engine.ini".to_owned(),
+            file_created: false,
+            encoding: "utf8".to_owned(),
+            before_digest: "0".repeat(64),
+            after_digest: "1".repeat(64),
+            recipe_fingerprint: "2".repeat(64),
+            contributions: Vec::new(),
+            created_headers: Vec::new(),
+            created_header_prefixes: Vec::new(),
+            created_header_groups: Vec::new(),
+            created_header_ordinals: Vec::new(),
+        }),
+        pending: None,
+    }
+}
+
+fn seed_engine_journal(
+    storage: &SqliteStorage,
+    game_id: &renderpilot_domain::GameId,
+    journal: &EngineConfigJournal,
+) {
+    storage
+        .connection
+        .lock()
+        .expect("connection")
+        .execute(
+            "INSERT INTO game_engine_config_journals
+                (game_id, addon_kind, journal_json, created_at, updated_at)
+             VALUES (?1, 'luma', ?2, 1, 1)",
+            rusqlite::params![
+                game_id.as_str(),
+                serde_json::to_string(journal).expect("journal")
+            ],
+        )
+        .expect("seed independent Engine.ini owner");
 }
 
 #[test]
@@ -399,7 +485,7 @@ fn shared_commit_is_atomic_across_addon_and_artifact_rows() {
                 id: &begin.id,
                 scope: begin.scope,
                 game_id: begin.game_id.as_ref(),
-                addon: super::super::game_mutations::InstalledAddonMutation::Upsert(&addon),
+                addon: InstalledAddonMutation::Upsert(&addon),
                 shared_artifact: SharedArtifactMutation::Upsert(&shared_record()),
             })
             .is_err()
@@ -420,6 +506,625 @@ fn shared_commit_is_atomic_across_addon_and_artifact_rows() {
         storage
             .get_pending_shared_vulkan_mutation(&begin.id)
             .expect("row")
+            .expect("row")
+            .state,
+        PendingSharedVulkanMutationState::Prepared
+    );
+}
+
+#[test]
+fn game_shared_expected_replacement_commits_proxy_release_new_owner_and_engine_independently() {
+    for (label, old_kind) in [("renodx", AddonKind::RenoDx), ("luma", AddonKind::Luma)] {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let installation = game(&format!("steam:shared-replace-{label}"));
+        let game_id = installation.id().clone();
+        storage.upsert_game(&installation).expect("game");
+        let expected = InstalledAddon::new(
+            game_id.clone(),
+            old_kind,
+            PathRef::new(format!("D:/External/{label}.addon")).expect("external payload"),
+        )
+        .with_host_kind(InstalledAddonHostKind::Proxy);
+        storage
+            .upsert_installed_addon(&expected)
+            .expect("old Proxy owner");
+        let journal = stable_engine_journal();
+        seed_engine_journal(&storage, &game_id, &journal);
+        let expected = storage
+            .get_installed_addon(&game_id)
+            .expect("old owner lookup")
+            .expect("old owner");
+
+        let begin = begin_shared(
+            &format!("replace-{label}"),
+            SharedVulkanMutationScope::GameShared,
+            Some(game_id.clone()),
+        );
+        storage
+            .try_begin_shared_vulkan_mutation(&begin)
+            .expect("reserve exact game owner");
+        storage
+            .finish_preparing_shared_vulkan_mutation(
+                &begin.id,
+                begin.scope,
+                begin.game_id.as_ref(),
+                r#"{"snapshots":[]}"#,
+            )
+            .expect("prepared row invalidates catalog with exact token");
+        let replacement = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::RenoDx,
+            PathRef::new("C:/Games/Shared-Test/renodx.addon64").expect("new payload"),
+        )
+        .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &expected,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Upsert(&shared_record()),
+            })
+            .expect("composed expected owner replacement");
+
+        let current = storage
+            .get_installed_addon(&game_id)
+            .expect("new owner lookup")
+            .expect("new owner committed");
+        assert_eq!(current.kind(), AddonKind::RenoDx);
+        assert_eq!(
+            current.host_kind(),
+            Some(InstalledAddonHostKind::SharedVulkanLayer)
+        );
+        assert_eq!(current.addon_file(), replacement.addon_file());
+        assert_eq!(
+            storage
+                .get_shared_artifact(SharedArtifactKind::RenoDxVulkanLayer)
+                .expect("shared owner read")
+                .expect("shared owner committed")
+                .dll_path(),
+            shared_record().dll_path()
+        );
+        let retained_engine = storage
+            .engine_config_journal_owner(&game_id)
+            .expect("Engine owner read")
+            .expect("Engine owner remains independent of file row");
+        assert_eq!(retained_engine.kind, AddonKind::Luma);
+        assert_eq!(retained_engine.journal, journal);
+        assert_eq!(
+            storage
+                .get_pending_shared_vulkan_mutation(&begin.id)
+                .expect("prepared row lookup")
+                .expect("durable row")
+                .state,
+            PendingSharedVulkanMutationState::Committed
+        );
+    }
+}
+
+#[test]
+fn game_shared_expected_replacement_requires_exact_owner_token_scope_and_prepared_state() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let installation = game("steam:shared-replace-guards");
+    let game_id = installation.id().clone();
+    storage.upsert_game(&installation).expect("game");
+    let begin = begin_shared(
+        "replace-guarded",
+        SharedVulkanMutationScope::GameShared,
+        Some(game_id.clone()),
+    );
+    let expected = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new("D:/External/old.addon64").expect("old payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::Proxy);
+    storage
+        .upsert_installed_addon(&expected)
+        .expect("old Proxy owner");
+    let expected = storage
+        .get_installed_addon(&game_id)
+        .expect("old owner lookup")
+        .expect("old owner");
+    let replacement = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new("C:/Games/Shared-Test/renodx.addon64").expect("new payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+    storage
+        .try_begin_shared_vulkan_mutation(&begin)
+        .expect("reserve");
+
+    let preparing_commit = SharedVulkanMutationCommit {
+        id: &begin.id,
+        scope: begin.scope,
+        game_id: begin.game_id.as_ref(),
+        addon: InstalledAddonMutation::ReplaceExpected {
+            expected: &expected,
+            replacement: &replacement,
+        },
+        shared_artifact: SharedArtifactMutation::Keep,
+    };
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(preparing_commit)
+            .is_err(),
+        "Preparing is not sufficient authority to publish"
+    );
+    storage
+        .finish_preparing_shared_vulkan_mutation(
+            &begin.id,
+            begin.scope,
+            begin.game_id.as_ref(),
+            r#"{"snapshots":[]}"#,
+        )
+        .expect("prepare");
+    let other_game_id =
+        renderpilot_domain::GameId::new("steam:wrong-reserved-game").expect("other game id");
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: SharedVulkanMutationScope::SharedOnly,
+                game_id: None,
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &expected,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "a GameShared reservation cannot be committed as SharedOnly"
+    );
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: Some(&other_game_id),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &expected,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "reservation game id must match exactly"
+    );
+    storage
+        .connection
+        .lock()
+        .expect("connection")
+        .execute(
+            "UPDATE catalog_scan_authority SET mutation_token = 'wrong-token' WHERE game_id = ?1",
+            [game_id.as_str()],
+        )
+        .expect("drift exact prepared authority token");
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &expected,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "prepared owner must retain the exact invalidation token"
+    );
+    assert_eq!(
+        storage
+            .get_installed_addon(&game_id)
+            .expect("owner preserved"),
+        Some(expected)
+    );
+    assert_eq!(
+        storage
+            .get_pending_shared_vulkan_mutation(&begin.id)
+            .expect("prepared row")
+            .expect("row")
+            .state,
+        PendingSharedVulkanMutationState::Prepared
+    );
+}
+
+#[test]
+fn game_shared_expected_replacement_rejects_pre_catalog_legacy_game_rows() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let game_id =
+        renderpilot_domain::GameId::new("steam:shared-replace-pre-catalog").expect("game id");
+    let expected = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::Luma,
+        PathRef::new("D:/External/luma.addon").expect("old payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::Proxy);
+    storage
+        .upsert_installed_addon(&expected)
+        .expect("legacy owner without catalog game");
+    let expected = storage
+        .get_installed_addon(&game_id)
+        .expect("old owner lookup")
+        .expect("old owner");
+    let replacement = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new("C:/Games/Shared-Test/renodx.addon64").expect("new payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+    let begin = begin_shared(
+        "replace-pre-catalog",
+        SharedVulkanMutationScope::GameShared,
+        Some(game_id.clone()),
+    );
+    storage
+        .try_begin_shared_vulkan_mutation(&begin)
+        .expect("reserve");
+    storage
+        .finish_preparing_shared_vulkan_mutation(
+            &begin.id,
+            begin.scope,
+            begin.game_id.as_ref(),
+            r#"{"snapshots":[]}"#,
+        )
+        .expect("prepared pre-catalog reservation");
+
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &expected,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "pre-catalog owner replacement has no exact catalog invalidation token"
+    );
+    assert_eq!(
+        storage
+            .get_installed_addon(&game_id)
+            .expect("old owner preserved"),
+        Some(expected)
+    );
+    assert_eq!(
+        storage
+            .get_pending_shared_vulkan_mutation(&begin.id)
+            .expect("pending row")
+            .expect("row")
+            .state,
+        PendingSharedVulkanMutationState::Prepared
+    );
+}
+
+#[test]
+fn game_shared_expected_replacement_rejects_owner_shape_ids_topology_and_peer_reservation() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let installation = game("steam:shared-replace-invalid");
+    let game_id = installation.id().clone();
+    storage.upsert_game(&installation).expect("game");
+    let (begin, expected, replacement) =
+        game_shared_replacement(&storage, &installation, "replace-invalid");
+
+    let wrong_old_kind = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::OptiScaler,
+        PathRef::new("D:/External/opti.dll").expect("old payload"),
+    );
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &wrong_old_kind,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "OptiScaler cannot be replaced through file owner transition"
+    );
+
+    let wrong_old_host = expected.clone();
+    // Persisted Proxy ownership is mandatory for the expected row.
+    let wrong_old_host = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::Luma,
+        wrong_old_host.addon_file().clone(),
+    );
+    storage
+        .upsert_installed_addon(&wrong_old_host)
+        .expect("change owner host classification");
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &wrong_old_host,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "old host kind must be Proxy"
+    );
+
+    let wrong_new_host = InstalledAddon::new(
+        game_id,
+        AddonKind::RenoDx,
+        PathRef::new("C:/Games/Shared-Test/new-addon.addon64").expect("new payload"),
+    );
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &wrong_old_host,
+                    replacement: &wrong_new_host,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "new host kind must be SharedVulkanLayer"
+    );
+
+    let wrong_id_replacement = InstalledAddon::new(
+        renderpilot_domain::GameId::new("steam:wrong-replacement-game").expect("wrong id"),
+        AddonKind::RenoDx,
+        PathRef::new("C:/Games/Shared-Test/new-addon.addon64").expect("new payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &expected,
+                    replacement: &wrong_id_replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "replacement game id must match reservation owner"
+    );
+
+    // Topology and aggregate reservation guards are checked for both owner
+    // kinds before the row can be replaced.
+    let topology_storage = SqliteStorage::in_memory().expect("topology storage");
+    let topology_game = game("steam:shared-replace-topology");
+    let topology_id = topology_game.id().clone();
+    topology_storage.upsert_game(&topology_game).expect("game");
+    let (topology_begin, topology_expected, topology_replacement) =
+        game_shared_replacement(&topology_storage, &topology_game, "replace-topology");
+    store_active_optiscaler_topology(&topology_storage, &topology_id);
+    assert!(
+        topology_storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &topology_begin.id,
+                scope: topology_begin.scope,
+                game_id: topology_begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &topology_expected,
+                    replacement: &topology_replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "active peer topology blocks the expected owner replacement"
+    );
+
+    let reservation_storage = SqliteStorage::in_memory().expect("reservation storage");
+    let reservation_game = game("steam:shared-replace-reservation");
+    let reservation_id = reservation_game.id().clone();
+    reservation_storage
+        .upsert_game(&reservation_game)
+        .expect("game");
+    let (reservation_begin, reservation_expected, reservation_replacement) =
+        game_shared_replacement(
+            &reservation_storage,
+            &reservation_game,
+            "replace-reservation",
+        );
+    reservation_storage
+        .connection
+        .lock()
+        .expect("connection")
+        .execute(
+            "INSERT INTO peer_aggregate_reservations
+                (game_id, operation_id, aggregate_kind, pending_binding, state,
+                 expected_revision, created_at, updated_at)
+             VALUES (?1, 'fixture-peer-owner', 'shared_peer', 'shared', 'preparing', 0, 1, 1)",
+            [reservation_id.as_str()],
+        )
+        .expect("simulate conflicting peer reservation");
+    assert!(
+        reservation_storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &reservation_begin.id,
+                scope: reservation_begin.scope,
+                game_id: reservation_begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &reservation_expected,
+                    replacement: &reservation_replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err(),
+        "peer aggregate reservation blocks the replacement"
+    );
+}
+
+#[test]
+fn game_shared_expected_replacement_failure_rolls_back_owner_engine_shared_artifact_and_marker() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let installation = game("steam:shared-replace-rollback");
+    let game_id = installation.id().clone();
+    storage.upsert_game(&installation).expect("game");
+    let begin = begin_shared(
+        "replace-rollback",
+        SharedVulkanMutationScope::GameShared,
+        Some(game_id.clone()),
+    );
+    let expected = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::Luma,
+        PathRef::new("D:/External/old-luma.addon").expect("old external payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::Proxy);
+    storage
+        .upsert_installed_addon(&expected)
+        .expect("old owner");
+    let journal = stable_engine_journal();
+    seed_engine_journal(&storage, &game_id, &journal);
+    let expected = storage
+        .get_installed_addon(&game_id)
+        .expect("old owner read")
+        .expect("old owner");
+    storage
+        .try_begin_shared_vulkan_mutation(&begin)
+        .expect("reserve");
+    storage
+        .finish_preparing_shared_vulkan_mutation(
+            &begin.id,
+            begin.scope,
+            begin.game_id.as_ref(),
+            r#"{"snapshots":[]}"#,
+        )
+        .expect("prepare");
+    storage
+        .connection
+        .lock()
+        .expect("connection")
+        .execute_batch(
+            "CREATE TRIGGER abort_replace_shared_artifact
+             BEFORE INSERT ON shared_artifacts
+             BEGIN SELECT RAISE(ABORT, 'fixture rejects shared artifact'); END;",
+        )
+        .expect("failure trigger");
+    let replacement = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new("C:/Games/Shared-Test/renodx.addon64").expect("new payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: begin.game_id.as_ref(),
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &expected,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Upsert(&shared_record()),
+            })
+            .is_err(),
+        "failure after owner replacement rolls back full composition"
+    );
+    assert_eq!(
+        storage
+            .get_installed_addon(&game_id)
+            .expect("old owner restored"),
+        Some(expected)
+    );
+    assert!(
+        storage
+            .get_shared_artifact(SharedArtifactKind::RenoDxVulkanLayer)
+            .expect("artifact rollback")
+            .is_none()
+    );
+    assert_eq!(
+        storage
+            .engine_config_journal_owner(&game_id)
+            .expect("Engine owner read")
+            .expect("independent owner retained")
+            .journal,
+        journal
+    );
+    assert_eq!(
+        storage
+            .get_pending_shared_vulkan_mutation(&begin.id)
+            .expect("pending row read")
+            .expect("prepared row unchanged")
+            .state,
+        PendingSharedVulkanMutationState::Prepared
+    );
+}
+
+#[test]
+fn shared_only_scope_rejects_expected_game_owner_replacement() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let installation = game("steam:shared-only-replace");
+    let game_id = installation.id().clone();
+    let expected = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::Luma,
+        PathRef::new("D:/External/luma.addon").expect("old payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::Proxy);
+    let replacement = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new("C:/Games/Shared-Test/renodx.addon64").expect("new payload"),
+    )
+    .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+    let begin = begin_shared(
+        "shared-only-replace",
+        SharedVulkanMutationScope::SharedOnly,
+        None,
+    );
+    storage
+        .try_begin_shared_vulkan_mutation(&begin)
+        .expect("reserve shared-only resource");
+    storage
+        .finish_preparing_shared_vulkan_mutation(&begin.id, begin.scope, None, "{}")
+        .expect("prepare shared-only row");
+
+    assert!(
+        storage
+            .commit_shared_vulkan_mutation(SharedVulkanMutationCommit {
+                id: &begin.id,
+                scope: begin.scope,
+                game_id: None,
+                addon: InstalledAddonMutation::ReplaceExpected {
+                    expected: &expected,
+                    replacement: &replacement,
+                },
+                shared_artifact: SharedArtifactMutation::Keep,
+            })
+            .is_err()
+    );
+    assert!(
+        storage
+            .get_installed_addon(&game_id)
+            .expect("no standalone row written")
+            .is_none()
+    );
+    assert_eq!(
+        storage
+            .get_pending_shared_vulkan_mutation(&begin.id)
+            .expect("pending row")
             .expect("row")
             .state,
         PendingSharedVulkanMutationState::Prepared
@@ -460,7 +1165,7 @@ fn game_shared_peer_commit_reports_peer_topology_conflict() {
             id: &begin.id,
             scope: begin.scope,
             game_id: begin.game_id.as_ref(),
-            addon: super::super::game_mutations::InstalledAddonMutation::Upsert(&addon),
+            addon: InstalledAddonMutation::Upsert(&addon),
             shared_artifact: SharedArtifactMutation::Keep,
         })
         .expect_err("game-shared peer projection must be fenced");
@@ -555,7 +1260,7 @@ fn pre_catalog_shared_owner_can_commit_only_addon_lifecycle_effects() {
                 id: &begin.id,
                 scope: begin.scope,
                 game_id: begin.game_id.as_ref(),
-                addon: super::super::game_mutations::InstalledAddonMutation::Keep,
+                addon: InstalledAddonMutation::Keep,
                 shared_artifact: SharedArtifactMutation::Keep,
             })
             .is_err()
@@ -570,7 +1275,7 @@ fn pre_catalog_shared_owner_can_commit_only_addon_lifecycle_effects() {
             id: &begin.id,
             scope: begin.scope,
             game_id: begin.game_id.as_ref(),
-            addon: super::super::game_mutations::InstalledAddonMutation::Upsert(&addon),
+            addon: InstalledAddonMutation::Upsert(&addon),
             shared_artifact: SharedArtifactMutation::Keep,
         })
         .expect("addon-only commit");
@@ -600,7 +1305,7 @@ fn committed_cleanup_is_exact() {
             id: &shared.id,
             scope: shared.scope,
             game_id: None,
-            addon: super::super::game_mutations::InstalledAddonMutation::Keep,
+            addon: InstalledAddonMutation::Keep,
             shared_artifact: SharedArtifactMutation::Keep,
         })
         .expect("commit shared");

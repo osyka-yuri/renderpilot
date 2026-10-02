@@ -7,10 +7,11 @@ use renderpilot_application::{
 use renderpilot_domain::{
     AddonKind, ComponentFile, ComponentId, ComponentKind, EngineConfigJournal, EngineConfigReceipt,
     FileOwnership, FileReceipt, GameId, GameIdentity, GameInstallation, GameProxyTopology,
-    GameRuntime, InstalledAddon, Launcher, LibraryComponent, LibraryTechnology, ManagedAddonFile,
-    ManagedFileBaseline, OptiScalerAdoptionState, OptiScalerFileCleanup, OptiScalerFileReceipt,
-    OptiScalerFileRole, OptiScalerPrerequisiteBinding, PathRef, Platform, ProxyImplementation,
-    ProxyLink, ProxyRootPrestate, Swappability,
+    GameRuntime, InstalledAddon, InstalledAddonHostKind, Launcher, LibraryComponent,
+    LibraryTechnology, ManagedAddonFile, ManagedFileBaseline, OptiScalerAdoptionState,
+    OptiScalerFileCleanup, OptiScalerFileReceipt, OptiScalerFileRole,
+    OptiScalerPrerequisiteBinding, PathRef, Platform, ProxyImplementation, ProxyLink,
+    ProxyRootPrestate, Swappability,
 };
 use tempfile::tempdir;
 
@@ -54,6 +55,26 @@ fn exact_receipt(path: &Path, bytes: &[u8], ownership: FileOwnership) -> FileRec
             renderpilot_detection::sha256_bytes(bytes).expect("hash"),
         )
         .expect("reused receipt"),
+    }
+}
+
+fn stable_engine_journal(path: &Path) -> EngineConfigJournal {
+    EngineConfigJournal {
+        stable: Some(EngineConfigReceipt {
+            schema_version: 1,
+            path: path.to_string_lossy().into_owned(),
+            file_created: false,
+            encoding: "utf8".to_owned(),
+            before_digest: "0".repeat(64),
+            after_digest: "1".repeat(64),
+            recipe_fingerprint: "2".repeat(64),
+            contributions: Vec::new(),
+            created_headers: Vec::new(),
+            created_header_prefixes: Vec::new(),
+            created_header_groups: Vec::new(),
+            created_header_ordinals: Vec::new(),
+        }),
+        pending: None,
     }
 }
 
@@ -943,4 +964,362 @@ fn public_luma_uninstall_waits_at_the_game_mutation_boundary() {
     drop(held);
     assert!(done_rx.recv().expect("completed").is_err());
     worker.join().expect("worker");
+}
+
+#[test]
+fn external_owner_release_is_receipt_bounded_and_leaves_engine_and_catalog_owners_untouched() {
+    let db = tempdir().expect("db");
+    let game = tempdir().expect("current game");
+    let external = tempdir().expect("old external payload root");
+    let context = Context::open_at(db.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("manual:luma-external-owner-release").expect("id");
+    seed_game(&context, &game_id, game.path());
+
+    let current_ini = game.path().join("ReShade.ini");
+    std::fs::write(&current_ini, b"[ADDON]\nAddonPath=current\n").expect("current INI");
+    let current_ini_before = std::fs::read(&current_ini).expect("current INI bytes");
+    let addon = external.path().join("Luma-Game.addon");
+    let owned_ini = external.path().join("ReShade.ini");
+    let owned_host = external.path().join("ReShade64.dll");
+    let inferred_log = external.path().join("ReShade.log");
+    let unrelated = external.path().join("neighbor.ini");
+    std::fs::write(&owned_ini, b"old owner receipt").expect("owned external INI");
+    std::fs::write(&owned_host, b"old proxy receipt").expect("owned external host");
+    std::fs::write(&inferred_log, b"unowned host log").expect("unowned external log");
+    std::fs::write(&unrelated, b"unowned neighbor").expect("unowned neighbor");
+
+    let live = external.path().join("nvngx_dlss.dll");
+    let sidecar = external.path().join("nvngx_dlss.dll.bak");
+    std::fs::write(&live, b"managed overlay").expect("managed live");
+    std::fs::write(&sidecar, b"managed baseline").expect("managed backup");
+    let baseline_hash = renderpilot_detection::sha256_file(&sidecar).expect("baseline hash");
+
+    // Keep an unrelated catalog component under the actual installation root.
+    // Luma's managed file may live under an external ReShade AddonPath, but the
+    // game component catalog is scanned from GameInstallation.install_path.
+    let catalog_live = game.path().join("nvngx_dlss.dll");
+    let catalog_sidecar = crate::fs::backup_path(&catalog_live).expect("catalog sidecar");
+    std::fs::write(&catalog_live, b"catalog overlay").expect("catalog live");
+    std::fs::write(&catalog_sidecar, b"catalog baseline").expect("catalog backup");
+    let catalog_baseline_hash =
+        renderpilot_detection::sha256_file(&catalog_sidecar).expect("catalog baseline hash");
+    let component_id = seed_dlss_component(
+        &context,
+        &game_id,
+        &catalog_live,
+        &[ComponentFile::new(path_ref(&catalog_live)).with_sha256(catalog_baseline_hash)],
+    );
+    let binding = ManagedAddonFile::owned(
+        path_ref(&live),
+        ManagedFileBaseline::Present {
+            sha256: baseline_hash,
+        },
+        renderpilot_detection::sha256_file(&live).expect("managed hash"),
+    );
+    let record = InstalledAddon::new(game_id.clone(), AddonKind::Luma, path_ref(&addon))
+        .with_host_kind(InstalledAddonHostKind::Proxy)
+        .with_created_file(path_ref(&owned_ini))
+        .with_created_file(path_ref(&owned_host))
+        .try_with_managed_files(vec![binding])
+        .expect("managed owner record");
+    context
+        .storage()
+        .upsert_installed_addon(&record)
+        .expect("owner record");
+
+    let engine_ini = db.path().join("AppData").join("Engine.ini");
+    std::fs::create_dir_all(engine_ini.parent().expect("Engine.ini parent"))
+        .expect("Engine.ini directory");
+    std::fs::write(&engine_ini, b"[SystemSettings]\nold contribution\n").expect("Engine.ini");
+    let journal = stable_engine_journal(&engine_ini);
+    context
+        .storage()
+        .compare_and_swap_engine_config_journal(&game_id, AddonKind::Luma, None, Some(&journal))
+        .expect("standalone Engine owner");
+    let persisted_before = context
+        .storage()
+        .get_installed_addon(&game_id)
+        .expect("owner read")
+        .expect("owner");
+    let engine_owner_before = context
+        .storage()
+        .engine_config_journal_owner(&game_id)
+        .expect("Engine owner read")
+        .expect("standalone Engine owner");
+
+    let prepared = super::prepare_external_owner_release(&context, &game_id, &persisted_before)
+        .expect("prepare inactive external owner release");
+    assert!(prepared.baseline_mutations().is_empty());
+    assert_eq!(prepared.next_components().len(), 1);
+    assert!(prepared.targets().paths.iter().any(|path| path == &live));
+    assert!(prepared.targets().paths.iter().any(|path| path == &sidecar));
+    let canonical_game_root = crate::paths::canonical_candidate(game.path()).expect("game root");
+    for path in prepared
+        .targets()
+        .paths
+        .iter()
+        .chain(&prepared.targets().roots)
+    {
+        let canonical = crate::paths::canonical_candidate(path).expect("prepared target");
+        assert_eq!(
+            renderpilot_domain::normalized_path_relation(
+                &canonical_game_root.to_string_lossy(),
+                &canonical.to_string_lossy(),
+            ),
+            renderpilot_domain::NormalizedPathRelation::Disjoint,
+            "target overlaps current game root: {}",
+            path.display()
+        );
+    }
+
+    prepared
+        .apply_filesystem_only()
+        .expect("apply receipt-only file effects");
+
+    assert!(
+        !owned_ini.exists(),
+        "the retained created-file receipt is removed"
+    );
+    assert_eq!(
+        std::fs::read(&live).expect("restored DLSS"),
+        b"managed baseline"
+    );
+    assert!(!sidecar.exists(), "the owned backup sidecar was consumed");
+    assert_eq!(
+        std::fs::read(&unrelated).expect("neighbor"),
+        b"unowned neighbor"
+    );
+    assert!(
+        !owned_host.exists(),
+        "the retained host file receipt is removed"
+    );
+    assert_eq!(
+        std::fs::read(&inferred_log).expect("inferred log"),
+        b"unowned host log",
+        "host-adjacent logs are outside the retained receipt closure"
+    );
+    assert_eq!(
+        std::fs::read(&current_ini).expect("current INI"),
+        current_ini_before
+    );
+    assert_eq!(
+        std::fs::read(&engine_ini).expect("Engine.ini"),
+        b"[SystemSettings]\nold contribution\n"
+    );
+    assert_eq!(
+        context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("owner read")
+            .as_ref(),
+        Some(&persisted_before),
+        "filesystem-only release must not replace or delete canonical ownership"
+    );
+    assert_eq!(
+        context
+            .storage()
+            .engine_config_journal_owner(&game_id)
+            .expect("Engine owner read")
+            .as_ref(),
+        Some(&engine_owner_before),
+        "filesystem-only release must not release standalone Engine ownership"
+    );
+    assert!(
+        context
+            .storage()
+            .get_component_backup(&component_id)
+            .expect("baseline inventory")
+            .is_some(),
+        "an unrelated in-root catalog component remains untouched"
+    );
+}
+
+#[test]
+fn external_owner_release_projects_exact_sv_files_and_rejects_catalog_effects() {
+    let db = tempdir().expect("db");
+    let game = tempdir().expect("current game");
+    let external = tempdir().expect("old external payload root");
+    let context = Context::open_at(db.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("manual:luma-external-svam-intents").expect("id");
+    seed_game(&context, &game_id, game.path());
+
+    let addon = external.path().join("Luma-Game.addon");
+    let created = external.path().join("Luma").join("Shader.hlsl");
+    let shadowed = external.path().join("ReShade64.dll");
+    let backup = crate::fs::backup_path(&shadowed).expect("backup path");
+    std::fs::create_dir_all(created.parent().expect("created parent")).expect("Luma dir");
+    std::fs::write(&created, b"created by old Luma").expect("created payload");
+    std::fs::write(&shadowed, b"old proxy").expect("shadowed host");
+    std::fs::write(&backup, b"host baseline").expect("host backup");
+
+    let record = InstalledAddon::new(game_id.clone(), AddonKind::Luma, path_ref(&addon))
+        .with_host_kind(InstalledAddonHostKind::Proxy)
+        .with_created_file(path_ref(&created))
+        .with_backed_up_file(path_ref(&shadowed));
+    context
+        .storage()
+        .upsert_installed_addon(&record)
+        .expect("owner record");
+    let persisted = context
+        .storage()
+        .get_installed_addon(&game_id)
+        .expect("owner read")
+        .expect("owner");
+
+    let prepared = super::prepare_external_owner_release(&context, &game_id, &persisted)
+        .expect("prepare external owner release");
+    prepared
+        .ensure_no_catalog_effects()
+        .expect("receipt-only release leaves the catalog unchanged");
+    let intents = prepared
+        .file_intents_for_shared_vulkan()
+        .expect("exact SVAM file participants");
+    assert_eq!(
+        intents,
+        vec![
+            crate::addons::shared_vulkan_mutation::FileIntent {
+                live_path: created,
+                before: Some(b"created by old Luma".to_vec()),
+                after: None,
+            },
+            crate::addons::shared_vulkan_mutation::FileIntent {
+                live_path: shadowed,
+                before: Some(b"old proxy".to_vec()),
+                after: Some(b"host baseline".to_vec()),
+            },
+            crate::addons::shared_vulkan_mutation::FileIntent {
+                live_path: backup,
+                before: Some(b"host baseline".to_vec()),
+                after: None,
+            },
+        ]
+    );
+
+    let cascade_context = Context::open_at(db.path().join("cascade.sqlite")).expect("context");
+    let cascade_game = tempdir().expect("cascade current game");
+    let cascade_external = tempdir().expect("cascade external root");
+    let cascade_id = GameId::new("manual:luma-external-svam-cascade").expect("cascade id");
+    seed_game(&cascade_context, &cascade_id, cascade_game.path());
+    let managed = cascade_game.path().join("nvngx_dlss.dll");
+    let sidecar = crate::fs::backup_path(&managed).expect("managed sidecar");
+    std::fs::write(&managed, b"managed overlay").expect("managed file");
+    std::fs::write(&sidecar, b"managed baseline").expect("managed backup");
+    let baseline_hash = renderpilot_detection::sha256_file(&sidecar).expect("baseline hash");
+    let component_id = seed_dlss_component(
+        &cascade_context,
+        &cascade_id,
+        &managed,
+        &[ComponentFile::new(path_ref(&managed)).with_sha256(baseline_hash.clone())],
+    );
+    let managed_owner = ManagedAddonFile::owned(
+        path_ref(&managed),
+        ManagedFileBaseline::Present {
+            sha256: baseline_hash,
+        },
+        renderpilot_detection::sha256_file(&managed).expect("managed hash"),
+    );
+    let addon = cascade_external.path().join("Luma-Game.addon");
+    std::fs::write(&addon, b"external owner payload").expect("external addon");
+    let owner = InstalledAddon::new(cascade_id.clone(), AddonKind::Luma, path_ref(&addon))
+        .with_host_kind(InstalledAddonHostKind::Proxy)
+        .with_created_file(path_ref(&addon))
+        .try_with_managed_files(vec![managed_owner])
+        .expect("managed owner");
+    cascade_context
+        .storage()
+        .upsert_installed_addon(&owner)
+        .expect("owner record");
+    let persisted = cascade_context
+        .storage()
+        .get_installed_addon(&cascade_id)
+        .expect("owner read")
+        .expect("owner");
+    let Err(error) =
+        super::prepare_external_owner_release(&cascade_context, &cascade_id, &persisted)
+    else {
+        panic!("a game-root managed receipt cannot join an external-only release");
+    };
+    assert!(
+        matches!(error, ServiceError::InvalidInput(_)),
+        "cross-root component rollback is rejected before file-only projection"
+    );
+    assert_eq!(
+        std::fs::read(&managed).expect("game-root managed file remains"),
+        b"managed overlay"
+    );
+    assert_eq!(
+        std::fs::read(&sidecar).expect("game-root managed baseline remains"),
+        b"managed baseline"
+    );
+    assert!(
+        cascade_context
+            .storage()
+            .get_installed_addon(&cascade_id)
+            .expect("owner read")
+            .as_ref()
+            .is_some_and(|current| current.eq_ignoring_persistence_timestamps(&persisted)),
+        "preflight rejection preserves the canonical owner"
+    );
+    assert!(
+        cascade_context
+            .storage()
+            .get_component_backup(&component_id)
+            .expect("component backup remains")
+            .is_some()
+    );
+}
+
+#[test]
+fn external_owner_release_rejects_modified_managed_file_before_any_write() {
+    let db = tempdir().expect("db");
+    let game = tempdir().expect("current game");
+    let external = tempdir().expect("old external payload root");
+    let context = Context::open_at(db.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("manual:luma-external-owner-modified-managed").expect("id");
+    seed_game(&context, &game_id, game.path());
+    let addon = external.path().join("Luma-Game.addon");
+    let live = external.path().join("nvngx_dlss.dll");
+    let untracked = external.path().join("fresh.ini");
+    std::fs::write(&live, b"changed managed bytes").expect("modified managed file");
+    std::fs::write(&untracked, b"leave me").expect("untracked neighbor");
+    let binding = ManagedAddonFile::owned(
+        path_ref(&live),
+        ManagedFileBaseline::Absent,
+        renderpilot_detection::sha256_bytes(b"expected bytes").expect("expected hash"),
+    );
+    let record = InstalledAddon::new(game_id.clone(), AddonKind::Luma, path_ref(&addon))
+        .with_host_kind(InstalledAddonHostKind::Proxy)
+        .try_with_managed_files(vec![binding])
+        .expect("managed owner record");
+    context
+        .storage()
+        .upsert_installed_addon(&record)
+        .expect("owner record");
+    let persisted = context
+        .storage()
+        .get_installed_addon(&game_id)
+        .expect("owner read")
+        .expect("owner");
+
+    let Err(error) = super::prepare_external_owner_release(&context, &game_id, &persisted) else {
+        panic!("modified managed path must fail during planning");
+    };
+
+    assert!(matches!(error, ServiceError::CommandFailed(_)));
+    assert_eq!(
+        std::fs::read(&live).expect("modified file remains"),
+        b"changed managed bytes"
+    );
+    assert_eq!(
+        std::fs::read(&untracked).expect("neighbor remains"),
+        b"leave me"
+    );
+    assert_eq!(
+        context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("owner read")
+            .as_ref(),
+        Some(&persisted)
+    );
 }

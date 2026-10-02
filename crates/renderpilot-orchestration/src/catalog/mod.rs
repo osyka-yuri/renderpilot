@@ -13,8 +13,8 @@ use renderpilot_application::{
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
-    AddonKind, ComponentFile, GameId, GameInstallation, InstalledAddon, LibraryArtifact,
-    LibraryComponent, LibraryTechnology,
+    AddonKind, ComponentFile, GameId, GameInstallation, LibraryArtifact, LibraryComponent,
+    LibraryTechnology,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -70,6 +70,8 @@ mod developer_mode;
 pub mod execute;
 mod install_boundary;
 mod install_paths;
+pub(crate) mod installation_lifecycle;
+pub mod leftovers;
 mod managed_state;
 mod operations;
 pub mod output;
@@ -270,6 +272,9 @@ pub fn addon_capabilities(
     context: &crate::Context,
     game_id: &GameId,
 ) -> Result<Vec<AddonKind>, ServiceError> {
+    if context.storage().find_active_game(game_id)?.is_none() {
+        return Ok(Vec::new());
+    }
     let profile =
         crate::addons::capabilities::DurableProfileCapabilities::load_for_game(context, game_id)?;
     let installed =
@@ -307,9 +312,15 @@ pub(crate) fn merge_addon_capabilities(
         .collect()
 }
 
-/// Returns all game installations stored in the catalog.
+/// Returns the active game installations in the catalog.
 pub fn list_games(context: &crate::Context) -> Result<Vec<GameInstallation>, ServiceError> {
-    context.storage().list_games().map_err(Into::into)
+    context.storage().list_active_games().map_err(Into::into)
+}
+
+fn require_active_game(storage: &SqliteStorage, game_id: &GameId) -> AppResult<GameInstallation> {
+    storage
+        .find_active_game(game_id)?
+        .ok_or_else(|| AppError::game_not_found(game_id.as_str()))
 }
 
 pub use root_correction::{
@@ -333,6 +344,7 @@ pub(crate) struct ReplacementUniverse {
 pub(crate) struct ReplacementUniverseRevision {
     inventory: u64,
     catalog: Option<(u64, u128)>,
+    catalog_generation: u64,
     local_files: u64,
 }
 
@@ -351,30 +363,41 @@ pub(crate) fn load_replacement_universe(
     }
 
     let _rebuild = context.replacement_universe_rebuild_guard();
-    inventory_revision = context.storage().library_artifact_revision()?;
-    catalog_revision = crate::libraries::replacement_catalog_revision()?;
-    if let Some(cached) =
-        current_replacement_universe(context, inventory_revision, catalog_revision)
-    {
-        return Ok(cached);
+    loop {
+        inventory_revision = context.storage().library_artifact_revision()?;
+        catalog_revision = crate::libraries::replacement_catalog_revision()?;
+        if let Some(cached) =
+            current_replacement_universe(context, inventory_revision, catalog_revision)
+        {
+            return Ok(cached);
+        }
+        let catalog_generation = context.storage().catalog_generation();
+        let (artifacts, downloaded_ids, active_catalog) =
+            crate::libraries::replacement_artifacts(context)?;
+        let candidate_context =
+            renderpilot_application::CandidateContext::new(downloaded_ids, active_catalog);
+        let universe = Arc::new(ReplacementUniverse {
+            artifact_index: CandidateArtifactIndex::new(artifacts),
+            candidate_context,
+        });
+        let local_files = local_artifact_metadata_revision(universe.artifact_index.artifacts());
+        if context.storage().catalog_generation() != catalog_generation
+            || context.storage().library_artifact_revision()? != inventory_revision
+            || crate::libraries::replacement_catalog_revision()? != catalog_revision
+        {
+            continue;
+        }
+        context.cache_replacement_universe(
+            ReplacementUniverseRevision {
+                inventory: inventory_revision,
+                catalog: catalog_revision,
+                catalog_generation,
+                local_files,
+            },
+            Arc::clone(&universe),
+        );
+        return Ok(universe);
     }
-
-    let (artifacts, downloaded_ids, active_catalog) =
-        crate::libraries::replacement_artifacts(context)?;
-    let candidate_context =
-        renderpilot_application::CandidateContext::new(downloaded_ids, active_catalog);
-
-    let universe = Arc::new(ReplacementUniverse {
-        artifact_index: CandidateArtifactIndex::new(artifacts),
-        candidate_context,
-    });
-    let effective_revision = ReplacementUniverseRevision {
-        inventory: context.storage().library_artifact_revision()?,
-        catalog: crate::libraries::replacement_catalog_revision()?,
-        local_files: local_artifact_metadata_revision(universe.artifact_index.artifacts()),
-    };
-    context.cache_replacement_universe(effective_revision, Arc::clone(&universe));
-    Ok(universe)
 }
 
 fn current_replacement_universe(
@@ -385,6 +408,7 @@ fn current_replacement_universe(
     let (cached_revision, cached) = context.replacement_universe_cache()?;
     (cached_revision.inventory == inventory_revision
         && cached_revision.catalog == catalog_revision
+        && cached_revision.catalog_generation == context.storage().catalog_generation()
         && cached_revision.local_files
             == local_artifact_metadata_revision(cached.artifact_index.artifacts()))
     .then_some(cached)
@@ -429,15 +453,21 @@ pub(crate) fn get_game_details_with_universe(
     universe: &ReplacementUniverse,
 ) -> Result<GameDetailsCatalogResult, ServiceError> {
     let storage = context.storage();
-    let game = storage.require_game(game_id)?;
+    let game = require_active_game(storage, game_id)?;
     let components = storage.list_components_for_game(game_id)?;
     let installed_addon = storage.get_installed_addon(game_id)?;
     let optiscaler_installed = storage.get_optiscaler_install_state(game_id)?.is_some();
     let profile_capabilities =
         crate::addons::capabilities::DurableProfileCapabilities::load_for_game(context, game_id)?;
+    let installed_addon_kind = match installed_addon.as_ref() {
+        Some(record) if crate::addons::tool::record_is_active_for_game(context, record)? => {
+            Some(record.kind())
+        }
+        _ => None,
+    };
     let addon_capabilities = merge_addon_capabilities(
         &profile_capabilities,
-        installed_addon.as_ref().map(InstalledAddon::kind),
+        installed_addon_kind,
         optiscaler_installed,
     );
     let backup_component_ids =
@@ -589,6 +619,8 @@ pub fn get_game_details(
     game_id: &GameId,
 ) -> Result<GameDetailsCatalogResult, ServiceError> {
     let initial_generation = context.storage().catalog_generation();
+    // Details are cached only after an active-game lookup. Absence advances
+    // this generation, so a current cache hit needs no additional SQL query.
     if let Some(details) = context.game_details_cache(game_id, initial_generation) {
         return Ok((*details).clone());
     }
@@ -602,6 +634,7 @@ pub fn get_game_details(
         if let Some(details) = context.game_details_cache(game_id, catalog_generation) {
             return Ok((*details).clone());
         }
+        require_active_game(context.storage(), game_id)?;
         let universe = load_replacement_universe(context)?;
         let details = get_game_details_with_universe(context, game_id, &universe)?;
         if context.storage().catalog_generation() == catalog_generation {
@@ -669,6 +702,9 @@ pub fn backup_component_ids(
     game_id: &GameId,
 ) -> Result<HashSet<String>, ServiceError> {
     let storage = context.storage();
+    if storage.find_active_game(game_id)?.is_none() {
+        return Ok(HashSet::new());
+    }
     let components = storage.list_components_for_game(game_id)?;
     crate::coordinated_files::available_component_backup_ids(storage, game_id, &components)
         .map_err(Into::into)
@@ -775,16 +811,13 @@ pub(crate) fn refresh_game_components_locked(
         .ok_or_else(|| AppError::game_not_found(game_id.as_str()))?;
 
     let root = PathBuf::from(game.install_path().as_str());
-    if !root.is_dir() {
-        return Err(ServiceError::invalid_input(format!(
-            "game installation directory '{}' is missing or not a directory",
-            root.display()
-        )));
-    }
 
-    let explicit_executable = game
-        .confirmed_executable()
-        .map(|relative| root.join(relative.as_str()));
+    let explicit_executable = if context.storage().is_installation_absent(game_id)? {
+        None
+    } else {
+        game.confirmed_executable()
+            .map(|relative| root.join(relative.as_str()))
+    };
 
     scan::scan_explicit_install_locked(
         context,
@@ -802,8 +835,7 @@ pub async fn refresh_game_components(
     context: &crate::Context,
     game_id: &GameId,
 ) -> Result<ScanFolderCatalogResult, ServiceError> {
-    let guard =
-        crate::mutation_boundary::enter_game_mutation_boundary_async(context, game_id).await?;
+    let guard = crate::mutation_boundary::enter_game_observation_boundary_async(game_id).await;
     refresh_game_components_locked(context, &guard, game_id)
 }
 
@@ -813,7 +845,7 @@ pub fn refresh_game_components_sync(
     context: &crate::Context,
     game_id: &GameId,
 ) -> Result<ScanFolderCatalogResult, ServiceError> {
-    let guard = crate::mutation_boundary::enter_game_mutation_boundary(context, game_id)?;
+    let guard = crate::mutation_boundary::enter_game_observation_boundary(game_id);
     refresh_game_components_locked(context, &guard, game_id)
 }
 
@@ -864,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn addon_capabilities_ignore_a_stale_renodx_record() {
+    fn addon_capabilities_ignore_payload_without_a_registered_game() {
         let db_dir = tempdir().expect("db dir");
         let game_dir = tempdir().expect("game dir");
         let context =
@@ -889,9 +921,61 @@ mod tests {
 
         std::fs::write(addon, b"addon").expect("write payload");
         assert!(
-            addon_capabilities(&context, &game_id)
+            !addon_capabilities(&context, &game_id)
                 .expect("capabilities")
                 .contains(&AddonKind::RenoDx)
+        );
+    }
+
+    #[test]
+    fn absent_game_capabilities_are_hidden_before_metadata_collection() {
+        use renderpilot_domain::{GameIdentity, GameRuntime, Launcher, Platform};
+        use renderpilot_storage_sqlite::AuthorityCas;
+
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context =
+            crate::Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("manual:absent-capabilities").expect("game id");
+        let game = GameInstallation::new(
+            GameIdentity::new(game_id.clone(), "Absent Game", Launcher::Manual).expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(game_dir.path().to_string_lossy()).expect("root"),
+        );
+        context.storage().upsert_game(&game).expect("game");
+        context
+            .storage()
+            .replace_game_profile_addon_capabilities(
+                &game_id,
+                &[(AddonKind::RenoDx, "test-profile".to_owned(), true)],
+            )
+            .expect("profile capability");
+        assert_eq!(
+            addon_capabilities(&context, &game_id).expect("present capability"),
+            vec![AddonKind::RenoDx]
+        );
+        game_dir.close().expect("uninstall fixture");
+        let readiness = context
+            .storage()
+            .catalog_readiness(&game_id)
+            .expect("authority");
+        context
+            .storage()
+            .mark_installation_absent(&game, AuthorityCas::new(readiness.authority_epoch()))
+            .expect("mark absent");
+
+        assert_eq!(
+            context
+                .storage()
+                .list_profile_addon_capabilities_for_game(&game_id)
+                .expect("uncollected profile"),
+            vec![AddonKind::RenoDx]
+        );
+        assert!(
+            addon_capabilities(&context, &game_id)
+                .expect("absent capability")
+                .is_empty()
         );
     }
 

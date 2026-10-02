@@ -63,6 +63,21 @@ impl PreparedRenoDxUninstall {
         record: &InstalledAddon,
         game_dir_hint: Option<&Path>,
     ) -> Result<Self, ServiceError> {
+        Self::prepare_inner(record, game_dir_hint, false)
+    }
+
+    /// Plans only operations proved by this typed record's retained receipts.
+    /// Unlike ordinary uninstall it never discovers a current/untracked INI
+    /// or authorizes advisory log cleanup from a neighboring host path.
+    pub(crate) fn prepare_receipt_only(record: &InstalledAddon) -> Result<Self, ServiceError> {
+        Self::prepare_inner(record, None, true)
+    }
+
+    fn prepare_inner(
+        record: &InstalledAddon,
+        game_dir_hint: Option<&Path>,
+        receipt_only: bool,
+    ) -> Result<Self, ServiceError> {
         let mut operations = Vec::new();
         let backed_up: HashSet<String> = record
             .backed_up_files()
@@ -79,7 +94,7 @@ impl PreparedRenoDxUninstall {
                 continue;
             }
             let path = PathBuf::from(path.as_str());
-            if permits_remove(&path, "created RenoDX file") {
+            if permits_remove(&path, "created RenoDX file", receipt_only)? {
                 operations.push(RenoDxUninstallOperation::RemoveCreated { path });
             }
         }
@@ -104,7 +119,7 @@ impl PreparedRenoDxUninstall {
                     continue;
                 }
             };
-            if permits_restore(&live, &backup) {
+            if permits_restore(&live, &backup, receipt_only)? {
                 operations.push(RenoDxUninstallOperation::RestoreBackup { live, backup });
             }
         }
@@ -177,28 +192,49 @@ impl PreparedRenoDxUninstall {
         match ini_in_created.or(ini_in_backed_up) {
             Some(ini_ref) if ini_in_backed_up.is_none() && owns_whole_stack => {
                 let path = PathBuf::from(ini_ref.as_str());
-                if permits_remove(&path, "owned ReShade.ini") {
+                if permits_remove(&path, "owned ReShade.ini", receipt_only)? {
                     operations.push(RenoDxUninstallOperation::RemoveIni { path });
                 }
             }
-            Some(ini_ref) => append_ini_rewrite(
+            Some(ini_ref) if !receipt_only => append_ini_rewrite(
                 &mut operations,
                 Path::new(ini_ref.as_str()),
                 record.renodx_config_receipt(),
             ),
-            None => {
+            Some(ini_ref) => {
+                if let Some(receipt) = record.renodx_config_receipt() {
+                    append_receipt_ini_rewrite(
+                        &mut operations,
+                        Path::new(ini_ref.as_str()),
+                        receipt,
+                    )?;
+                }
+            }
+            None if !receipt_only => {
                 if let Some(path) = locate_untracked_ini(record, game_dir_hint) {
                     append_ini_rewrite(&mut operations, &path, record.renodx_config_receipt());
                 }
             }
+            None => {
+                if let Some(receipt) = record.renodx_config_receipt() {
+                    append_receipt_ini_rewrite(
+                        &mut operations,
+                        Path::new(receipt.ini_path.as_str()),
+                        receipt,
+                    )?;
+                }
+            }
         }
 
-        let log_base_path =
+        let log_base_path = if !receipt_only {
             crate::addons::tracking::owned_proxy_host_path(record).and_then(|host_path| {
                 host_path.parent().map(|game_dir| {
                     reshade::resolve_paths(game_dir, Some(&host_path)).effective_base_path
                 })
-            });
+            })
+        } else {
+            None
+        };
         Ok(Self {
             operations,
             log_base_path,
@@ -538,22 +574,28 @@ fn is_ini_path(path: &PathRef) -> bool {
         .is_some_and(|name| name.eq_ignore_ascii_case(reshade::RESHADE_INI_FILE_NAME))
 }
 
-fn permits_remove(path: &Path, label: &str) -> bool {
+fn permits_remove(path: &Path, label: &str, strict: bool) -> Result<bool, ServiceError> {
     match observe(path) {
-        V2DiskObservation::Absent | V2DiskObservation::Regular { .. } => true,
+        V2DiskObservation::Absent | V2DiskObservation::Regular { .. } => Ok(true),
         observation => {
+            if strict {
+                return Err(crate::failed(format!(
+                    "RenoDX receipt-owned {label} is unsafe to release: {} ({observation:?})",
+                    path.display()
+                )));
+            }
             let diagnostic_path = path.to_string_lossy();
             tracing::warn!(
                 diagnostic_path = diagnostic_path.as_ref(),
                 "RenoDX uninstall: skipping unsafe {label} `{}` ({observation:?})",
                 path.display()
             );
-            false
+            Ok(false)
         }
     }
 }
 
-fn permits_restore(live: &Path, backup: &Path) -> bool {
+fn permits_restore(live: &Path, backup: &Path, strict: bool) -> Result<bool, ServiceError> {
     let live_observation = observe(live);
     let backup_observation = observe(backup);
     let live_safe = matches!(
@@ -562,7 +604,14 @@ fn permits_restore(live: &Path, backup: &Path) -> bool {
     );
     let backup_safe = matches!(backup_observation, V2DiskObservation::Regular { .. });
     if live_safe && backup_safe {
-        return true;
+        return Ok(true);
+    }
+    if strict {
+        return Err(crate::failed(format!(
+            "RenoDX receipt-owned backup cannot be safely restored: {} <- {} ({live_observation:?}, {backup_observation:?})",
+            live.display(),
+            backup.display()
+        )));
     }
     let diagnostic_path = live.to_string_lossy();
     tracing::warn!(
@@ -571,7 +620,58 @@ fn permits_restore(live: &Path, backup: &Path) -> bool {
         live.display(),
         backup.display()
     );
-    false
+    Ok(false)
+}
+
+fn append_receipt_ini_rewrite(
+    operations: &mut Vec<RenoDxUninstallOperation>,
+    path: &Path,
+    receipt: &renderpilot_domain::RenoDxConfigReceipt,
+) -> Result<(), ServiceError> {
+    if !receipt.is_supported()
+        || !matches!(
+            normalized_path_relation(receipt.ini_path.as_str(), &path.to_string_lossy()),
+            NormalizedPathRelation::Equal
+        )
+    {
+        return Err(crate::failed(format!(
+            "RenoDX receipt-only release has an invalid config receipt for {}",
+            path.display()
+        )));
+    }
+    match observe(path) {
+        V2DiskObservation::Absent => Ok(()),
+        V2DiskObservation::Regular { .. } => {
+            let before = std::fs::read(path).map_err(|error| {
+                crate::failed(format!(
+                    "RenoDX receipt-owned ReShade.ini is unreadable at {}: {error}",
+                    path.display()
+                ))
+            })?;
+            let path_ref = renderpilot_domain::PathRef::new(path.to_string_lossy().into_owned())
+                .map_err(|error| crate::failed(error.to_string()))?;
+            let plan =
+                super::super::reshade_ini::plan_config_removal(&path_ref, Some(&before), receipt)
+                    .map_err(|error| {
+                    crate::failed(format!(
+                        "RenoDX receipt-owned ReShade.ini cannot be released at {}: {error}",
+                        path.display()
+                    ))
+                })?;
+            if let Some(after) = plan.after.filter(|after| *after != before) {
+                operations.push(RenoDxUninstallOperation::RewriteIni {
+                    path: path.to_path_buf(),
+                    expected_before: before,
+                    bytes: after,
+                });
+            }
+            Ok(())
+        }
+        observation => Err(crate::failed(format!(
+            "RenoDX receipt-owned ReShade.ini is unsafe to release at {} ({observation:?})",
+            path.display()
+        ))),
+    }
 }
 
 fn append_ini_rewrite(
@@ -768,7 +868,7 @@ mod tests {
                 hash(b"managed ReShade host"),
             )])
             .expect("record");
-        let plan = PreparedRenoDxUninstall::prepare(&record, None).expect("plan");
+        let plan = PreparedRenoDxUninstall::prepare_receipt_only(&record).expect("plan");
         std::fs::write(&host, b"foreign replacement").expect("drift host");
 
         assert!(plan.apply().is_err());
@@ -794,6 +894,36 @@ mod tests {
         plan.apply().expect("apply safe operations");
         assert!(!addon.exists());
         assert!(companion.is_dir());
+    }
+
+    #[test]
+    fn receipt_only_plan_does_not_discover_current_game_or_external_neighbor_ini() {
+        let game_root = tempdir().expect("game root");
+        let external_root = tempdir().expect("external AddonPath");
+        let addon = external_root.path().join("renodx-game.addon64");
+        let game_ini = game_root.path().join(reshade::RESHADE_INI_FILE_NAME);
+        let external_ini = external_root.path().join(reshade::RESHADE_INI_FILE_NAME);
+        let game_ini_bytes = b"[renodx]\r\nSet_Path=1\r\n[GENERAL]\r\nGameSetting=keep\r\n";
+        let external_ini_bytes = b"[renodx]\r\nSet_Path=1\r\n[GENERAL]\r\nExternal=keep\r\n";
+        std::fs::write(&addon, b"addon").expect("external addon");
+        std::fs::write(&game_ini, game_ini_bytes).expect("current game ini");
+        std::fs::write(&external_ini, external_ini_bytes).expect("external neighbor ini");
+        let record = record(&addon).with_host_kind(InstalledAddonHostKind::Proxy);
+
+        let plan =
+            PreparedRenoDxUninstall::prepare_receipt_only(&record).expect("receipt-only plan");
+        assert_eq!(plan.affected_paths(), vec![addon.clone()]);
+
+        plan.apply().expect("apply receipt-only release");
+        assert!(!addon.exists());
+        assert_eq!(
+            std::fs::read(&game_ini).expect("game ini remains"),
+            game_ini_bytes
+        );
+        assert_eq!(
+            std::fs::read(&external_ini).expect("external neighbor remains"),
+            external_ini_bytes
+        );
     }
 
     #[test]

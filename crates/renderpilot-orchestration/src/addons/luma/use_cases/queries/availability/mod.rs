@@ -139,7 +139,13 @@ fn build_report(
         LumaResolution::Installable(plan) => plan.guidance.as_slice(),
         _ => &[],
     };
-    let engine_config = engine_config_report(&engine_config_resolution, record.as_ref(), guidance)?;
+    let engine_config = engine_config_report(
+        context,
+        game_id,
+        AddonKind::Luma,
+        &engine_config_resolution,
+        guidance,
+    )?;
 
     let outcome = if let Some(block) = blocked {
         let blocked = availability_pipeline::blocked_outcome(block);
@@ -186,8 +192,10 @@ fn build_report(
 }
 
 fn engine_config_report(
+    context: &Context,
+    game_id: &GameId,
+    kind: AddonKind,
     resolution: &crate::addons::engine_config::EngineIniResolution,
-    record: Option<&renderpilot_domain::InstalledAddon>,
     guidance: &[crate::addons::luma::types::LumaGuidance],
 ) -> Result<EngineConfigAvailability, ServiceError> {
     let manual_only = guidance.iter().any(|item| {
@@ -208,11 +216,16 @@ fn engine_config_report(
                 .map_err(|error| ServiceError::invalid_input(error.to_string()))?,
         )
     };
+    let owner = context.storage().engine_config_journal_owner(game_id)?;
+    let journal = owner
+        .as_ref()
+        .filter(|owner| owner.kind == kind)
+        .map(|owner| &owner.journal);
     Ok(service::inspect_availability(
         resolution,
         recipe_set.as_ref(),
         manual_only,
-        record.and_then(|value| value.engine_config_journal()),
+        journal,
     ))
 }
 

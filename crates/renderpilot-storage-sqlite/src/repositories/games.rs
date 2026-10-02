@@ -7,8 +7,8 @@ use crate::{error::storage_error, mapping, sqlite_clock};
 use super::{
     SqliteStorage,
     catalog_select_sql::{
-        FIND_GAME_SQL, LIST_DISTINCT_GAME_LAUNCHERS_SQL, LIST_DISTINCT_GAME_LIBRARIES_SQL,
-        LIST_GAMES_SQL,
+        FIND_ACTIVE_GAME_SQL, FIND_GAME_SQL, LIST_ACTIVE_GAMES_SQL,
+        LIST_DISTINCT_GAME_LAUNCHERS_SQL, LIST_DISTINCT_GAME_LIBRARIES_SQL, LIST_GAMES_SQL,
     },
     game_covers::{DeletedGameInfo, find_cover_in_connection},
     row_mapping::game_from_row,
@@ -90,6 +90,26 @@ impl SqliteStorage {
         self.query_list(LIST_GAMES_SQL, [], game_from_row)
     }
 
+    /// Lists only registrations whose installation is currently active.
+    pub fn list_active_games(&self) -> AppResult<Vec<GameInstallation>> {
+        self.query_list(LIST_ACTIVE_GAMES_SQL, [], game_from_row)
+    }
+
+    /// Finds a game only when its persisted installation state is active.
+    pub fn find_active_game(&self, id: &GameId) -> AppResult<Option<GameInstallation>> {
+        self.with_connection(|connection| {
+            connection
+                .query_row(
+                    FIND_ACTIVE_GAME_SQL,
+                    named_params! { ":id": id.as_str() },
+                    game_from_row,
+                )
+                .optional()
+                .map_err(storage_error)?
+                .transpose()
+        })
+    }
+
     /// Lists distinct technology values currently observed in `components`.
     pub fn list_distinct_game_libraries(&self) -> AppResult<Vec<String>> {
         self.query_list(LIST_DISTINCT_GAME_LIBRARIES_SQL, [], |row| {
@@ -125,7 +145,7 @@ impl SqliteStorage {
     }
 }
 
-fn find_game_in_connection(
+pub(super) fn find_game_in_connection(
     connection: &Connection,
     id: &GameId,
 ) -> AppResult<Option<GameInstallation>> {

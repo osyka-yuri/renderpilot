@@ -15,9 +15,12 @@ use crate::addons::luma::use_cases::update_target::{
     ResolvedUpdateTarget, host_status_from_digests,
 };
 use crate::addons::reshade::fetch::sha256_hex;
-use renderpilot_application::InstalledAddonRepository;
-use renderpilot_domain::{Architecture, PathRef, TrackedSource};
-use tempfile::tempdir;
+use renderpilot_application::{GameRepository, InstalledAddonRepository};
+use renderpilot_domain::{
+    Architecture, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+    TrackedSource,
+};
+use tempfile::{TempDir, tempdir};
 
 #[tokio::test]
 async fn check_updates_skips_a_record_belonging_to_a_different_addon_kind() {
@@ -51,15 +54,25 @@ async fn check_updates_skips_a_record_belonging_to_a_different_addon_kind() {
 fn unavailable_manifest_reports_unknown_for_each_installed_luma_record() {
     let db_dir = tempdir().expect("db dir");
     let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    let mut roots = Vec::new();
     for (id, kind, file) in [
         ("steam:1", AddonKind::Luma, "Luma-One.addon"),
         ("steam:2", AddonKind::Luma, "Luma-Two.addon"),
         ("steam:3", AddonKind::RenoDx, "renodx-three.addon64"),
     ] {
+        let game_id = GameId::new(id).expect("id");
+        let payload_path = if kind == AddonKind::Luma {
+            let root = seed_active_luma_install(&context, &game_id, file);
+            let path = root.path().join(file);
+            roots.push(root);
+            path
+        } else {
+            std::path::PathBuf::from(format!(r"C:\Games\Test\{file}"))
+        };
         let record = InstalledAddon::new(
-            GameId::new(id).expect("id"),
+            game_id,
             kind,
-            PathRef::new(format!(r"C:\Games\Test\{file}")).expect("path"),
+            PathRef::new(payload_path.to_string_lossy()).expect("path"),
         );
         context
             .storage()
@@ -73,6 +86,49 @@ fn unavailable_manifest_reports_unknown_for_each_installed_luma_record() {
     for id in ["steam:1", "steam:2"] {
         assert!(results.contains(&(GameId::new(id).expect("id"), UpdateStatus::Unknown,)));
     }
+    drop(roots);
+}
+
+fn seed_active_luma_install(context: &Context, game_id: &GameId, payload_name: &str) -> TempDir {
+    use crate::addons::luma::test_support::{
+        MACHINE_AMD64, PE32_PLUS_MAGIC, build_pe_with_exports,
+    };
+
+    let root = tempdir().expect("Luma game root");
+    let exe = root.path().join("Game.exe");
+    let payload = root.path().join(payload_name);
+    std::fs::write(
+        &exe,
+        build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
+    )
+    .expect("game executable");
+    std::fs::write(
+        root.path().join("dxgi.dll"),
+        build_pe_with_exports(
+            MACHINE_AMD64,
+            PE32_PLUS_MAGIC,
+            &[
+                "ReShadeVersion",
+                "ReShadeRegisterAddon",
+                "ReShadeUnregisterAddon",
+                "ReShadeRegisterEvent",
+            ],
+        ),
+    )
+    .expect("compatible ReShade host");
+    std::fs::write(&payload, b"Luma payload").expect("Luma payload");
+    let game = GameInstallation::new(
+        GameIdentity::new(game_id.clone(), payload_name, Launcher::Manual).expect("game identity"),
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(root.path().to_string_lossy()).expect("game root"),
+    )
+    .with_executable_candidate(PathRef::new(exe.to_string_lossy()).expect("game exe"));
+    context
+        .storage()
+        .upsert_game(&game)
+        .expect("register active game");
+    root
 }
 
 #[tokio::test]

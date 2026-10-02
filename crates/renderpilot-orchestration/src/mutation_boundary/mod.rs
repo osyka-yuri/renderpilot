@@ -53,9 +53,12 @@ impl GameSharedMutationGuards {
     }
 }
 
+#[cfg(windows)]
+pub(crate) use game::enter_game_observation_boundaries;
 pub(crate) use game::{
     enter_game_mutation_boundaries, enter_game_mutation_boundary,
-    enter_game_mutation_boundary_async,
+    enter_game_mutation_boundary_async, enter_game_observation_boundary,
+    enter_game_observation_boundary_async,
 };
 pub(crate) use shared::{
     enter_game_shared_mutation_boundary, enter_game_shared_mutation_boundary_async,

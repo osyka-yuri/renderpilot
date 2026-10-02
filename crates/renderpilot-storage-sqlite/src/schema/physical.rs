@@ -175,7 +175,6 @@ pub mod installed_addons {
     pub const RESHADE_CHANNEL: &str = "reshade_channel";
     pub const REGISTERED_EXE_PATH: &str = "registered_exe_path";
     pub const RENODX_CONFIG_RECEIPT_JSON: &str = "renodx_config_receipt_json";
-    pub const ENGINE_CONFIG_JOURNAL_JSON: &str = "engine_config_journal_json";
     pub const CREATED_AT: &str = "created_at";
     pub const UPDATED_AT: &str = "updated_at";
 
@@ -192,7 +191,6 @@ pub mod installed_addons {
         RESHADE_CHANNEL,
         REGISTERED_EXE_PATH,
         RENODX_CONFIG_RECEIPT_JSON,
-        ENGINE_CONFIG_JOURNAL_JSON,
         CREATED_AT,
         UPDATED_AT,
     ];
@@ -560,6 +558,23 @@ pub mod portable_path_tags {
     pub const ALL: &[&str] = &[TAG, KIND, VALUE];
 }
 
+pub mod installation_availability {
+    pub const GAME_ID: &str = "game_id";
+    pub const STATE: &str = "state";
+    pub const REVISION: &str = "revision";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[GAME_ID, STATE, REVISION, UPDATED_AT];
+}
+
+pub mod game_engine_config_journals {
+    pub const GAME_ID: &str = "game_id";
+    pub const ADDON_KIND: &str = "addon_kind";
+    pub const JOURNAL_JSON: &str = "journal_json";
+    pub const CREATED_AT: &str = "created_at";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[GAME_ID, ADDON_KIND, JOURNAL_JSON, CREATED_AT, UPDATED_AT];
+}
+
 /// Tables covered by the physical-column contract (exact set equality vs
 /// `PRAGMA table_info` after migration).
 ///
@@ -610,4 +625,9 @@ pub const CONTRACT_TABLES: &[(&str, &[&str])] = &[
         profile_addon_capabilities::ALL,
     ),
     ("portable_path_tags", portable_path_tags::ALL),
+    ("installation_availability", installation_availability::ALL),
+    (
+        "game_engine_config_journals",
+        game_engine_config_journals::ALL,
+    ),
 ];

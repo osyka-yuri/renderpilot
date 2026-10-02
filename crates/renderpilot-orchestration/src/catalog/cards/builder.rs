@@ -2,9 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use renderpilot_application::{
-    InstalledAddonRepository, OptiScalerStateRepository, find_replacement_candidates_indexed,
-};
+use renderpilot_application::{OptiScalerStateRepository, find_replacement_candidates_indexed};
 use renderpilot_domain::{GameId, InstalledAddon, LibraryComponent, LibraryTechnology};
 
 use crate::ServiceError;
@@ -20,7 +18,7 @@ pub(super) fn build_snapshot(
     facts_mode: SnapshotFactsMode,
 ) -> Result<CatalogSnapshot, ServiceError> {
     let storage = context.storage();
-    let games = storage.list_games()?;
+    let games = crate::catalog::list_games(context)?;
 
     let mut components_by_game = HashMap::<GameId, Vec<LibraryComponent>>::new();
     for component in storage.list_all_components()? {
@@ -66,12 +64,10 @@ pub(super) fn build_snapshot(
         }
     }
 
-    let installed_records: HashMap<GameId, InstalledAddon> = storage
-        .list_installed_addons()?
-        .into_iter()
-        .filter(crate::addons::tool::record_is_active)
-        .map(|addon| (addon.game_id().clone(), addon))
-        .collect();
+    let installed_records: HashMap<GameId, InstalledAddon> =
+        crate::addons::records::active_records(context)?
+            .map(|addon| (addon.game_id().clone(), addon))
+            .collect();
     let optiscaler_installed_game_ids: HashSet<GameId> = storage
         .list_optiscaler_install_states()?
         .into_iter()

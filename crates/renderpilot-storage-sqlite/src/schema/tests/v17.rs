@@ -40,6 +40,7 @@ fn malformed_current_shared_vulkan_constraints_trigger_a_rebuild() {
     connection
         .execute_batch(
             "DROP TABLE pending_shared_vulkan_mutations;
+             DROP TRIGGER IF EXISTS trg_games_restrict_peer_aggregate_delete;
              CREATE TABLE pending_shared_vulkan_mutations (
                  resource_key TEXT PRIMARY KEY NOT NULL,
                  id TEXT UNIQUE NOT NULL,
@@ -48,6 +49,7 @@ fn malformed_current_shared_vulkan_constraints_trigger_a_rebuild() {
                  feature TEXT NOT NULL,
                  state TEXT NOT NULL,
                  manifest_json TEXT NOT NULL,
+                 root_capabilities_json TEXT NOT NULL DEFAULT '{}',
                  created_at INTEGER NOT NULL,
                  updated_at INTEGER NOT NULL
              ) STRICT;

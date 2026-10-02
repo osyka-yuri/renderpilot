@@ -50,7 +50,6 @@ const MOCK_VULKAN_LAYER = {
 
 export function mockUnsupportedRenoDxAvailability(): unknown {
   return {
-    has_persisted_record: false,
     state: { status: 'not_installed' },
     host_detection: 'absent',
     host_facts: defaultHostFacts('stable'),
@@ -60,6 +59,8 @@ export function mockUnsupportedRenoDxAvailability(): unknown {
     install_torn: false,
     outcome: { kind: 'unsupported' },
     manual_install: null,
+    has_persisted_record: false,
+    install_requires_shared_vulkan: false,
     vulkan_layer: MOCK_VULKAN_LAYER,
   };
 }

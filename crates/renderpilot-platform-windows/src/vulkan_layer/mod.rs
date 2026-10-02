@@ -37,8 +37,8 @@ mod types;
 mod util;
 
 pub use apps_ini::{
-    AppListChange, AppListPlan, AppListPlanError, parse_app_list, plan_register_app,
-    plan_unregister_app, read_app_list, read_app_list_bytes,
+    AppListChange, AppListPlan, AppListPlanError, parse_app_list, plan_rebind_app,
+    plan_register_app, plan_unregister_app, read_app_list, read_app_list_bytes,
 };
 pub use detection::detect_report;
 pub use paths::reshade_common_dir;
@@ -48,8 +48,9 @@ pub use planner::{
     AppUnregisterOutcome, DirectoryEntryKind, DirectoryEntryObservation, DirectoryMutation,
     DirectoryObservation, FileMutation, FileObservation, LayerPlanOperation, LayerPlannerError,
     RegistryMutation, SharedVulkanLayerObservation, SharedVulkanLayerPlan, active_registry_value,
-    canonical_manifest_bytes, observe_shared_vulkan_layer, plan_install_and_register, plan_refresh,
-    plan_register_app_only, plan_settings_remove, plan_unregister_app_only, unregister_app_outcome,
+    canonical_manifest_bytes, observe_shared_vulkan_layer, plan_install_and_rebind_app,
+    plan_install_and_register, plan_rebind_app_only, plan_refresh, plan_register_app_only,
+    plan_settings_remove, plan_unregister_app_only, unregister_app_outcome,
 };
 #[cfg(windows)]
 pub use registry::WindowsLayerRegistry;

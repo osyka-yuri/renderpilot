@@ -26,11 +26,16 @@ use super::{
 fn gothic_cross_directory_xiph_empty_import_proof_plans_and_applies() {
     let mut fixture = GothicXiphFixture::setup();
     fixture.initial_normal_scan_and_register();
+    fixture.assert_game_payload_intact();
     fixture.plan_and_apply();
     fixture.assert_post_apply_projection();
+    fixture.assert_game_payload_intact();
     fixture.post_apply_normal_rescan();
+    fixture.assert_game_payload_intact();
     fixture.rollback_and_assert();
+    fixture.assert_game_payload_intact();
     fixture.post_rollback_normal_rescan();
+    fixture.assert_game_payload_intact();
 }
 
 struct GothicXiphFixture {
@@ -39,6 +44,8 @@ struct GothicXiphFixture {
     game: GameInstallation,
     artifact: LibraryArtifact,
     component_id: Option<renderpilot_domain::ComponentId>,
+    game_payload: PathBuf,
+    game_payload_bytes: Vec<u8>,
     vorbis_dir: PathBuf,
     ogg_dir: PathBuf,
     old_wrapper: PathBuf,
@@ -62,6 +69,10 @@ impl GothicXiphFixture {
         fs::create_dir_all(&vorbis_dir).expect("Vorbis directory");
         fs::create_dir_all(&ogg_dir).expect("Ogg directory");
         fs::create_dir_all(&library_dir).expect("library directory");
+
+        let game_payload = game_dir.join("Game.exe");
+        let game_payload_bytes = synthetic_xiph_pe("RenderPilotTestGame", &[]);
+        write(&game_payload, &game_payload_bytes);
 
         let old_wrapper = vorbis_dir.join("libvorbisfile_64.dll");
         let old_vorbis = vorbis_dir.join("libvorbis_64.dll");
@@ -107,6 +118,8 @@ impl GothicXiphFixture {
             game,
             artifact,
             component_id: None,
+            game_payload,
+            game_payload_bytes,
             vorbis_dir,
             ogg_dir,
             old_wrapper,
@@ -169,6 +182,14 @@ impl GothicXiphFixture {
         self.component_id
             .as_ref()
             .expect("initial scan component id")
+    }
+
+    fn assert_game_payload_intact(&self) {
+        assert_eq!(
+            fs::read(&self.game_payload).expect("game payload remains readable"),
+            self.game_payload_bytes,
+            "normal scans, apply, and rollback must preserve the game executable"
+        );
     }
 
     fn plan_and_apply(&self) {

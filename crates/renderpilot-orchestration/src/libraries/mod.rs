@@ -21,7 +21,7 @@ mod validation;
 use crate::ServiceError;
 use crate::net::ProgressObserver;
 use renderpilot_application::{ActiveCatalogPackage, ArtifactRepository};
-use renderpilot_domain::{ArtifactId, LibraryArtifact};
+use renderpilot_domain::{ArtifactId, ArtifactTrustLevel, GameId, LibraryArtifact};
 
 pub(crate) use self::artifact_builder::catalog_packages_as_artifacts;
 pub use self::storage::local_dlss_document_path;
@@ -147,7 +147,33 @@ pub(crate) fn replacement_artifacts(
     } else {
         LibraryCatalogStatus::LocalFallback
     };
-    Ok(inventory::Inventory::load(context, catalog.as_ref(), status)?.replacement_projection())
+    let active_game_ids = crate::catalog::list_games(context)?
+        .into_iter()
+        .map(|game| game.id().clone())
+        .collect();
+    Ok(retain_active_local_observations(
+        inventory::Inventory::load(context, catalog.as_ref(), status)?.replacement_projection(),
+        &active_game_ids,
+    ))
+}
+
+fn retain_active_local_observations(
+    (mut artifacts, mut downloaded_ids, mut active_catalog): ReplacementArtifactProjection,
+    active_game_ids: &std::collections::HashSet<GameId>,
+) -> ReplacementArtifactProjection {
+    artifacts.retain(|artifact| {
+        artifact.trust_level() != ArtifactTrustLevel::LocalObserved
+            || artifact
+                .source_game_id()
+                .is_none_or(|game_id| active_game_ids.contains(game_id))
+    });
+    let retained_ids = artifacts
+        .iter()
+        .map(|artifact| artifact.id())
+        .collect::<std::collections::HashSet<_>>();
+    downloaded_ids.retain(|artifact_id| retained_ids.contains(artifact_id));
+    active_catalog.retain(|artifact_id, _| retained_ids.contains(artifact_id));
+    (artifacts, downloaded_ids, active_catalog)
 }
 
 pub(crate) fn replacement_catalog_revision() -> Result<Option<(u64, u128)>, ServiceError> {

@@ -12,13 +12,17 @@
 //! 3. Append `&YourTool` to [`TOOLS`].
 //! 4. Add types / matcher / fetch / install / tracking / use_cases.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use renderpilot_domain::{AddonKind, InstalledAddon};
+use renderpilot_application::ProxyTopologyRepository;
+use renderpilot_domain::{AddonKind, InstalledAddon, InstalledAddonHostKind};
 
 use super::capabilities::CapabilityProbeFuture;
 use crate::game_mutation_lock::GameMutationGuard;
 use crate::{Context, ServiceError};
+
+#[path = "tool/active_binding.rs"]
+mod active_binding;
 
 /// Static policy and identity for one add-on tool RenderPilot can install.
 ///
@@ -40,6 +44,17 @@ pub(crate) trait AddonTool: Send + Sync {
 
     /// On-disk signature when no DB record exists (shallow / bounded scan).
     fn unmanaged_present(&self, dir: &Path) -> bool;
+
+    /// Concrete files matching this tool's existing bounded unmanaged
+    /// signature. The fallback keeps tools without path-level probes
+    /// fail-closed by returning the directory as an opaque match.
+    fn unmanaged_paths(&self, dir: &Path) -> Vec<PathBuf> {
+        if self.unmanaged_present(dir) {
+            vec![dir.to_path_buf()]
+        } else {
+            Vec::new()
+        }
+    }
 
     /// Whether a persisted install record still represents an active install.
     ///
@@ -111,10 +126,20 @@ pub(crate) fn exclusive_peers(kind: AddonKind) -> &'static [AddonKind] {
     tool(kind).map_or(&[], |registered| registered.exclusive_peers())
 }
 
-/// Returns whether a registered tool's bounded on-disk signature is present.
+/// Returns the concrete matches from a registered tool's existing bounded
+/// unmanaged probe. A caller may discount only exact receipt-owned paths.
 #[must_use]
-pub(crate) fn unmanaged_files_present(dir: &Path, kind: AddonKind) -> bool {
-    tool(kind).is_some_and(|registered| registered.unmanaged_present(dir))
+pub(crate) fn unmanaged_matching_paths(dir: &Path, kind: AddonKind) -> Vec<PathBuf> {
+    tool(kind).map_or_else(Vec::new, |registered| registered.unmanaged_paths(dir))
+}
+
+/// Collects concrete unmanaged matches across the exact directories used by
+/// install preflight.
+#[must_use]
+pub(crate) fn unmanaged_matching_paths_in_dirs(dirs: &[&Path], kind: AddonKind) -> Vec<PathBuf> {
+    dirs.iter()
+        .flat_map(|dir| unmanaged_matching_paths(dir, kind))
+        .collect()
 }
 
 /// Returns whether `record` still represents an active install according to
@@ -122,6 +147,71 @@ pub(crate) fn unmanaged_files_present(dir: &Path, kind: AddonKind) -> bool {
 #[must_use]
 pub(crate) fn record_is_active(record: &InstalledAddon) -> bool {
     require_tool(record.kind()).record_is_active(record)
+}
+
+/// Whether a persisted record still describes an install bound to this game's
+/// current loading chain.
+///
+/// The registered-tool predicate remains the inexpensive payload/local-state
+/// check. Every record additionally requires a currently active game
+/// registration. Proxy installs also require a compatible ReShade host in the
+/// current executable root and a strict current ReShade `AddonPath` that
+/// resolves to the record's payload directory. Shared Vulkan installs retain
+/// their existing payload semantics for an active registration.
+/// This is a read-only status query: it never repairs observations or changes
+/// persisted ownership.
+pub(crate) fn record_is_active_for_game(
+    context: &Context,
+    record: &InstalledAddon,
+) -> Result<bool, ServiceError> {
+    if !record_is_active(record) {
+        return Ok(false);
+    }
+
+    let Some(game) = context.storage().find_active_game(record.game_id())? else {
+        return Ok(false);
+    };
+
+    if !requires_proxy_host(record) {
+        return Ok(true);
+    }
+
+    let override_path = crate::addons::game_context::executable_override(context, record.game_id());
+    let analysis = crate::addons::game_analysis::analyze_game(&game, override_path.as_deref());
+    let Ok(runtime_root) = crate::addons::game_analysis::install_target_dir(&analysis) else {
+        return Ok(false);
+    };
+
+    let topology = context.storage().get_proxy_topology(record.game_id())?;
+    Ok(active_binding::proxy_binding_matches_current_loading_chain(
+        record,
+        &runtime_root,
+        analysis.facts.graphics.architecture(),
+        topology.as_ref(),
+    ))
+}
+
+fn requires_proxy_host(record: &InstalledAddon) -> bool {
+    match record.kind() {
+        AddonKind::Luma => true,
+        AddonKind::RenoDx => record.host_kind() != Some(InstalledAddonHostKind::SharedVulkanLayer),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+pub(super) fn proxy_binding_matches_current_loading_chain(
+    record: &InstalledAddon,
+    runtime_root: &Path,
+    game_architecture: Option<renderpilot_domain::Architecture>,
+    topology: Option<&renderpilot_domain::GameProxyTopology>,
+) -> bool {
+    active_binding::proxy_binding_matches_current_loading_chain(
+        record,
+        runtime_root,
+        game_architecture,
+        topology,
+    )
 }
 
 /// Whether check-update supports a deep/advisory probe for `kind`.
@@ -134,7 +224,35 @@ pub(crate) fn supports_deep_check(kind: AddonKind) -> bool {
 /// Scans all possible install roots for a registered tool's on-disk signature.
 #[must_use]
 pub(crate) fn unmanaged_files_present_in_dirs(dirs: &[&Path], kind: AddonKind) -> bool {
-    dirs.iter().any(|dir| unmanaged_files_present(dir, kind))
+    let Some(registered) = tool(kind) else {
+        return false;
+    };
+    dirs.iter().any(|dir| registered.unmanaged_present(dir))
+}
+
+/// Lazily yields immediate regular files whose lowercased names match an
+/// existing shallow unmanaged signature.
+pub(crate) fn matching_regular_file_entries<'predicate>(
+    dir: &Path,
+    predicate: impl Fn(&str) -> bool + 'predicate,
+) -> impl Iterator<Item = std::fs::DirEntry> + 'predicate {
+    std::fs::read_dir(dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_file()))
+        .filter(move |entry| predicate(&entry.file_name().to_string_lossy().to_ascii_lowercase()))
+}
+
+/// Collects matching paths for callers that need concrete receipt candidates.
+pub(crate) fn matching_regular_file_paths(
+    dir: &Path,
+    predicate: impl Fn(&str) -> bool,
+) -> Vec<PathBuf> {
+    matching_regular_file_entries(dir, predicate)
+        .map(|entry| entry.path())
+        .collect()
 }
 
 #[cfg(test)]
@@ -193,5 +311,40 @@ mod tests {
                 t.kind()
             );
         }
+    }
+
+    #[test]
+    fn unmanaged_path_observation_matches_only_existing_shallow_signature_files() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let addon = root.path().join("RenoDX-game.AddOn64");
+        let unrelated = root.path().join("readme.txt");
+        std::fs::write(&addon, b"addon").expect("addon");
+        std::fs::write(&unrelated, b"notes").expect("unrelated file");
+
+        let matches = unmanaged_matching_paths(root.path(), AddonKind::RenoDx);
+        assert_eq!(matches, vec![addon]);
+        assert!(unmanaged_matching_paths(root.path(), AddonKind::Luma).is_empty());
+    }
+
+    #[test]
+    fn shallow_matching_entries_stop_when_the_consumer_finds_a_match() {
+        use std::cell::Cell;
+
+        let root = tempfile::tempdir().expect("tempdir");
+        for index in 0..8 {
+            std::fs::write(root.path().join(format!("file-{index}.txt")), b"file")
+                .expect("write file");
+        }
+
+        let predicate_calls = Cell::new(0);
+        let found = matching_regular_file_entries(root.path(), |_| {
+            predicate_calls.set(predicate_calls.get() + 1);
+            true
+        })
+        .next()
+        .is_some();
+
+        assert!(found);
+        assert_eq!(predicate_calls.get(), 1);
     }
 }

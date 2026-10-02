@@ -41,9 +41,10 @@ pub(crate) struct OrphanedInstall {
 /// Callers must already hold the per-game `game_mutation_lock` (see
 /// `load_availability`). Nested `try_lock` would silently no-op.
 ///
-/// A record already present for a **different** addon kind (e.g. Luma) is never
-/// adopted over: this returns `Ok(None)` exactly as if there were nothing to
-/// adopt, so a foreign-tool install is never silently overwritten.
+/// An existing record is never adopted over. A different-kind record remains
+/// foreign ownership; a same-kind record is returned only while it is active.
+/// An inactive same-kind owner stays persisted for explicit release/replacement
+/// and this read-side discovery leaves it untouched.
 pub(crate) fn reconcile_orphaned_install_locked(
     context: &Context,
     candidate: &OrphanedInstall,
@@ -55,6 +56,9 @@ pub(crate) fn reconcile_orphaned_install_locked(
         records::active_record_of_kind(context, &candidate.game_id, AddonKind::RenoDx)?
     {
         return Ok(Some(record));
+    }
+    if records::record_of_kind(context, &candidate.game_id, AddonKind::RenoDx)?.is_some() {
+        return Ok(None);
     }
 
     let record = build_adopted_record(candidate)?;

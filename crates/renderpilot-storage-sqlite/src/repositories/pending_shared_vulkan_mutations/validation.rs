@@ -1,11 +1,12 @@
 //! Input, owner, commit, and cross-fence validation for the singleton row.
 
 use renderpilot_application::{AppError, AppResult};
-use renderpilot_domain::GameId;
+use renderpilot_domain::{AddonKind, GameId, InstalledAddon, InstalledAddonHostKind};
 use rusqlite::{OptionalExtension, Transaction};
 
 use crate::{error::storage_error, repositories::observations};
 
+use super::super::game_mutations::InstalledAddonMutation;
 use super::RESOURCE_KEY;
 use super::model::{
     BeginSharedVulkanMutation, PendingSharedVulkanMutationRow, PendingSharedVulkanMutationState,
@@ -33,7 +34,14 @@ pub(crate) fn validate_prepared_shared_vulkan_mutation_commit_within_transaction
     }
 
     if let Some(game_id) = commit.game_id {
-        if observations::catalog_exists_within_transaction(transaction, game_id)? {
+        let catalog_exists = observations::catalog_exists_within_transaction(transaction, game_id)?;
+        if matches!(commit.addon, InstalledAddonMutation::ReplaceExpected { .. }) && !catalog_exists
+        {
+            return Err(AppError::storage_failed(
+                "expected-owner shared Vulkan replacement requires an existing catalog game",
+            ));
+        }
+        if catalog_exists {
             match observations::readiness_within_transaction(transaction, game_id)? {
                 crate::repositories::observations::CatalogReadiness::Invalidated {
                     mutation_token: Some(token),
@@ -46,55 +54,92 @@ pub(crate) fn validate_prepared_shared_vulkan_mutation_commit_within_transaction
                     )));
                 }
             }
-        } else if matches!(
-            commit.addon,
-            super::super::game_mutations::InstalledAddonMutation::Keep
-        ) {
+        } else if matches!(commit.addon, InstalledAddonMutation::Keep) {
             return Err(AppError::storage_failed(format!(
                 "pre-catalog shared Vulkan mutation '{}' may commit only an add-on lifecycle effect",
                 commit.id
             )));
         }
         match commit.addon {
-            super::super::game_mutations::InstalledAddonMutation::Upsert(addon)
-                if addon.game_id() != game_id =>
-            {
+            InstalledAddonMutation::Upsert(addon) if addon.game_id() != game_id => {
                 return Err(AppError::storage_failed(format!(
                     "shared Vulkan mutation '{}' add-on owner does not match game {}",
                     commit.id,
                     game_id.as_str()
                 )));
             }
-            super::super::game_mutations::InstalledAddonMutation::Upsert(addon) => {
+            InstalledAddonMutation::Upsert(addon) => {
                 super::super::installed_addons::ensure_independent_peer_mutation_allowed(
                     transaction,
                     game_id,
                     addon.kind(),
                 )?;
             }
-            super::super::game_mutations::InstalledAddonMutation::Delete(kind) => {
+            InstalledAddonMutation::Delete(kind) => {
                 super::super::installed_addons::ensure_independent_peer_mutation_allowed(
                     transaction,
                     game_id,
                     kind,
                 )?;
             }
-            super::super::game_mutations::InstalledAddonMutation::Keep => {}
-            super::super::game_mutations::InstalledAddonMutation::OptiScaler(_) => {
+            InstalledAddonMutation::ReplaceExpected {
+                expected,
+                replacement,
+            } => {
+                validate_expected_shared_vulkan_replacement(
+                    transaction,
+                    game_id,
+                    expected,
+                    replacement,
+                )?;
+            }
+            InstalledAddonMutation::Keep => {}
+            InstalledAddonMutation::OptiScaler(_) => {
                 return Err(AppError::invalid_input(
                     "shared Vulkan mutations cannot commit an OptiScaler aggregate",
                 ));
             }
         }
-    } else if !matches!(
-        commit.addon,
-        super::super::game_mutations::InstalledAddonMutation::Keep
-    ) {
+    } else if !matches!(commit.addon, InstalledAddonMutation::Keep) {
         return Err(AppError::invalid_input(
             "shared-only Vulkan mutations cannot change a game add-on",
         ));
     }
     Ok(row)
+}
+
+fn validate_expected_shared_vulkan_replacement(
+    transaction: &Transaction<'_>,
+    game_id: &GameId,
+    expected: &InstalledAddon,
+    replacement: &InstalledAddon,
+) -> AppResult<()> {
+    if expected.game_id() != game_id || replacement.game_id() != game_id {
+        return Err(AppError::invalid_input(
+            "expected shared Vulkan owner and replacement must match the reserved game",
+        ));
+    }
+    if !matches!(expected.kind(), AddonKind::RenoDx | AddonKind::Luma)
+        || expected.host_kind() != Some(InstalledAddonHostKind::Proxy)
+        || replacement.kind() != AddonKind::RenoDx
+        || replacement.host_kind() != Some(InstalledAddonHostKind::SharedVulkanLayer)
+    {
+        return Err(AppError::invalid_input(
+            "shared Vulkan expected-owner replacement requires a RenoDX/Luma Proxy owner and a RenoDX SharedVulkanLayer replacement",
+        ));
+    }
+
+    super::super::installed_addons::ensure_independent_peer_mutation_allowed(
+        transaction,
+        game_id,
+        expected.kind(),
+    )?;
+    super::super::installed_addons::ensure_independent_peer_mutation_allowed(
+        transaction,
+        game_id,
+        replacement.kind(),
+    )?;
+    Ok(())
 }
 
 pub(crate) fn assert_no_shared_mutation_for_game_within_transaction(

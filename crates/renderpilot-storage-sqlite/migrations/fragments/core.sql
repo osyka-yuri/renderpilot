@@ -216,7 +216,6 @@ CREATE TABLE IF NOT EXISTS installed_addons (
     reshade_channel       TEXT,
     registered_exe_path   TEXT,
     renodx_config_receipt_json TEXT,
-    engine_config_journal_json TEXT,
     created_at            INTEGER NOT NULL DEFAULT (
         CAST(unixepoch('subsec') * 1000 AS INTEGER)
     ),
@@ -241,8 +240,6 @@ CREATE TABLE IF NOT EXISTS installed_addons (
     CHECK (registered_exe_path IS NULL OR instr(registered_exe_path, char(0)) = 0),
     CHECK (renodx_config_receipt_json IS NULL OR json_valid(renodx_config_receipt_json)),
     CHECK (renodx_config_receipt_json IS NULL OR json_type(renodx_config_receipt_json) = 'object'),
-    CHECK (engine_config_journal_json IS NULL OR json_valid(engine_config_journal_json)),
-    CHECK (engine_config_journal_json IS NULL OR json_type(engine_config_journal_json) = 'object'),
     CHECK (created_at >= 0),
     CHECK (updated_at >= created_at)
 ) STRICT;

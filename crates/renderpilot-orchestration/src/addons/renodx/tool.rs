@@ -45,7 +45,13 @@ pub(crate) fn capability_probe(manifest: RenoDxManifest) -> CapabilityProbe {
 }
 
 fn unmanaged_present(game_dir: &Path) -> bool {
-    crate::addons::any_file_name_matches(game_dir, is_renodx_addon_file_name)
+    crate::addons::tool::matching_regular_file_entries(game_dir, is_renodx_addon_file_name)
+        .next()
+        .is_some()
+}
+
+fn unmanaged_paths(game_dir: &Path) -> Vec<std::path::PathBuf> {
+    crate::addons::tool::matching_regular_file_paths(game_dir, is_renodx_addon_file_name)
 }
 
 impl AddonTool for RenoDxTool {
@@ -67,6 +73,10 @@ impl AddonTool for RenoDxTool {
 
     fn unmanaged_present(&self, dir: &Path) -> bool {
         unmanaged_present(dir)
+    }
+
+    fn unmanaged_paths(&self, dir: &Path) -> Vec<std::path::PathBuf> {
+        unmanaged_paths(dir)
     }
 
     fn record_is_active(&self, record: &InstalledAddon) -> bool {

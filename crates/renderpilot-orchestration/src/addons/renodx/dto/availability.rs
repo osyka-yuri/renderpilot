@@ -105,6 +105,9 @@ pub struct AvailabilityReport {
     /// Whether an earlier framework-managed RenoDX operation left its crash
     /// sentinel behind.
     pub install_torn: bool,
+    /// Whether an existing per-game Shared Vulkan owner requires install
+    /// safety to include the shared layer, even if the new plan is a proxy.
+    pub install_requires_shared_vulkan: bool,
     /// Whether and how RenoDX can be installed.
     pub outcome: AvailabilityOutcome,
     /// The manual "install ReShade host + your own add-on file" escape hatch,

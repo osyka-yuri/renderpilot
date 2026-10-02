@@ -1,6 +1,7 @@
 //! Aggregate consolidation and conflict-policy tests.
 
 use super::*;
+use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{EngineConfigContribution, EngineConfigJournal, EngineConfigReceipt};
 #[test]
 fn aggregate_consolidation_rekeys_every_scoped_state_category() {
@@ -60,10 +61,15 @@ fn aggregate_consolidation_rekeys_every_scoped_state_category() {
     storage
         .connection()
         .expect("connection")
+        .execute_batch("UPDATE installed_addons SET kind = 'renodx' WHERE game_id='manual:child'")
+        .expect("canonical local add-on kind");
+    storage
+        .connection()
+        .expect("connection")
         .execute(
-            "UPDATE installed_addons
-                SET kind = 'renodx', engine_config_journal_json = :journal
-              WHERE game_id = :game_id",
+            "INSERT INTO game_engine_config_journals
+                (game_id, addon_kind, journal_json, created_at, updated_at)
+             VALUES (:game_id, 'renodx', :journal, 1, 1)",
             rusqlite::named_params! {
                 ":journal": journal_json,
                 ":game_id": source.id().as_str(),
@@ -113,6 +119,7 @@ fn aggregate_consolidation_rekeys_every_scoped_state_category() {
         "operation_items",
         "component_backups",
         "installed_addons",
+        "game_engine_config_journals",
         "game_covers",
         "nvapi_executable_overrides",
         "game_ui_state",
@@ -137,8 +144,8 @@ fn aggregate_consolidation_rekeys_every_scoped_state_category() {
     assert_eq!(artifact_owner, "game:destination");
     let moved_journal: String = connection
         .query_row(
-            "SELECT engine_config_journal_json
-               FROM installed_addons
+            "SELECT journal_json
+               FROM game_engine_config_journals
               WHERE game_id = 'game:destination'",
             [],
             |row| row.get(0),
@@ -164,6 +171,93 @@ fn aggregate_consolidation_rekeys_every_scoped_state_category() {
         )
         .expect("backup component");
     assert_eq!(backup_component, "component:destination");
+}
+
+#[test]
+fn standalone_engine_journal_moves_during_consolidation_without_local_addon_row() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let destination = game("game:destination", "C:/Games/Example");
+    let source = game("manual:journal-owner", "C:/Games/Example/OldRoot");
+    storage.upsert_game(&destination).expect("destination");
+    storage.upsert_game(&source).expect("source");
+    let journal = EngineConfigJournal {
+        stable: Some(EngineConfigReceipt {
+            schema_version: 1,
+            path: "C:/Games/Example/OldRoot/Engine.ini".to_owned(),
+            file_created: false,
+            encoding: "utf8".to_owned(),
+            before_digest: "0".repeat(64),
+            after_digest: "1".repeat(64),
+            recipe_fingerprint: "2".repeat(64),
+            contributions: Vec::new(),
+            created_headers: Vec::new(),
+            created_header_prefixes: Vec::new(),
+            created_header_groups: Vec::new(),
+            created_header_ordinals: Vec::new(),
+        }),
+        pending: None,
+    };
+    let raw = serde_json::to_string(&journal).expect("journal json");
+    storage
+        .connection()
+        .expect("connection")
+        .execute(
+            "INSERT INTO game_engine_config_journals
+                (game_id, addon_kind, journal_json, created_at, updated_at)
+             VALUES (?1, 'renodx', ?2, 1, 1)",
+            rusqlite::params![source.id().as_str(), raw],
+        )
+        .expect("standalone owner");
+    assert!(
+        storage
+            .get_installed_addon(source.id())
+            .expect("no local add-on")
+            .is_none()
+    );
+
+    let plan = consolidation_plan(&destination, &[&source]);
+    let conflicts = storage
+        .inspect_consolidation_conflicts(&plan)
+        .expect("preview");
+    assert!(
+        !conflicts.has_blocking_conflicts(),
+        "stable standalone journal can move"
+    );
+    storage
+        .save_install_scan_with_consolidation(
+            ScanWriteUnit {
+                game: &destination,
+                components: &[],
+                artifacts: &[],
+                prune_empty_operations: false,
+            },
+            &plan,
+            &conflicts,
+        )
+        .expect("move standalone owner");
+
+    let owner = storage
+        .engine_config_journal_owner(destination.id())
+        .expect("destination owner")
+        .expect("owner moved independent of local add-on");
+    assert_eq!(owner.kind, renderpilot_domain::AddonKind::RenoDx);
+    assert_eq!(owner.journal, journal);
+    assert_eq!(
+        owner.raw_token,
+        serde_json::to_string(&owner.journal).expect("raw token")
+    );
+    assert_eq!(
+        storage
+            .engine_config_journal_owner(source.id())
+            .expect("source owner"),
+        None
+    );
+    assert!(
+        storage
+            .get_installed_addon(destination.id())
+            .expect("still no local row")
+            .is_none()
+    );
 }
 
 #[test]

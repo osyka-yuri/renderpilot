@@ -1,6 +1,6 @@
 //! Catalog identity merge for a freshly discovered install.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use renderpilot_application::{AppResult, ArtifactRepository};
 use renderpilot_detection::DetectedLibraryFile;
@@ -21,6 +21,7 @@ use crate::catalog::install_paths;
 pub(crate) struct CatalogInstallIndex {
     by_install_path: HashMap<InstallKey, GameInstallation>,
     by_game_id: HashMap<GameId, GameInstallation>,
+    absent_game_ids: HashSet<GameId>,
     components_by_game: HashMap<GameId, HashMap<ComponentId, LibraryComponent>>,
     local_artifacts_by_game: HashMap<GameId, HashMap<ArtifactId, LibraryArtifact>>,
 }
@@ -30,8 +31,12 @@ impl CatalogInstallIndex {
         let games = storage.list_games()?;
         let mut by_install_path = HashMap::with_capacity(games.len());
         let mut by_game_id = HashMap::with_capacity(games.len());
+        let mut absent_game_ids = HashSet::new();
 
         for game in games {
+            if storage.is_installation_absent(game.id())? {
+                absent_game_ids.insert(game.id().clone());
+            }
             let key = game.install_key().clone();
             by_install_path.entry(key).or_insert_with(|| game.clone());
             by_game_id.insert(game.id().clone(), game);
@@ -40,6 +45,9 @@ impl CatalogInstallIndex {
         let mut components_by_game =
             HashMap::<GameId, HashMap<ComponentId, LibraryComponent>>::new();
         for component in storage.list_all_components()? {
+            if absent_game_ids.contains(component.game_id()) {
+                continue;
+            }
             components_by_game
                 .entry(component.game_id().clone())
                 .or_default()
@@ -53,6 +61,9 @@ impl CatalogInstallIndex {
                 continue;
             }
             if let Some(game_id) = artifact.source_game_id() {
+                if absent_game_ids.contains(game_id) {
+                    continue;
+                }
                 local_artifacts_by_game
                     .entry(game_id.clone())
                     .or_default()
@@ -63,6 +74,7 @@ impl CatalogInstallIndex {
         Ok(Self {
             by_install_path,
             by_game_id,
+            absent_game_ids,
             components_by_game,
             local_artifacts_by_game,
         })
@@ -86,7 +98,8 @@ impl CatalogInstallIndex {
 
     #[cfg(test)]
     pub(crate) fn contains_install_path(&self, install_path: &std::path::Path) -> bool {
-        self.contains_install_path_str(&install_path.to_string_lossy())
+        self.find_by_install_path(&install_path.to_string_lossy())
+            .is_some()
     }
 
     #[cfg(windows)]
@@ -98,8 +111,13 @@ impl CatalogInstallIndex {
             .map(GameInstallation::id)
     }
 
-    pub(super) fn contains_install_path_str(&self, install_path: &str) -> bool {
-        self.find_by_install_path(install_path).is_some()
+    pub(super) fn contains_active_install_path_str(&self, install_path: &str) -> bool {
+        self.find_by_install_path(install_path)
+            .is_some_and(|game| !self.absent_game_ids.contains(game.id()))
+    }
+
+    fn is_absent(&self, game_id: &GameId) -> bool {
+        self.absent_game_ids.contains(game_id)
     }
 
     pub(super) fn card_facts_changed(
@@ -108,7 +126,8 @@ impl CatalogInstallIndex {
         components: &[LibraryComponent],
         artifacts: &[LibraryArtifact],
     ) -> bool {
-        self.find_by_install_path(game.install_path().as_str()) != Some(game)
+        self.is_absent(game.id())
+            || self.find_by_install_path(game.install_path().as_str()) != Some(game)
             || !self.components_match(game.id(), components)
             || !self.local_artifacts_match(game.id(), artifacts)
     }
@@ -142,9 +161,43 @@ pub(super) fn reconcile_game_with_catalog(
     discovered: GameInstallation,
 ) -> GameInstallation {
     match catalog_index.find_by_install_path(discovered.install_path().as_str()) {
+        Some(existing) if catalog_index.is_absent(existing.id()) => {
+            merge_reactivated_game_with_existing(existing, discovered)
+        }
         Some(existing) => merge_scan_game_with_existing(existing, &discovered),
         None => discovered,
     }
+}
+
+pub(super) fn reconcile_reappeared_game_with_catalog(
+    catalog_index: &CatalogInstallIndex,
+    discovered: GameInstallation,
+) -> GameInstallation {
+    match catalog_index.find_by_install_path(discovered.install_path().as_str()) {
+        Some(existing) => merge_reactivated_game_with_existing(existing, discovered),
+        None => discovered,
+    }
+}
+
+/// Rebuilds a reappeared install from fresh discovery and its stable identity.
+/// Retired executable selection and launcher identity are not current
+/// filesystem evidence and must not be copied back from the raw registration.
+fn merge_reactivated_game_with_existing(
+    existing: &GameInstallation,
+    discovered: GameInstallation,
+) -> GameInstallation {
+    let identity = build_reconciled_identity(
+        existing.id(),
+        discovered.identity().title(),
+        discovered.identity().launcher(),
+        discovered.identity().external_id(),
+    )
+    .expect("a valid discovered identity remains valid with the stable game id");
+    let root_authority =
+        reconcile_root_authority(existing.root_authority(), discovered.root_authority());
+    discovered
+        .with_identity(identity)
+        .with_root_authority(root_authority)
 }
 
 /// Merges a freshly discovered install with a catalog row for the same path.
@@ -261,9 +314,9 @@ mod tests {
         ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime, Launcher,
         LibraryComponent, LibraryTechnology, PathRef, Platform, RootAuthority, Swappability,
     };
-    use renderpilot_storage_sqlite::SqliteStorage;
+    use renderpilot_storage_sqlite::{AuthorityCas, SqliteStorage};
 
-    use super::{CatalogInstallIndex, merge_scan_game_with_existing};
+    use super::{CatalogInstallIndex, merge_scan_game_with_existing, reconcile_game_with_catalog};
 
     #[test]
     fn catalog_index_distinguishes_noop_scan_from_changed_game_facts() {
@@ -290,6 +343,82 @@ mod tests {
             "C:/Games/Stable",
         );
         assert!(index.card_facts_changed(&renamed, &[], &[]));
+    }
+
+    #[test]
+    fn reappearance_keeps_only_stable_id_and_fresh_discovery_metadata() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let stale_executable = PathRef::new("OldLauncher.exe").expect("executable");
+        let existing = sample_install(
+            "game:registered-stable-id",
+            "Old title",
+            Launcher::Steam,
+            Some("stale-store-id"),
+            "C:/Games/Reappeared",
+        )
+        .with_root_authority(RootAuthority::UserConfirmed)
+        .with_confirmed_executable(stale_executable);
+        storage.upsert_game(&existing).expect("seed game");
+        let authority = AuthorityCas::new(
+            storage
+                .catalog_readiness(existing.id())
+                .expect("readiness")
+                .authority_epoch(),
+        );
+        storage
+            .mark_installation_absent(&existing, authority)
+            .expect("mark absent");
+
+        let index = CatalogInstallIndex::load(&storage).expect("catalog index");
+        let discovered_without_executable = sample_install(
+            "game:provider-temporary-id",
+            "Fresh title",
+            Launcher::Manual,
+            None,
+            "C:/Games/Reappeared",
+        )
+        .with_root_authority(RootAuthority::UserConfirmed);
+        let reappeared_without_executable =
+            reconcile_game_with_catalog(&index, discovered_without_executable);
+        assert!(
+            reappeared_without_executable
+                .executable_candidates()
+                .is_empty()
+        );
+        assert_eq!(reappeared_without_executable.confirmed_executable(), None);
+
+        let fresh_candidate = PathRef::new("C:/Games/Reappeared/FreshLauncher.exe")
+            .expect("fresh executable candidate");
+        let fresh_confirmed = PathRef::new("C:/Games/Reappeared/CurrentGame.exe")
+            .expect("fresh confirmed executable");
+        let discovered = sample_install(
+            "game:provider-temporary-id",
+            "Fresh title",
+            Launcher::Manual,
+            None,
+            "C:/Games/Reappeared",
+        )
+        .with_root_authority(RootAuthority::UserConfirmed)
+        .with_executable_candidate(fresh_candidate.clone())
+        .with_confirmed_executable(fresh_confirmed.clone());
+        let reappeared = reconcile_game_with_catalog(&index, discovered);
+
+        assert_eq!(
+            reappeared.id(),
+            existing.id(),
+            "keep the registered stable id"
+        );
+        assert_eq!(reappeared.identity().launcher(), Launcher::Manual);
+        assert_eq!(reappeared.identity().external_id(), None);
+        assert_eq!(reappeared.identity().title(), "Fresh title");
+        assert_eq!(reappeared.root_authority(), RootAuthority::UserConfirmed);
+        assert_eq!(
+            reappeared.executable_candidates(),
+            &[fresh_candidate, fresh_confirmed.clone()]
+        );
+        assert_eq!(reappeared.confirmed_executable(), Some(&fresh_confirmed));
+        assert!(index.card_facts_changed(&reappeared, &[], &[]));
+        assert!(!index.contains_active_install_path_str("C:/Games/Reappeared"));
     }
 
     #[test]

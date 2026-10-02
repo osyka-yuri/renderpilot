@@ -1,7 +1,10 @@
 use super::*;
 use crate::addons::renodx::test_support::{self, MACHINE_AMD64, PE32_PLUS_MAGIC};
-use renderpilot_application::SharedArtifactRepository;
-use renderpilot_domain::{InstalledAddonHostKind, SharedArtifactKind};
+use renderpilot_application::{GameRepository, SharedArtifactRepository};
+use renderpilot_domain::{
+    GameIdentity, GameInstallation, GameRuntime, InstalledAddonHostKind, Launcher,
+    ManagedAddonFile, ManagedFileBaseline, Platform, Sha256Hash, SharedArtifactKind,
+};
 use tempfile::tempdir;
 
 fn context() -> (tempfile::TempDir, Context) {
@@ -25,6 +28,31 @@ fn write_file(path: &Path, bytes: &[u8]) {
         std::fs::create_dir_all(parent).expect("create parent");
     }
     std::fs::write(path, bytes).expect("write file");
+}
+
+fn seed_active_game(context: &Context, game_id: &GameId, root: &Path) {
+    let exe = root.join("Game.exe");
+    write_file(
+        &exe,
+        &test_support::build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
+    );
+    let game = GameInstallation::new(
+        GameIdentity::new(game_id.clone(), "RenoDX orphan test", Launcher::Manual)
+            .expect("game identity"),
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(root.to_string_lossy()).expect("game root"),
+    )
+    .with_executable_candidate(PathRef::new(exe.to_string_lossy()).expect("game executable"));
+    context.storage().upsert_game(&game).expect("seed game");
+}
+
+fn write_addon_path(game_root: &Path, addon_root: &Path) {
+    let addon_root = addon_root.to_string_lossy().replace('\\', "/");
+    write_file(
+        &game_root.join("ReShade.ini"),
+        format!("[ADDON]\nAddonPath={addon_root}\n").as_bytes(),
+    );
 }
 
 fn full_reshade_host() -> Vec<u8> {
@@ -286,6 +314,92 @@ fn vulkan_adoption_records_registered_exe_without_claiming_shared_layer() {
     );
     assert_eq!(created_names(&record), vec!["renodx-cp2077.addon64"]);
     assert!(record.backed_up_files().is_empty());
+}
+
+#[test]
+fn proxy_orphan_does_not_replace_an_inactive_shared_vulkan_owner() {
+    let (_db_dir, context) = context();
+    let game_dir = tempdir().expect("game dir");
+    let external_dir = tempdir().expect("external owner dir");
+    let game_id = GameId::new("manual:p6b-renodx-retained-owner").expect("game id");
+    seed_active_game(&context, &game_id, game_dir.path());
+    let owner_addon = game_dir.path().join("removed-renodx.addon64");
+    let registered_exe = game_dir.path().join("OldGame.exe");
+    let external_receipt = external_dir.path().join("retained-layer-state.ini");
+    let owner = InstalledAddon::new(
+        game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new(owner_addon.to_string_lossy()).expect("owner addon path"),
+    )
+    .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer)
+    .with_registered_exe_path(
+        PathRef::new(registered_exe.to_string_lossy()).expect("registered executable"),
+    )
+    .try_with_managed_files(vec![ManagedAddonFile::owned(
+        PathRef::new(external_receipt.to_string_lossy()).expect("external receipt path"),
+        ManagedFileBaseline::Absent,
+        Sha256Hash::new("a".repeat(64)).expect("receipt hash"),
+    )])
+    .expect("managed external receipt");
+    context
+        .storage()
+        .upsert_installed_addon(&owner)
+        .expect("seed inactive canonical owner");
+
+    let candidate = OrphanedInstall {
+        game_id: game_id.clone(),
+        game_dir: game_dir.path().to_path_buf(),
+        addon_file: game_dir.path().join("renodx-cp2077.addon64"),
+        host_file: Some(game_dir.path().join("dxgi.dll")),
+        host_kind: InstalledAddonHostKind::Proxy,
+        registered_exe_path: None,
+        reshade_config: test_support::reshade_sources(),
+        game_arch: None,
+        addon_url: None,
+    };
+    write_file(&candidate.addon_file, b"new proxy addon");
+    write_file(
+        candidate.host_file.as_deref().expect("proxy host path"),
+        &full_reshade_host(),
+    );
+    write_addon_path(game_dir.path(), game_dir.path());
+    let candidate_record = build_adopted_record(&candidate).expect("valid proxy candidate");
+    assert!(
+        crate::addons::tool::record_is_active_for_game(&context, &candidate_record)
+            .expect("candidate activity")
+    );
+
+    assert!(
+        records::active_record_of_kind(&context, &game_id, AddonKind::RenoDx)
+            .expect("inactive SharedVulkan owner")
+            .is_none()
+    );
+    assert!(
+        adopt_orphaned(&context, &candidate)
+            .expect("read-side reconciliation")
+            .is_none(),
+        "an orphan candidate must not become authority to replace a retained owner"
+    );
+
+    let persisted = context
+        .storage()
+        .get_installed_addon(&game_id)
+        .expect("raw owner query")
+        .expect("retained owner");
+    assert!(persisted.eq_ignoring_persistence_timestamps(&owner));
+    let expected_registered_exe = registered_exe.to_string_lossy().replace('\\', "/");
+    assert_eq!(
+        persisted
+            .registered_exe_path()
+            .map(|path| path.as_str().to_owned()),
+        Some(expected_registered_exe)
+    );
+    assert_eq!(persisted.managed_files().len(), 1);
+    let expected_receipt = external_receipt.to_string_lossy().replace('\\', "/");
+    assert_eq!(
+        persisted.managed_files()[0].path().as_str().to_owned(),
+        expected_receipt
+    );
 }
 
 fn base_record(host_kind: InstalledAddonHostKind) -> InstalledAddon {

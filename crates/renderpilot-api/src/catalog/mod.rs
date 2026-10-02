@@ -7,6 +7,7 @@
 
 mod cards;
 mod details;
+mod leftovers;
 mod settings;
 
 use std::collections::BTreeSet;
@@ -20,6 +21,9 @@ pub use cards::{
     query_game_cards, refresh_catalog_snapshot_revision, refresh_validated_catalog_snapshot,
 };
 pub use details::get_game_details;
+pub use leftovers::{
+    clean_retired_game_leftovers, leave_retired_game_leftovers, list_retired_game_leftovers,
+};
 pub use settings::{get_catalog_setting, set_catalog_setting, set_game_favorite, set_game_hidden};
 
 /// Whether the GUI surfaces this component in the details projection.

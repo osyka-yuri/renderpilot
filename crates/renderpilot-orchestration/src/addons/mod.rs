@@ -42,6 +42,7 @@
 //! * `vulkan_lock` — cross-game shared-resource mutex (Vulkan layer only)
 //! * `exclusivity` — mutual exclusion policy over registered tools
 //! * `install_guard` — shared exclusivity + torn recovery on install roots
+//! * `external_proxy_owner` — inactive external Proxy receipt policy + release adapter
 //! * `availability_pipeline` — shared availability front half
 //! * `progress` — sequential stages + finalizing phase
 //! * `game_analysis` / `game_context` / `matching` — facts + match rules
@@ -84,6 +85,7 @@ pub mod engine;
 pub mod engine_config;
 pub(crate) mod errors;
 pub(crate) mod exclusivity;
+pub(crate) mod external_proxy_owner;
 pub(crate) mod file_update;
 pub(crate) mod game_analysis;
 pub(crate) mod game_context;
@@ -122,24 +124,11 @@ pub fn addon_supports_deep_check(kind: renderpilot_domain::AddonKind) -> bool {
 #[cfg(test)]
 pub(crate) mod test_support;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// UTF-8 byte-order mark some publishing tools prepend to JSON, which `serde_json`
 /// rejects; stripped at the parse boundary.
 pub(crate) const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
-
-/// Iterates a directory's immediate children, converts each regular-file name
-/// to ASCII lowercase, and returns `true` the moment the predicate accepts one.
-/// Returns `false` when the directory can't be read or no match is found.
-pub(crate) fn any_file_name_matches(dir: &Path, predicate: impl Fn(&str) -> bool) -> bool {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return false;
-    };
-    entries.flatten().any(|entry| {
-        entry.file_type().is_ok_and(|ft| ft.is_file())
-            && predicate(&entry.file_name().to_string_lossy().to_ascii_lowercase())
-    })
-}
 
 /// Converts a slice of [`renderpilot_domain::PathRef`]s into owned [`PathBuf`]s.
 #[must_use]
@@ -166,29 +155,4 @@ pub(crate) fn reconcile_legacy_managed_files_locked(
     registered
         .reconcile_legacy_locked(context, guard, &record)
         .map(Some)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::any_file_name_matches;
-    use tempfile::tempdir;
-
-    #[test]
-    fn file_name_matching_lowercases_regular_files_and_ignores_directories() {
-        let dir = tempdir().expect("tempdir");
-        std::fs::create_dir(dir.path().join("RenoDX-Cp2077.Addon64")).expect("create directory");
-        assert!(!any_file_name_matches(dir.path(), |name| name == "renodx-cp2077.addon64"));
-
-        std::fs::write(dir.path().join("RenoDX-Other.Addon64"), b"x").expect("write match");
-
-        assert!(any_file_name_matches(dir.path(), |name| name == "renodx-other.addon64"));
-    }
-
-    #[test]
-    fn file_name_matching_returns_false_for_a_missing_directory() {
-        let dir = tempdir().expect("tempdir");
-        assert!(!any_file_name_matches(&dir.path().join("missing"), |_| {
-            true
-        }));
-    }
 }

@@ -1,9 +1,9 @@
 use super::*;
 use renderpilot_application::GameRepository;
 use renderpilot_domain::{
-    EngineConfigJournal, GameIdentity, GameInstallation, GameProxyTopology, GameRuntime, Launcher,
-    Platform, ProxyImplementation, ProxyLink, ProxyRootPrestate, RenoDxConfigReceipt,
-    RenoDxSetPathBaseline, RenoDxSetPathValue, Sha256Hash,
+    EngineConfigJournal, EngineConfigReceipt, GameIdentity, GameInstallation, GameProxyTopology,
+    GameRuntime, Launcher, Platform, ProxyImplementation, ProxyLink, ProxyRootPrestate,
+    RenoDxConfigReceipt, RenoDxSetPathBaseline, RenoDxSetPathValue, Sha256Hash,
 };
 
 fn game_id() -> GameId {
@@ -157,7 +157,7 @@ fn engine_config_journal_uses_null_safe_cas_and_survives_regular_upsert() {
     storage.upsert_installed_addon(&addon).expect("upsert");
     assert_eq!(
         storage
-            .engine_config_journal_token(&game_id())
+            .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
             .expect("read"),
         None
     );
@@ -175,7 +175,7 @@ fn engine_config_journal_uses_null_safe_cas_and_survives_regular_upsert() {
     );
     assert_eq!(
         storage
-            .engine_config_journal_token(&game_id())
+            .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
             .expect("read"),
         None
     );
@@ -184,7 +184,7 @@ fn engine_config_journal_uses_null_safe_cas_and_survives_regular_upsert() {
     storage.upsert_installed_addon(&updated).expect("upsert");
     assert_eq!(
         storage
-            .engine_config_journal_token(&game_id())
+            .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
             .expect("read"),
         None
     );
@@ -195,7 +195,7 @@ fn engine_config_journal_uses_null_safe_cas_and_survives_regular_upsert() {
     );
     assert_eq!(
         storage
-            .engine_config_journal_token(&game_id())
+            .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
             .expect("read"),
         None
     );
@@ -252,7 +252,7 @@ fn nonempty_engine_config_journal_survives_upsert_and_exact_cas_delete() {
             .expect("store journal")
     );
     let token = storage
-        .engine_config_journal_token(&game_id())
+        .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
         .expect("read journal")
         .expect("nonempty token");
 
@@ -261,7 +261,16 @@ fn nonempty_engine_config_journal_survives_upsert_and_exact_cas_delete() {
         .expect("upsert must preserve journal");
     assert_eq!(
         storage
-            .engine_config_journal_token(&game_id())
+            .get_installed_addon(&game_id())
+            .expect("hydrate owner")
+            .expect("addon")
+            .engine_config_journal(),
+        Some(&journal),
+        "hydration reads the matching standalone owner"
+    );
+    assert_eq!(
+        storage
+            .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
             .expect("read journal")
             .as_deref(),
         Some(token.as_str())
@@ -288,8 +297,89 @@ fn nonempty_engine_config_journal_survives_upsert_and_exact_cas_delete() {
     );
     assert_eq!(
         storage
-            .engine_config_journal_token(&game_id())
+            .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
             .expect("read cleared journal"),
+        None
+    );
+}
+
+#[test]
+fn standalone_engine_journal_owner_supports_kind_scoped_null_safe_cas_without_addon_row() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let journal = EngineConfigJournal {
+        stable: Some(EngineConfigReceipt {
+            schema_version: 1,
+            path: "C:/Games/CP2077/Engine.ini".to_owned(),
+            file_created: false,
+            encoding: "utf8".to_owned(),
+            before_digest: "0".repeat(64),
+            after_digest: "1".repeat(64),
+            recipe_fingerprint: "2".repeat(64),
+            contributions: Vec::new(),
+            created_headers: Vec::new(),
+            created_header_prefixes: Vec::new(),
+            created_header_groups: Vec::new(),
+            created_header_ordinals: Vec::new(),
+        }),
+        pending: None,
+    };
+    assert!(
+        storage
+            .compare_and_swap_engine_config_journal(
+                &game_id(),
+                AddonKind::RenoDx,
+                None,
+                Some(&journal)
+            )
+            .expect("create standalone owner")
+    );
+    let owner = storage
+        .engine_config_journal_owner(&game_id())
+        .expect("owner read")
+        .expect("standalone owner exists");
+    assert_eq!(owner.kind, AddonKind::RenoDx);
+    assert_eq!(owner.journal, journal);
+    assert_eq!(
+        storage
+            .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
+            .expect("kind-scoped token")
+            .as_deref(),
+        Some(owner.raw_token.as_str())
+    );
+    assert_eq!(
+        storage
+            .engine_config_journal_token(&game_id(), AddonKind::Luma)
+            .expect("other-kind lookup"),
+        None
+    );
+    assert_eq!(
+        storage.list_installed_addons().expect("empty local list"),
+        []
+    );
+    assert!(
+        !storage
+            .compare_and_swap_engine_config_journal(
+                &game_id(),
+                AddonKind::RenoDx,
+                Some("stale"),
+                None,
+            )
+            .expect("stale token")
+    );
+    assert!(
+        storage
+            .compare_and_swap_engine_config_journal(
+                &game_id(),
+                AddonKind::RenoDx,
+                Some(&owner.raw_token),
+                None,
+            )
+            .expect("exact clear")
+    );
+    assert_eq!(
+        storage
+            .engine_config_journal_owner(&game_id())
+            .expect("empty owner"),
         None
     );
 }
@@ -305,9 +395,9 @@ fn non_canonical_engine_config_journal_is_rejected_on_read() {
         .lock()
         .expect("connection")
         .execute(
-            "UPDATE installed_addons
-                SET engine_config_journal_json = '{ \"stable\": null, \"pending\": null }'
-              WHERE game_id = ?1",
+            "INSERT INTO game_engine_config_journals
+                (game_id, addon_kind, journal_json, created_at, updated_at)
+             VALUES (?1, 'renodx', '{ \"stable\": null, \"pending\": null }', 1, 1)",
             rusqlite::params![game_id().as_str()],
         )
         .expect("non-canonical fixture");
@@ -326,15 +416,19 @@ fn empty_engine_config_journal_is_rejected_instead_of_becoming_some_empty_state(
         .lock()
         .expect("connection")
         .execute(
-            "UPDATE installed_addons
-                SET engine_config_journal_json = '{}'
-              WHERE game_id = ?1",
+            "INSERT INTO game_engine_config_journals
+                (game_id, addon_kind, journal_json, created_at, updated_at)
+             VALUES (?1, 'renodx', '{}', 1, 1)",
             rusqlite::params![game_id().as_str()],
         )
         .expect("empty fixture");
 
     assert!(storage.get_installed_addon(&game_id()).is_err());
-    assert!(storage.engine_config_journal_token(&game_id()).is_err());
+    assert!(
+        storage
+            .engine_config_journal_token(&game_id(), AddonKind::RenoDx)
+            .is_err()
+    );
 }
 
 #[test]

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
     sync::{
         Mutex,
@@ -19,6 +20,8 @@ use crate::catalog::auto_scan::{AutoScanBatch, open_auto_scan_batch, scan_auto_i
 /// `root: ""` field.
 #[derive(Debug, Clone, Copy)]
 pub enum GlobalErrorLabel {
+    /// Installation-root reconciliation failure.
+    Presence,
     /// Pruning failure.
     Prune,
     /// Batch open failure.
@@ -28,6 +31,7 @@ pub enum GlobalErrorLabel {
 impl std::fmt::Display for GlobalErrorLabel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Presence => write!(f, "auto-scan:presence"),
             Self::Prune => write!(f, "auto-scan:prune"),
             Self::OpenBatch => write!(f, "auto-scan:open"),
         }
@@ -73,18 +77,24 @@ pub fn scan_auto_libraries_background(context: &crate::Context) -> AutoScanDisco
 
 fn scan_auto_libraries_impl(context: &crate::Context) -> AutoScanDiscoveryResult {
     let _scan_guard = context.catalog_scan_guard();
-    let (library_root_keys, authoritative_root_keys, install_path_keys, installs) =
-        discover_normalized_auto_scan_inputs();
+    let (library_root_keys, install_path_keys, installs) = discover_normalized_auto_scan_inputs();
 
     let mut scan = AutoScanAccumulator::default();
 
-    match super::prune_auto_scan_orphans(
-        context,
-        &library_root_keys,
-        &authoritative_root_keys,
-        &install_path_keys,
-    ) {
-        Ok(removed) => scan.delta.removed_game_ids = removed,
+    match super::super::installation_lifecycle::coordinator::reconcile_registered_roots(context) {
+        Ok(sweep) => {
+            scan.delta.removed_game_ids.extend(sweep.removed_game_ids);
+            scan.errors
+                .extend(sweep.errors.into_iter().map(|error| ScanErrorOutput {
+                    root: error.root,
+                    message: error.message,
+                }));
+        }
+        Err(error) => scan.push_global_error(GlobalErrorLabel::Presence, &error),
+    }
+
+    match super::prune_auto_scan_orphans(context, &library_root_keys, &install_path_keys) {
+        Ok(removed) => scan.delta.removed_game_ids.extend(removed),
         Err(error) => scan.push_global_error(GlobalErrorLabel::Prune, &error),
     }
 
@@ -122,25 +132,12 @@ fn refresh_confirmed_manual_roots(context: &crate::Context, scan: &mut AutoScanA
 
     for game in games {
         let root = PathBuf::from(game.install_path().as_str());
-        if !root.is_dir() {
-            scan.errors.push(ScanErrorOutput {
-                root: normalized_path_string(&root),
-                message: "confirmed manual installation is currently unavailable".to_owned(),
-            });
-            continue;
+        let outcome = super::scan_explicit_install_observational(context, &game);
+        match outcome {
+            Ok(Some(result)) => scan.record_scan_outcome(&root, Ok(vec![result])),
+            Ok(None) => {}
+            Err(error) => scan.push_error(&root, &error),
         }
-        let outcome = super::scan_explicit_install(
-            context,
-            root.clone(),
-            game.id().clone(),
-            game.root_authority(),
-            game.confirmed_executable()
-                .map(|relative| root.join(relative.as_str())),
-            super::ExplicitRootChange::Unchanged,
-            &[],
-        )
-        .map(|result| vec![result]);
-        scan.record_scan_outcome(&root, outcome);
     }
 }
 
@@ -149,14 +146,13 @@ struct AutoScanInstall {
     install: renderpilot_platform_windows::game_libraries::DiscoveredInstall,
 }
 
-fn discover_normalized_auto_scan_inputs()
--> (Vec<String>, Vec<String>, Vec<String>, Vec<AutoScanInstall>) {
+fn discover_normalized_auto_scan_inputs() -> (Vec<String>, Vec<String>, Vec<AutoScanInstall>) {
     use renderpilot_platform_windows::game_libraries::DiscoveredGameSources;
 
     let DiscoveredGameSources {
         installs,
         library_roots,
-        authoritative_library_roots,
+        authoritative_library_roots: _,
     } = renderpilot_platform_windows::game_libraries::discover_game_sources();
 
     let library_root_keys = library_roots
@@ -167,21 +163,12 @@ fn discover_normalized_auto_scan_inputs()
         .iter()
         .map(|install| normalized_path_string(&install.install_path))
         .collect::<Vec<_>>();
-    let authoritative_root_keys = authoritative_library_roots
-        .iter()
-        .map(normalized_path_string)
-        .collect::<Vec<_>>();
     let installs = installs
         .into_iter()
         .map(|install| AutoScanInstall { install })
         .collect();
 
-    (
-        library_root_keys,
-        authoritative_root_keys,
-        install_path_keys,
-        installs,
-    )
+    (library_root_keys, install_path_keys, installs)
 }
 
 /// Drives one auto-scan batch across multiple install directories in parallel.
@@ -311,6 +298,14 @@ impl AutoScanAccumulator {
         sort_and_dedup_game_ids(&mut self.delta.added_game_ids);
         sort_and_dedup_game_ids(&mut self.delta.updated_game_ids);
         sort_and_dedup_game_ids(&mut self.delta.removed_game_ids);
+        let added = self.delta.added_game_ids.iter().collect::<HashSet<_>>();
+        self.delta
+            .updated_game_ids
+            .retain(|game_id| !added.contains(game_id));
+        let updated = self.delta.updated_game_ids.iter().collect::<HashSet<_>>();
+        self.delta
+            .removed_game_ids
+            .retain(|game_id| !added.contains(game_id) && !updated.contains(game_id));
         self.errors
             .sort_by(|left, right| (&left.root, &left.message).cmp(&(&right.root, &right.message)));
         AutoScanDiscoveryResult {
@@ -401,10 +396,11 @@ mod tests {
     fn accumulated_delta_and_partial_errors_have_deterministic_order() {
         let game_a = GameId::new("manual:a").expect("game id");
         let game_b = GameId::new("manual:b").expect("game id");
+        let game_c = GameId::new("manual:c").expect("game id");
         let output = AutoScanAccumulator {
             delta: crate::catalog::CatalogScanDelta {
                 added_game_ids: vec![game_b.clone(), game_a.clone(), game_b],
-                updated_game_ids: vec![game_a.clone(), game_a],
+                updated_game_ids: vec![game_c.clone(), game_a.clone(), game_c, game_a],
                 removed_game_ids: Vec::new(),
             },
             errors: vec![
@@ -429,9 +425,55 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["manual:a", "manual:b"]
         );
-        assert_eq!(output.delta.updated_game_ids.len(), 1);
+        assert_eq!(
+            output
+                .delta
+                .updated_game_ids
+                .iter()
+                .map(GameId::as_str)
+                .collect::<Vec<_>>(),
+            vec!["manual:c"]
+        );
         assert_eq!(output.errors[0].root, "a");
         assert_eq!(output.errors[1].root, "z");
+    }
+
+    #[test]
+    fn lifecycle_absence_removals_survive_prune_results() {
+        let lifecycle_removed = GameId::new("manual:lifecycle-removed").expect("game id");
+        let prune_removed = GameId::new("manual:prune-removed").expect("game id");
+        let game_root = std::path::PathBuf::from("C:/Games/Reappeared");
+        let game = renderpilot_domain::GameInstallation::new(
+            renderpilot_domain::GameIdentity::new(
+                lifecycle_removed.clone(),
+                "Reappeared",
+                renderpilot_domain::Launcher::Manual,
+            )
+            .expect("identity"),
+            renderpilot_domain::Platform::Windows,
+            renderpilot_domain::GameRuntime::NativeWindows,
+            renderpilot_domain::PathRef::new("C:/Games/Reappeared").expect("root"),
+        );
+        let mut scan = AutoScanAccumulator::default();
+        scan.delta
+            .removed_game_ids
+            .extend([lifecycle_removed.clone()]);
+        scan.delta.removed_game_ids.extend([prune_removed.clone()]);
+        scan.record_scan_outcome(
+            &game_root,
+            Ok(vec![crate::catalog::ScanFolderCatalogResult {
+                game,
+                libraries: Vec::new(),
+                change: crate::catalog::CatalogScanChange::Added,
+                consolidation: crate::catalog::ScanConsolidationOutcome::default(),
+                root_correction_recovery_bundle_path: None,
+            }]),
+        );
+        let output = scan.into_output();
+
+        assert_eq!(output.delta.removed_game_ids, vec![prune_removed]);
+        assert_eq!(output.delta.added_game_ids, vec![lifecycle_removed.clone()]);
+        assert_eq!(output.delta.changed_game_ids(), vec![lifecycle_removed]);
     }
 
     #[test]

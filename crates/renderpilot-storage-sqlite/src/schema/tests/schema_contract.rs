@@ -21,9 +21,9 @@ fn apply_rebuilds_table_absent_v19_catalog_to_the_current_contract() {
         .execute_batch("PRAGMA user_version = 19;")
         .expect("schema version should be set");
 
-    apply(&mut connection).expect("v19 catalog should be rebuilt to v20");
+    apply(&mut connection).expect("v19 catalog should be rebuilt to current");
 
-    assert_eq!(CURRENT_SCHEMA_VERSION, 21);
+    assert_eq!(CURRENT_SCHEMA_VERSION, 22);
     assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
     super::super::validation::validate_catalog_schema(&connection)
         .expect("rebuilt catalog should satisfy the canonical contract");
@@ -32,11 +32,19 @@ fn apply_rebuilds_table_absent_v19_catalog_to_the_current_contract() {
         "installed_addons",
         "renodx_config_receipt_json"
     ));
-    assert!(table_has_column(
+    assert!(!table_has_column(
         &connection,
         "installed_addons",
         "engine_config_journal_json"
     ));
+    let journal_table_exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='game_engine_config_journals')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("journal table");
+    assert!(journal_table_exists);
 }
 
 #[test]
@@ -339,7 +347,7 @@ fn apply_backs_up_file_database_before_v15_and_v16_migrations() {
 }
 
 #[test]
-fn v20_to_v21_backup_preserves_discarded_baselines_and_other_data() {
+fn v20_upgrade_backup_preserves_discarded_baselines_and_other_data() {
     let directory = tempfile::tempdir().expect("temporary catalog directory");
     let db_path = directory.path().join("catalog.db");
 
@@ -388,7 +396,7 @@ fn v20_to_v21_backup_preserves_discarded_baselines_and_other_data() {
             )
             .expect("restore v20 shape and seed old state");
 
-        apply(&mut connection).expect("run v20 to v21 migration");
+        apply(&mut connection).expect("run v20 migration chain to current");
         assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
         let old_table_exists: bool = connection
             .query_row(
@@ -419,7 +427,7 @@ fn v20_to_v21_backup_preserves_discarded_baselines_and_other_data() {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.contains(".pre-migration-v21.") && name.ends_with(".bak"))
+                .is_some_and(|name| name.contains(".pre-migration-v22.") && name.ends_with(".bak"))
         })
         .collect();
     assert_eq!(

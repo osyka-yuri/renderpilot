@@ -1,8 +1,16 @@
-//! Shared test fixtures for the addon subsystem: synthetic PE images and zip
-//! archives used by the ReShade fetch tests and each tool's install/fetch tests.
+//! Shared addon fixtures: synthetic PE images, the current RenoDX proxy game,
+//! and zip archives used by ReShade fetch and tool install/fetch tests.
 
+use std::fs;
 use std::io::{Cursor, Write};
+use std::path::Path;
 
+use renderpilot_application::GameRepository;
+use renderpilot_domain::{
+    GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+};
+
+use crate::Context;
 use crate::addons::reshade::types::{ReshadeNightly, ReshadeSourceCatalog, ReshadeStable};
 
 /// Shared ReShade host source catalogue fixture (stable + nightly URLs).
@@ -161,6 +169,46 @@ pub(crate) fn build_pe_with_exports(machine: u16, magic: u16, exports: &[&str]) 
 
     bytes[section_raw_ptr as usize..].copy_from_slice(&section_body);
     bytes
+}
+
+/// Seeds the current AMD64 proxy binding used by RenoDX query tests.
+pub(crate) fn seed_current_proxy_game(context: &Context, game_id: &GameId, root: &Path) {
+    let exe = root.join("Game.exe");
+    fs::write(
+        &exe,
+        build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
+    )
+    .expect("game executable");
+    fs::write(
+        root.join("dxgi.dll"),
+        build_pe_with_exports(
+            MACHINE_AMD64,
+            PE32_PLUS_MAGIC,
+            &[
+                "ReShadeVersion",
+                "ReShadeRegisterAddon",
+                "ReShadeUnregisterAddon",
+                "ReShadeRegisterEvent",
+            ],
+        ),
+    )
+    .expect("compatible ReShade host");
+    let game = GameInstallation::new(
+        GameIdentity::new(
+            game_id.clone(),
+            "RenoDX current proxy fixture",
+            Launcher::Manual,
+        )
+        .expect("game identity"),
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(root.to_string_lossy()).expect("game root"),
+    )
+    .with_executable_candidate(PathRef::new(exe.to_string_lossy()).expect("game exe"));
+    context
+        .storage()
+        .upsert_game(&game)
+        .expect("register active game");
 }
 
 /// Builds a minimal PE with a real `VS_VERSION_INFO` resource proving NVIDIA

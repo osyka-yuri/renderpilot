@@ -40,6 +40,8 @@ pub const RENODX_UPDATE: &str = "renodx_update";
 pub const RENODX_SWITCH_RESHADE_CHANNEL: &str = "renodx_switch_reshade_channel";
 /// Settings-side apply/update of the process-wide shared Vulkan layer.
 pub const SHARED_VULKAN_APPLY: &str = "shared_vulkan_apply";
+/// Per-game unregister of an app from the settings-owned shared Vulkan layer.
+pub const RETIRED_GAME_LEFTOVERS_UNREGISTER: &str = "retired_game_leftovers_unregister";
 /// RenoDX DLSS-Fix companion install.
 pub const RENODX_DLSS_FIX_INSTALL: &str = "renodx_dlss_fix_install";
 /// RenoDX DLSS-Fix companion uninstall.
@@ -88,7 +90,7 @@ pub fn feature_owner(feature: &str) -> Option<MutationFeatureOwner> {
         | RENODX_DLSS_FIX_INSTALL
         | RENODX_DLSS_FIX_UNINSTALL
         | RENODX_DLSS_FIX_UPDATE => Some(RenoDx),
-        SHARED_VULKAN_APPLY => Some(SharedVulkan),
+        SHARED_VULKAN_APPLY | RETIRED_GAME_LEFTOVERS_UNREGISTER => Some(SharedVulkan),
         _ => None,
     }
 }
@@ -136,7 +138,8 @@ pub fn safety_requirement(feature: &str) -> Option<SafetyRequirement> {
         | LUMA_UNINSTALL
         | OPTISCALER_UNINSTALL
         | RENODX_UNINSTALL
-        | RENODX_DLSS_FIX_UNINSTALL => Some(None),
+        | RENODX_DLSS_FIX_UNINSTALL
+        | RETIRED_GAME_LEFTOVERS_UNREGISTER => Some(None),
         _ => Option::None,
     }
 }
@@ -183,6 +186,7 @@ mod tests {
             RENODX_UPDATE,
             RENODX_SWITCH_RESHADE_CHANNEL,
             SHARED_VULKAN_APPLY,
+            RETIRED_GAME_LEFTOVERS_UNREGISTER,
             RENODX_DLSS_FIX_INSTALL,
             RENODX_DLSS_FIX_UNINSTALL,
             RENODX_DLSS_FIX_UPDATE,
@@ -215,6 +219,7 @@ mod tests {
             (RENODX_UPDATE, RenoDx),
             (RENODX_SWITCH_RESHADE_CHANNEL, RenoDx),
             (SHARED_VULKAN_APPLY, SharedVulkan),
+            (RETIRED_GAME_LEFTOVERS_UNREGISTER, SharedVulkan),
             (RENODX_DLSS_FIX_INSTALL, RenoDx),
             (RENODX_DLSS_FIX_UNINSTALL, RenoDx),
             (RENODX_DLSS_FIX_UPDATE, RenoDx),
@@ -246,6 +251,7 @@ mod tests {
             (RENODX_UPDATE, GameWithOptionalSharedVulkan),
             (RENODX_SWITCH_RESHADE_CHANNEL, GameWithOptionalSharedVulkan),
             (SHARED_VULKAN_APPLY, SharedVulkan),
+            (RETIRED_GAME_LEFTOVERS_UNREGISTER, None),
             (RENODX_DLSS_FIX_INSTALL, Game),
             (RENODX_DLSS_FIX_UNINSTALL, None),
             (RENODX_DLSS_FIX_UPDATE, Game),

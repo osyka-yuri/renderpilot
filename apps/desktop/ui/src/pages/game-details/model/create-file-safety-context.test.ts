@@ -780,7 +780,9 @@ describe('createFileSafetyContext', () => {
     });
     host.resolveMutationConfirmation(true, true);
     await expect(generalAction).resolves.toEqual({ gameContextToken: 'persisted-token-1' });
-    await vi.waitFor(() => expect(settingWrites).toHaveLength(1));
+    await vi.waitFor(() => {
+      expect(settingWrites).toHaveLength(1);
+    });
     expect(settingWrites).toEqual([{ key: 'game_file_safety_warning_v1', value: 'true' }]);
     expect(host.getMutationConfirmation()).toBeNull();
 

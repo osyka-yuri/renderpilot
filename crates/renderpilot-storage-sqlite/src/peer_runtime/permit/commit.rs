@@ -317,6 +317,9 @@ fn apply_addon(
         InstalledAddonMutation::Delete(kind) => {
             installed_addons::delete_within_transaction(transaction, game_id, kind)
         }
+        InstalledAddonMutation::ReplaceExpected { .. } => Err(AppError::invalid_input(
+            "expected-owner replacement is only valid through the prepared game file mutation commit",
+        )),
         InstalledAddonMutation::OptiScaler(_) => Err(AppError::invalid_input(
             "shared peer commit cannot carry an OptiScaler aggregate",
         )),

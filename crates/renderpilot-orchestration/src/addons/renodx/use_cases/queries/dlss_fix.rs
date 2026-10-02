@@ -104,6 +104,10 @@ mod tests {
         let root = tempdir().expect("db root");
         let context = Context::open_at(root.path().join("catalog.sqlite")).expect("context");
         let game_id = record.game_id().clone();
+        let game_root = Path::new(record.addon_file().as_str())
+            .parent()
+            .expect("record payload parent");
+        crate::addons::test_support::seed_current_proxy_game(&context, &game_id, game_root);
         context
             .storage()
             .upsert_installed_addon(record)

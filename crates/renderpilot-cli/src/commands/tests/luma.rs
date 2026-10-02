@@ -4,7 +4,7 @@ use renderpilot_orchestration::domain::{
 };
 use tempfile::TempDir;
 
-use super::{CatalogFixture, args};
+use super::{CatalogFixture, args, path_string, sample_game};
 
 struct LumaFixture {
     _game_dir: TempDir,
@@ -44,6 +44,24 @@ impl LumaFixture {
             "zip-digest",
         ))
     }
+
+    fn register_active_game(&self, fixture: &CatalogFixture) {
+        let root = self._game_dir.path();
+        let exe = root.join("LumaTest.exe");
+        std::fs::write(&exe, super::super::test_support::game_executable_pe())
+            .expect("write game executable");
+        std::fs::write(
+            root.join("dxgi.dll"),
+            super::super::test_support::compatible_reshade_proxy_host(),
+        )
+        .expect("write compatible current ReShade Proxy host");
+
+        let game = sample_game(&self.game_id, "Luma CLI status fixture", &path_string(root))
+            .with_executable_candidate(
+                PathRef::new(exe.to_string_lossy()).expect("game executable path"),
+            );
+        fixture.store_game(&game);
+    }
 }
 
 #[test]
@@ -63,6 +81,7 @@ fn luma_status_reports_not_installed_for_a_game_without_an_addon() {
 fn luma_status_reports_installed_after_a_record_is_stored() {
     let luma = LumaFixture::new();
     let fixture = CatalogFixture::new("luma-status-installed");
+    luma.register_active_game(&fixture);
     fixture
         .storage()
         .upsert_installed_addon(&luma.installed_record())

@@ -61,9 +61,39 @@ pub(super) const LIST_GAMES_SQL: &str = concat!(
     "
 );
 
+pub(super) const FIND_ACTIVE_GAME_SQL: &str = concat!(
+    "
+    SELECT
+    ",
+    projection_game_sql!(),
+    "
+    FROM games
+    INNER JOIN installation_availability
+      ON installation_availability.game_id = games.id
+    WHERE games.id = :id AND installation_availability.state = 'active'
+    "
+);
+
+pub(super) const LIST_ACTIVE_GAMES_SQL: &str = concat!(
+    "
+    SELECT
+    ",
+    projection_game_sql!(),
+    "
+    FROM games
+    INNER JOIN installation_availability
+      ON installation_availability.game_id = games.id
+    WHERE installation_availability.state = 'active'
+    ORDER BY games.title, games.id
+    "
+);
+
 pub(super) const LIST_DISTINCT_GAME_LIBRARIES_SQL: &str = "
     SELECT DISTINCT components.technology
     FROM components
+    INNER JOIN installation_availability
+      ON installation_availability.game_id = components.game_id
+     AND installation_availability.state = 'active'
     WHERE trim(components.technology) <> ''
     ORDER BY components.technology
 ";
@@ -71,6 +101,9 @@ pub(super) const LIST_DISTINCT_GAME_LIBRARIES_SQL: &str = "
 pub(super) const LIST_DISTINCT_GAME_LAUNCHERS_SQL: &str = "
     SELECT DISTINCT games.launcher
     FROM games
+    INNER JOIN installation_availability
+      ON installation_availability.game_id = games.id
+     AND installation_availability.state = 'active'
     WHERE trim(games.launcher) <> ''
     ORDER BY games.launcher
 ";

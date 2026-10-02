@@ -54,6 +54,13 @@ function safetyScopeForHost(hostKind: HostKind | null | undefined): MutationSafe
   return hostKind === 'proxy' ? 'game' : 'game_and_shared';
 }
 
+function safetyScopeForInstall(
+  hostKind: HostKind | null | undefined,
+  existingSharedOwner: boolean,
+): MutationSafetyScope {
+  return existingSharedOwner ? 'game_and_shared' : safetyScopeForHost(hostKind);
+}
+
 function plannedInstallHostKind(
   outcome: AvailabilityOutcome | null,
   manualInstallHost: HostKind | null,
@@ -134,8 +141,10 @@ export function createRenoDxHostMutations(options: RenoDxHostMutationOptions) {
     if (!channelIsSupported(channel)) {
       return 'skipped';
     }
-    const safetyScope = safetyScopeForHost(
+    const snapshot = getAvailabilitySnapshot();
+    const safetyScope = safetyScopeForInstall(
       plannedInstallHostKind(getOutcome(), getManualInstallHostKind()),
+      snapshot.installRequiresSharedVulkan,
     );
     return runWithSafetyTokens(gameId, safetyScope, 'gameDetails.renodx.installError', (tokens) =>
       core.runBusyMutation(
@@ -162,8 +171,10 @@ export function createRenoDxHostMutations(options: RenoDxHostMutationOptions) {
     if (!channelIsSupported(channel)) {
       return 'skipped';
     }
-    const safetyScope = safetyScopeForHost(
+    const snapshot = getAvailabilitySnapshot();
+    const safetyScope = safetyScopeForInstall(
       plannedInstallHostKind(getOutcome(), getManualInstallHostKind()),
+      snapshot.installRequiresSharedVulkan,
     );
     return runWithSafetyTokens(gameId, safetyScope, 'gameDetails.renodx.installError', (tokens) =>
       core.runBusyMutation(

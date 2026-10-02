@@ -30,7 +30,11 @@ impl RecordingJournal {
 }
 
 impl EngineConfigJournalStore for MemoryJournal {
-    fn engine_config_journal_token(&self, _game_id: &GameId) -> AppResult<Option<String>> {
+    fn engine_config_journal_token(
+        &self,
+        _game_id: &GameId,
+        _kind: AddonKind,
+    ) -> AppResult<Option<String>> {
         Ok(self.token.borrow().clone())
     }
 
@@ -57,7 +61,11 @@ impl EngineConfigJournalStore for MemoryJournal {
 }
 
 impl EngineConfigJournalStore for RecordingJournal {
-    fn engine_config_journal_token(&self, _game_id: &GameId) -> AppResult<Option<String>> {
+    fn engine_config_journal_token(
+        &self,
+        _game_id: &GameId,
+        _kind: AddonKind,
+    ) -> AppResult<Option<String>> {
         Ok(self.token.borrow().clone())
     }
 
@@ -125,6 +133,106 @@ fn apply_and_release_follow_pending_before_visible_mutation() {
     );
     assert!(!path.exists());
     assert!(store.token.borrow().is_none());
+}
+
+#[test]
+fn canonical_engine_journal_can_be_released_without_an_installed_addon_row() {
+    let temp = tempdir().expect("temp");
+    let path = temp.path().join("Engine.ini");
+    let recipe = super::super::EngineIniRecipe::new(
+        "canonical.owner",
+        1,
+        vec![super::super::EngineIniEntry {
+            section: "SystemSettings".to_owned(),
+            key: "r.AllowHDR".to_owned(),
+            value: "1".to_owned(),
+        }],
+    )
+    .expect("recipe");
+    let recipes = super::super::EngineIniRecipeSet::from_recipes([&recipe]).expect("set");
+    let store = MemoryJournal {
+        token: RefCell::new(None),
+    };
+    let game = GameId::new("manual:canonical-engine-owner").expect("game");
+
+    apply(
+        &store,
+        &game,
+        AddonKind::RenoDx,
+        &path,
+        &recipes,
+        "canonical-owner-apply",
+    )
+    .expect("apply");
+
+    assert_eq!(
+        release_record_by_kind(&store, &game, AddonKind::RenoDx, "canonical-owner-release",)
+            .expect("release canonical owner"),
+        ReleaseOutcome::Released
+    );
+    assert!(!path.exists(), "the persisted target was released");
+    assert!(
+        store.token.borrow().is_none(),
+        "the canonical owner was cleared"
+    );
+}
+
+#[test]
+fn kind_scoped_release_does_not_consume_another_kind_engine_owner() {
+    let temp = tempdir().expect("temp");
+    let context = crate::Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
+    let path = temp.path().join("Engine.ini");
+    let recipe = super::super::EngineIniRecipe::new(
+        "kind.scoped.owner",
+        1,
+        vec![super::super::EngineIniEntry {
+            section: "SystemSettings".to_owned(),
+            key: "r.AllowHDR".to_owned(),
+            value: "1".to_owned(),
+        }],
+    )
+    .expect("recipe");
+    let recipes = super::super::EngineIniRecipeSet::from_recipes([&recipe]).expect("set");
+    let game = GameId::new("manual:kind-scoped-engine-owner").expect("game");
+    apply(
+        context.storage(),
+        &game,
+        AddonKind::RenoDx,
+        &path,
+        &recipes,
+        "kind-scoped-owner-apply",
+    )
+    .expect("apply RenoDX owner");
+    let owner_token = context
+        .storage()
+        .engine_config_journal_token(&game, AddonKind::RenoDx)
+        .expect("RenoDX token")
+        .expect("RenoDX owner");
+    let bytes_before = std::fs::read(&path).expect("Engine.ini");
+
+    assert_eq!(
+        release_record_by_kind(
+            context.storage(),
+            &game,
+            AddonKind::Luma,
+            "wrong-kind-release",
+        )
+        .expect("unrelated kind is a no-op"),
+        ReleaseOutcome::NotConfigured
+    );
+
+    assert_eq!(
+        context
+            .storage()
+            .engine_config_journal_token(&game, AddonKind::RenoDx)
+            .expect("RenoDX token remains")
+            .as_deref(),
+        Some(owner_token.as_str())
+    );
+    assert_eq!(
+        std::fs::read(&path).expect("unchanged Engine.ini"),
+        bytes_before
+    );
 }
 
 #[test]

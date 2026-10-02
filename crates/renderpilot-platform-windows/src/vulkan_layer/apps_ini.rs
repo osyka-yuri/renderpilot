@@ -178,6 +178,69 @@ pub fn plan_unregister_app(
     })
 }
 
+/// Plans replacing one registered executable with another in a single app-list
+/// postimage. The old entry may already be absent; that case remains
+/// idempotent while the new executable is still registered.
+pub fn plan_rebind_app(
+    raw: Option<&[u8]>,
+    old_exe_path: &Path,
+    new_exe_path: &Path,
+) -> Result<AppListPlan, AppListPlanError> {
+    // Preserve the existing registration path's exact no-op behavior when the
+    // persisted owner already names the target executable.
+    if same_path(old_exe_path, new_exe_path) {
+        return plan_register_app(raw, new_exe_path);
+    }
+
+    let parsed = parse_raw(raw)?;
+    // Match plan_register_app's fail-closed path validation even when an
+    // equivalent spelling already occurs in the file.
+    let new_segment = path_for_ini(new_exe_path)?;
+    let mut entries = parsed.entries;
+    let before_len = entries.len();
+    entries.retain(|entry| !same_path(&entry.path, old_exe_path));
+    let removed_old = entries.len() != before_len;
+
+    let mut added_new = false;
+    if !entries
+        .iter()
+        .any(|entry| same_path(&entry.path, new_exe_path))
+    {
+        entries.push(AppEntry {
+            segment: new_segment,
+            path: new_exe_path.to_path_buf(),
+        });
+        added_new = true;
+    }
+    let changed = removed_old || added_new;
+
+    if !changed {
+        return Ok(AppListPlan {
+            change: AppListChange::Unchanged,
+            resulting_apps: entries.into_iter().map(|entry| entry.path).collect(),
+        });
+    }
+
+    let joined = entries
+        .iter()
+        .map(|entry| entry.segment.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+    let replacement = match parsed.apps_line {
+        Some(line) => replace_apps_value(&parsed.content, line, &joined),
+        None => append_apps_line(&parsed.content, &joined),
+    };
+    let resulting_apps = entries.into_iter().map(|entry| entry.path).collect();
+    Ok(AppListPlan {
+        change: if replacement.as_bytes() == raw.unwrap_or_default() {
+            AppListChange::Unchanged
+        } else {
+            AppListChange::Replacement(replacement.into_bytes())
+        },
+        resulting_apps,
+    })
+}
+
 /// Parses a complete app-list byte sequence without touching the filesystem.
 pub fn parse_app_list(raw: &[u8]) -> Result<Vec<PathBuf>, AppListPlanError> {
     Ok(parse_raw(Some(raw))?

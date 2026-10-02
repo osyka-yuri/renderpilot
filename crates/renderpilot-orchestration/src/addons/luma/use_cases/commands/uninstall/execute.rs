@@ -6,7 +6,7 @@ use renderpilot_domain::{AddonKind, GameId, PeerCatalogRollbackClaim};
 use renderpilot_storage_sqlite::ComponentBaselineMutation;
 
 use crate::addons::engine::InstallChanges;
-use crate::addons::luma::install::uninstall_engine_files;
+use crate::addons::luma::install::{uninstall_engine_files, uninstall_engine_files_receipt_only};
 use crate::addons::peer_lifecycle::package::{PeerMutationPackage, PeerMutationRequest};
 use crate::addons::records;
 use crate::game_mutation_lock::GameMutationGuard;
@@ -131,11 +131,7 @@ pub(super) fn execute_uninstall_body(
             tracing::warn!("luma metadata-only uninstall engine cleanup failed: {error}");
         }
     } else {
-        crate::catalog::cascade::apply_cascade_rollback_fs(&apply.rollback_specs)?;
-        for release in &apply.release_plans {
-            release.execute()?;
-        }
-        uninstall_engine_files(&apply.record)?;
+        execute_filesystem_reverse(apply, uninstall_engine_files)?;
     }
     let baseline_mutations = apply
         .rolled_back_ids
@@ -156,6 +152,23 @@ pub(super) fn execute_uninstall_body(
             mutation_id,
         })?;
     Ok(())
+}
+
+pub(super) fn execute_external_owner_release_files(
+    apply: &UninstallApply,
+) -> Result<(), ServiceError> {
+    execute_filesystem_reverse(apply, uninstall_engine_files_receipt_only)
+}
+
+fn execute_filesystem_reverse(
+    apply: &UninstallApply,
+    uninstall_recorded_files: fn(&renderpilot_domain::InstalledAddon) -> Result<(), ServiceError>,
+) -> Result<(), ServiceError> {
+    crate::catalog::cascade::apply_cascade_rollback_fs(&apply.rollback_specs)?;
+    for release in &apply.release_plans {
+        release.execute()?;
+    }
+    uninstall_recorded_files(&apply.record)
 }
 
 pub(super) fn journal_cascade_after_commit(

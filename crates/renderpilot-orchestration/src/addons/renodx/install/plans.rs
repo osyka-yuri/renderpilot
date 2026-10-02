@@ -16,6 +16,77 @@ use crate::addons::reshade::host_policy;
 use crate::addons::reshade::scan as reshade;
 use crate::addons::reshade::update::host_binary_source;
 
+/// Read-only proxy preparation shared by the ordinary split executor and the
+/// combined Shared Vulkan reinstall transaction.
+pub(crate) struct PreparedProxyInstall {
+    roots: crate::addons::reshade::split_install::InstallRoots,
+    unified_ops: Vec<engine::FileOp>,
+    payload_ops: Vec<engine::FileOp>,
+    game_ops: Vec<engine::FileOp>,
+    addon_dir: PathBuf,
+    writes_host: bool,
+    adopted_existing: Vec<PathBuf>,
+    config_receipt: Option<RenoDxConfigReceipt>,
+}
+
+impl PreparedProxyInstall {
+    /// Returns the exact participant plan and record projection, together with
+    /// all roots touched by the existing proxy layout policy.
+    pub(crate) fn into_combined_parts(
+        self,
+        prepared: &PreparedInstall,
+    ) -> Result<(GameParticipantPlan, InstalledAddon, Vec<PathBuf>), ServiceError> {
+        let Self {
+            roots,
+            unified_ops,
+            payload_ops,
+            game_ops,
+            writes_host,
+            adopted_existing,
+            ..
+        } = self;
+        let participants = if roots.is_unified {
+            game_participants::build(
+                &roots.game_dir,
+                InstallPlan {
+                    kind: AddonKind::RenoDx,
+                    ops: unified_ops,
+                },
+            )?
+        } else {
+            let payload = game_participants::build(
+                &roots.addon_dir,
+                InstallPlan {
+                    kind: AddonKind::RenoDx,
+                    ops: payload_ops,
+                },
+            )?;
+            let host = game_participants::build(
+                &roots.game_dir,
+                InstallPlan {
+                    kind: AddonKind::RenoDx,
+                    ops: game_ops,
+                },
+            )?;
+            payload.merge(host)?
+        };
+        let record = build_record(
+            prepared,
+            &roots.addon_dir,
+            writes_host,
+            &adopted_existing,
+            participants.receipt(),
+            participants.config_receipt(),
+        )?;
+        let touched_roots = if roots.is_unified {
+            vec![roots.game_dir]
+        } else {
+            vec![roots.game_dir, roots.addon_dir]
+        };
+        Ok((participants, record, touched_roots))
+    }
+}
+
 /// Installs a Direct3D (proxy-DLL) RenoDX host.
 ///
 /// Refuses if a RenoDX install record already exists here (the caller should
@@ -27,6 +98,45 @@ pub(super) fn install_proxy(
     game_dir: &Path,
     prepared: &PreparedInstall,
 ) -> Result<(InstalledAddon, engine::PendingInstallCommit), ServiceError> {
+    let prepared_proxy = prepare_proxy_install(game_dir, prepared)?;
+    let PreparedProxyInstall {
+        roots,
+        unified_ops,
+        payload_ops,
+        game_ops,
+        addon_dir,
+        writes_host,
+        adopted_existing,
+        config_receipt,
+        ..
+    } = prepared_proxy;
+    let success = run_split_install(
+        &roots,
+        AddonKind::RenoDx,
+        unified_ops,
+        payload_ops,
+        game_ops,
+        PayloadRollback::Flat,
+    )?;
+    let record = build_record(
+        prepared,
+        &addon_dir,
+        writes_host,
+        &adopted_existing,
+        &success.receipt,
+        config_receipt.as_ref(),
+    )?;
+    Ok((record, success.commit))
+}
+
+/// Resolves the ordinary proxy policy and all touched bytes without writing.
+/// The generic split executor still applies ordinary installs; inactive
+/// Shared-Vulkan transitions consume the same plan through their one SVAM
+/// reservation instead.
+pub(crate) fn prepare_proxy_install(
+    game_dir: &Path,
+    prepared: &PreparedInstall,
+) -> Result<PreparedProxyInstall, ServiceError> {
     let host = host_policy::assess(game_dir, &prepared.proxy_dll_name);
     host.ensure_initial_installable(&prepared.proxy_dll_name)?;
     if host.initial_writes_host() && prepared.reshade_dll_bytes.is_empty() {
@@ -46,14 +156,14 @@ pub(super) fn install_proxy(
     let adopted_existing = host.initial_owned_existing_paths(paths.ini_path.as_deref());
     let prepared_ini = ini_op_for_game(game_dir, prepared)?;
     let config_receipt = prepared_ini.as_ref().and_then(|operation| match operation {
-        engine::FileOp::RenoDxConfig { receipt, .. } => Some(receipt),
+        engine::FileOp::RenoDxConfig { receipt, .. } => Some(receipt.clone()),
         _ => None,
     });
-
     let roots = InstallRoots::resolve(game_dir, &host.target_path);
-    let (unified_ops, payload_ops, host_ops) = if roots.is_unified {
+    let writes_host = host.initial_writes_host();
+    let (unified_ops, payload_ops, game_ops) = if roots.is_unified {
         (
-            combined_ops(prepared, host.initial_writes_host(), prepared_ini.as_ref()),
+            combined_ops(prepared, writes_host, prepared_ini.as_ref()),
             Vec::new(),
             Vec::new(),
         )
@@ -61,26 +171,19 @@ pub(super) fn install_proxy(
         (
             Vec::new(),
             vec![addon_op(prepared)],
-            host_ops(prepared, host.initial_writes_host(), prepared_ini.as_ref()),
+            host_ops(prepared, writes_host, prepared_ini.as_ref()),
         )
     };
-    let success = run_split_install(
-        &roots,
-        AddonKind::RenoDx,
+    Ok(PreparedProxyInstall {
+        roots,
         unified_ops,
         payload_ops,
-        host_ops,
-        PayloadRollback::Flat,
-    )?;
-    let record = build_record(
-        prepared,
-        &paths.effective_addon_path,
-        host.initial_writes_host(),
-        &adopted_existing,
-        &success.receipt,
+        game_ops,
+        addon_dir: paths.effective_addon_path,
+        writes_host,
+        adopted_existing,
         config_receipt,
-    )?;
-    Ok((record, success.commit))
+    })
 }
 
 /// Assembles the [`InstalledAddon`] from the engine receipt and the upstream entries
@@ -227,4 +330,113 @@ pub(crate) fn build_vulkan_record(
         participants.receipt(),
         participants.config_receipt(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use renderpilot_domain::GameId;
+    use tempfile::{TempDir, tempdir};
+
+    use super::*;
+
+    fn prepared(game_id: &GameId) -> PreparedInstall {
+        PreparedInstall {
+            game_id: game_id.clone(),
+            host_kind: crate::addons::reshade::proxy::HostKind::Proxy,
+            proxy_dll_name: "dxgi.dll".to_owned(),
+            addon_file_name: "renodx-test.addon64".to_owned(),
+            addon_source_url: "https://example.test/renodx-test.addon64".to_owned(),
+            source_digest: "source-digest".to_owned(),
+            source_etag: None,
+            source_last_modified: None,
+            addon_bytes: b"addon".to_vec(),
+            reshade_dll_bytes: b"reshade-host".to_vec(),
+            reshade_source_url: "https://example.test/reshade.zip".to_owned(),
+            reshade_source_etag: None,
+            reshade_last_modified: None,
+            reshade_digest: "reshade-digest".to_owned(),
+            reshade_channel: Some(crate::addons::reshade::types::ReshadeChannel::Stable),
+            processing_path: crate::addons::renodx::types::RenoDxProcessingPath::Upgrade,
+            renodx_config: None,
+            ini_tweaks: crate::addons::renodx::types::renodx_ini_defaults(),
+        }
+    }
+
+    fn split_proxy_fixture() -> (TempDir, TempDir, PreparedInstall) {
+        let game_dir = tempdir().expect("game root");
+        let addon_dir = tempdir().expect("external AddonPath");
+        let game_id = GameId::new("manual:renodx-proxy-plan").expect("game id");
+        let prepared = prepared(&game_id);
+        fs::write(
+            game_dir.path().join("ReShade.ini"),
+            format!(
+                "[ADDON]\r\nAddonPath={}\r\n[renodx]\r\nSet_Path = custom\r\n",
+                addon_dir.path().display()
+            ),
+        )
+        .expect("seed split AddonPath and config baseline");
+        (game_dir, addon_dir, prepared)
+    }
+
+    #[test]
+    fn split_proxy_read_only_plan_matches_executor_receipts_and_config_projection() {
+        let (game_dir, addon_dir, prepared) = split_proxy_fixture();
+        let proxy_plan =
+            prepare_proxy_install(game_dir.path(), &prepared).expect("read-only proxy plan");
+        let (participants, projected_record, roots) = proxy_plan
+            .into_combined_parts(&prepared)
+            .expect("combined proxy projection");
+        assert!(
+            roots
+                .iter()
+                .any(|root| crate::paths::same_path(root, game_dir.path()))
+        );
+        assert!(
+            roots
+                .iter()
+                .any(|root| crate::paths::same_path(root, addon_dir.path())),
+            "the split AddonPath root must be included in the composed scope: {roots:?}"
+        );
+        let (files, _) = participants.into_parts();
+        assert!(files.iter().any(|file| {
+            crate::paths::same_path(
+                &file.live_path,
+                &addon_dir.path().join("renodx-test.addon64"),
+            ) && file.before.is_none()
+                && file.after.as_deref() == Some(b"addon".as_slice())
+        }));
+        assert!(files.iter().any(|file| {
+            crate::paths::same_path(&file.live_path, &game_dir.path().join("dxgi.dll"))
+                && file.before.is_none()
+                && file.after.as_deref() == Some(b"reshade-host".as_slice())
+        }));
+        assert!(files.iter().any(|file| {
+            crate::paths::same_path(&file.live_path, &game_dir.path().join("ReShade.ini"))
+                && file.before.is_some()
+                && file.after.is_some()
+        }));
+        assert!(projected_record.renodx_config_receipt().is_some());
+        assert!(projected_record.created_files().iter().any(|path| {
+            crate::paths::same_path(
+                Path::new(path.as_str()),
+                &addon_dir.path().join("renodx-test.addon64"),
+            )
+        }));
+
+        let (executed_record, commit) =
+            install_proxy(game_dir.path(), &prepared).expect("ordinary split proxy executor");
+        commit.finish_committed();
+        assert!(executed_record.eq_ignoring_persistence_timestamps(&projected_record));
+        assert!(executed_record.renodx_config_receipt().is_some());
+        assert_eq!(
+            fs::read(addon_dir.path().join("renodx-test.addon64")).expect("external payload"),
+            b"addon"
+        );
+        assert_eq!(
+            fs::read(game_dir.path().join("dxgi.dll")).expect("game host"),
+            b"reshade-host"
+        );
+    }
 }

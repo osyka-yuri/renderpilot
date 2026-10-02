@@ -743,6 +743,7 @@ mod tests {
         let game_dir = tempdir().expect("game dir");
         let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
         let game_id = GameId::new("steam:1091501").expect("game id");
+        crate::addons::test_support::seed_current_proxy_game(&context, &game_id, game_dir.path());
         let addon = game_dir.path().join("renodx-test.addon64");
         let record = InstalledAddon::new(
             game_id,

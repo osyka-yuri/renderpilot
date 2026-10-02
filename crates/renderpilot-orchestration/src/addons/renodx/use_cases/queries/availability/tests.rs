@@ -16,7 +16,8 @@ use renderpilot_domain::{ExeGraphicsInfo, GraphicsApi, Launcher};
 #[cfg(windows)]
 use renderpilot_domain::{
     FileReceipt, GameIdentity, GameInstallation, GameProxyTopology, GameRuntime, InstalledAddon,
-    PathRef, Platform, ProxyImplementation, ProxyLink, ProxyRootPrestate, Sha256Hash,
+    InstalledAddonHostKind, PathRef, Platform, ProxyImplementation, ProxyLink, ProxyRootPrestate,
+    Sha256Hash,
 };
 #[cfg(windows)]
 use tempfile::tempdir;
@@ -48,6 +49,50 @@ fn full_reshade_host_bytes() -> Vec<u8> {
             "ReShadeUnregisterEvent",
         ],
     )
+}
+
+#[cfg(windows)]
+fn seed_availability_game(
+    context: &Context,
+    game_id: &renderpilot_domain::GameId,
+    appid: &str,
+    game_root: &std::path::Path,
+    exe_path: &std::path::Path,
+) {
+    let identity = GameIdentity::new(game_id.clone(), "Cyberpunk 2077", Launcher::Steam)
+        .expect("identity")
+        .with_external_id(appid)
+        .expect("external id");
+    let game = GameInstallation::new(
+        identity,
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(game_root.to_string_lossy().replace('\\', "/")).expect("install path"),
+    )
+    .with_executable_candidate(
+        PathRef::new(exe_path.to_string_lossy().replace('\\', "/")).expect("exe path"),
+    );
+    context.storage().upsert_game(&game).expect("seed game");
+}
+
+#[cfg(windows)]
+fn seed_external_luma_owner(
+    context: &Context,
+    game_id: &renderpilot_domain::GameId,
+    external_dir: &std::path::Path,
+) -> InstalledAddon {
+    let addon_path = external_dir.join("Luma-Cyberpunk.addon");
+    std::fs::write(&addon_path, b"external Luma payload").expect("write external payload");
+    let addon_path = PathRef::new(addon_path.to_string_lossy().replace('\\', "/"))
+        .expect("external add-on path");
+    let record = InstalledAddon::new(game_id.clone(), AddonKind::Luma, addon_path.clone())
+        .with_host_kind(InstalledAddonHostKind::Proxy)
+        .with_created_file(addon_path);
+    context
+        .storage()
+        .upsert_installed_addon(&record)
+        .expect("seed external Luma owner");
+    record
 }
 
 #[test]
@@ -98,6 +143,174 @@ fn manual_install_is_not_offered_for_unsupported_settings() {
     );
 
     assert!(report.is_none());
+}
+
+#[test]
+#[cfg(windows)]
+fn retained_shared_vulkan_owner_requires_shared_install_scope_without_active_payload() {
+    let db_dir = tempdir().expect("db dir");
+    let install_dir = tempdir().expect("install dir");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("steam:1091598").expect("game id");
+    let addon_path = install_dir.path().join("missing-renodx.addon64");
+    let exe_path = install_dir.path().join("Game.exe");
+    context
+        .storage()
+        .upsert_installed_addon(
+            &InstalledAddon::new(
+                game_id.clone(),
+                AddonKind::RenoDx,
+                PathRef::new(addon_path.to_string_lossy().replace('\\', "/")).expect("addon path"),
+            )
+            .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer)
+            .with_registered_exe_path(
+                PathRef::new(exe_path.to_string_lossy().replace('\\', "/"))
+                    .expect("registered executable"),
+            ),
+        )
+        .expect("seed external owner");
+
+    assert!(!addon_path.exists(), "the local payload is absent");
+    assert!(
+        crate::addons::records::active_record_of_kind(&context, &game_id, AddonKind::RenoDx,)
+            .expect("active record query")
+            .is_none(),
+        "the retained host receipt must not be a local installed flag"
+    );
+    assert!(install_requires_shared_vulkan(&context, &game_id).expect("install scope"));
+}
+
+#[test]
+#[cfg(windows)]
+fn engine_config_report_uses_only_matching_standalone_owner_without_addon_record() {
+    use renderpilot_domain::{EngineConfigJournal, EngineConfigTransition};
+
+    fn report_status(
+        owner_kind: AddonKind,
+        pending: bool,
+    ) -> crate::addons::engine_config::service::EngineConfigStatus {
+        let temp = tempdir().expect("temp");
+        let context = Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
+        let game_id =
+            GameId::new(format!("manual:engine-owner-{owner_kind:?}-{pending}")).expect("game id");
+        let owner_target = temp.path().join("external").join("Engine.ini");
+        let report_target = temp.path().join("game-config").join("Engine.ini");
+        std::fs::create_dir_all(owner_target.parent().expect("owner parent"))
+            .expect("owner directory");
+        std::fs::create_dir_all(report_target.parent().expect("report parent"))
+            .expect("report directory");
+
+        let guidance = engine_ini_guidance();
+        let recipe = guidance
+            .engine_ini
+            .as_ref()
+            .expect("typed Engine.ini recipe")
+            .to_engine_config_recipe(&guidance.id)
+            .expect("runtime recipe");
+        let recipes = EngineIniRecipeSet::from_recipes([&recipe]).expect("recipe set");
+        crate::addons::engine_config::service::apply(
+            context.storage(),
+            &game_id,
+            owner_kind,
+            &owner_target,
+            &recipes,
+            "availability-owner-apply",
+        )
+        .expect("persist standalone owner");
+
+        if pending {
+            let owner = context
+                .storage()
+                .engine_config_journal_owner(&game_id)
+                .expect("read canonical owner")
+                .expect("owner");
+            let stable = owner.journal.stable.clone().expect("stable receipt");
+            let pending_journal = EngineConfigJournal {
+                stable: Some(stable.clone()),
+                pending: Some(EngineConfigTransition {
+                    operation_id: "availability-owner-pending".to_owned(),
+                    stage_name: ".renderpilot-engine-availability-owner-pending.stage".to_owned(),
+                    prior: Some(stable.clone()),
+                    after: None,
+                    before_digest: stable.after_digest.clone(),
+                    after_digest: stable.after_digest,
+                }),
+            };
+            assert!(
+                context
+                    .storage()
+                    .compare_and_swap_engine_config_journal(
+                        &game_id,
+                        owner_kind,
+                        Some(&owner.raw_token),
+                        Some(&pending_journal),
+                    )
+                    .expect("save pending owner")
+            );
+        }
+
+        assert!(
+            context
+                .storage()
+                .get_installed_addon(&game_id)
+                .expect("local add-on record")
+                .is_none()
+        );
+        let report = super::engine_config_report(
+            &context,
+            &game_id,
+            AddonKind::RenoDx,
+            &crate::addons::engine_config::EngineIniResolution::ReadyToCreate(report_target),
+            &[guidance],
+        )
+        .expect("Engine.ini availability");
+        report.status
+    }
+
+    assert_eq!(
+        report_status(AddonKind::RenoDx, false),
+        crate::addons::engine_config::service::EngineConfigStatus::NeedsRepair,
+        "a stable RenoDX journal is visible without a local InstalledAddon row"
+    );
+    assert_eq!(
+        report_status(AddonKind::RenoDx, true),
+        crate::addons::engine_config::service::EngineConfigStatus::RecoveryRequired,
+        "a Pending RenoDX journal remains visible without a local row"
+    );
+    assert_eq!(
+        report_status(AddonKind::Luma, false),
+        crate::addons::engine_config::service::EngineConfigStatus::Ready,
+        "a Luma owner is not interpreted as RenoDX ownership"
+    );
+}
+
+#[cfg(windows)]
+fn engine_ini_guidance() -> crate::addons::renodx::types::RenoDxGuidance {
+    use crate::addons::renodx::types::{
+        RenoDxEngineIniEntry, RenoDxEngineIniRecipe, RenoDxEngineIniSection, RenoDxGuidanceKind,
+    };
+
+    crate::addons::renodx::types::RenoDxGuidance {
+        id: "availability.engine.owner".to_owned(),
+        kind: RenoDxGuidanceKind::EngineIni,
+        message_id: "availability.engine.owner".to_owned(),
+        fallback_text: "Apply the reviewed Engine.ini setting.".to_owned(),
+        code: Some("[SystemSettings]\nr.AvailabilityOwner=1".to_owned()),
+        settings: Vec::new(),
+        engine_ini: Some(RenoDxEngineIniRecipe {
+            schema_version: 1,
+            revision: 1,
+            sections: vec![RenoDxEngineIniSection {
+                name: "SystemSettings".to_owned(),
+                entries: vec![RenoDxEngineIniEntry {
+                    key: "r.AvailabilityOwner".to_owned(),
+                    value: "1".to_owned(),
+                }],
+            }],
+        }),
+        url: None,
+        condition: None,
+    }
 }
 
 #[test]
@@ -211,6 +424,7 @@ fn availability_reports_architecture_incompatible_persisted_record_without_promo
         report.has_persisted_record,
         "the RenoDX record is persisted"
     );
+    assert!(!report.install_requires_shared_vulkan);
 }
 
 #[tokio::test]
@@ -297,70 +511,187 @@ async fn availability_auto_adopts_proxy_install_after_db_loss() {
 
 #[tokio::test]
 #[cfg(windows)]
-async fn availability_does_not_adopt_orphan_over_existing_proxy_topology() {
+async fn availability_load_allows_install_with_an_inactive_external_luma_owner() {
     let db_dir = tempdir().expect("db dir");
     let game_dir = tempdir().expect("game dir");
+    let external_dir = tempdir().expect("external AddonPath");
     let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
-    let game_id = GameId::new("steam:1091502").expect("game id");
+    let game_id = renderpilot_domain::GameId::new("steam:1091513").expect("game id");
     let exe_path = game_dir.path().join("Game.exe");
-
     std::fs::write(
         &exe_path,
         build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
     )
     .expect("write exe");
-    std::fs::write(game_dir.path().join("dxgi.dll"), full_reshade_host_bytes())
-        .expect("write host");
-    std::fs::write(game_dir.path().join("renodx-cp2077.addon64"), b"addon").expect("write addon");
-    std::fs::write(
-        game_dir.path().join("ReShade.ini"),
-        "[ADDON]\r\nDisabledAddons=Generic Depth,Effect Runtime Sync\r\n",
-    )
-    .expect("write ini");
+    seed_availability_game(&context, &game_id, "1091500", game_dir.path(), &exe_path);
+    let owner = seed_external_luma_owner(&context, &game_id, external_dir.path());
+    let manifest = manifest(vec![title(
+        "cp2077",
+        "cp2077",
+        Architecture::X64,
+        crate::addons::renodx::types::Status::Working,
+        vec![rule(
+            crate::addons::renodx::types::MatchKind::SteamAppid,
+            "1091500",
+            100,
+        )],
+    )]);
+    let mut reshade_sources = crate::addons::renodx::test_support::reshade_sources();
+    reshade_sources.stable = None;
 
-    let identity = GameIdentity::new(game_id.clone(), "Cyberpunk 2077", Launcher::Steam)
-        .expect("identity")
-        .with_external_id("1091502")
-        .expect("external id");
-    let game = GameInstallation::new(
-        identity,
-        Platform::Windows,
-        GameRuntime::NativeWindows,
-        PathRef::new(game_dir.path().to_string_lossy().replace('\\', "/")).expect("install path"),
-    )
-    .with_executable_candidate(
-        PathRef::new(exe_path.to_string_lossy().replace('\\', "/")).expect("exe path"),
+    let report = load_availability(&context, &manifest, &reshade_sources, &game_id)
+        .await
+        .expect("availability");
+
+    assert!(matches!(
+        report.outcome,
+        AvailabilityOutcome::Installable { .. }
+    ));
+    assert_eq!(report.state, RenoDxInstallState::NotInstalled);
+    assert!(
+        context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("read external owner")
+            .is_some_and(|stored| stored.eq_ignoring_persistence_timestamps(&owner)),
+        "availability leaves the raw external-owner receipt unchanged"
     );
-    context.storage().upsert_game(&game).expect("seed game");
+}
 
-    let root_slot = PathRef::new(
-        game_dir
-            .path()
-            .join("dxgi.dll")
-            .to_string_lossy()
-            .replace('\\', "/"),
+#[tokio::test]
+#[cfg(windows)]
+async fn availability_keeps_unrelated_unmanaged_luma_files_blocking_an_external_owner() {
+    let db_dir = tempdir().expect("db dir");
+    let game_dir = tempdir().expect("game dir");
+    let external_dir = tempdir().expect("external AddonPath");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    let game_id = renderpilot_domain::GameId::new("steam:1091514").expect("game id");
+    let exe_path = game_dir.path().join("Game.exe");
+    std::fs::write(
+        &exe_path,
+        build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
     )
-    .expect("root slot");
-    let topology = GameProxyTopology {
-        id: "topology:availability-aggregate-owner".to_owned(),
-        game_id: game_id.clone(),
-        root_slot: root_slot.clone(),
-        outer: ProxyLink {
-            implementation: ProxyImplementation::OptiScaler,
-            path: root_slot,
-            receipt: FileReceipt::owned(
-                "optiscaler:availability",
-                Sha256Hash::new("a".repeat(64)).expect("digest"),
-            )
-            .expect("receipt"),
-        },
-        downstream: None,
-        downstream_origin: None,
-        root_prestate: ProxyRootPrestate::Absent,
-    };
-    let connection = rusqlite::Connection::open(db_dir.path().join("catalog.sqlite"))
-        .expect("fixture connection");
-    connection
+    .expect("write exe");
+    seed_availability_game(&context, &game_id, "1091500", game_dir.path(), &exe_path);
+    let owner = seed_external_luma_owner(&context, &game_id, external_dir.path());
+    std::fs::write(game_dir.path().join("Luma-untracked.addon"), b"unowned")
+        .expect("write unrelated peer file");
+    let manifest = manifest(vec![title(
+        "cp2077",
+        "cp2077",
+        Architecture::X64,
+        crate::addons::renodx::types::Status::Working,
+        vec![rule(
+            crate::addons::renodx::types::MatchKind::SteamAppid,
+            "1091500",
+            100,
+        )],
+    )]);
+    let mut reshade_sources = crate::addons::renodx::test_support::reshade_sources();
+    reshade_sources.stable = None;
+
+    let report = load_availability(&context, &manifest, &reshade_sources, &game_id)
+        .await
+        .expect("availability");
+
+    assert!(matches!(
+        report.outcome,
+        AvailabilityOutcome::BlockedByOtherAddon {
+            other_kind: AddonKind::Luma,
+            unmanaged: true,
+        }
+    ));
+    assert_eq!(report.state, RenoDxInstallState::NotInstalled);
+    assert!(
+        context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("read external owner")
+            .is_some_and(|stored| stored.eq_ignoring_persistence_timestamps(&owner)),
+        "the blocked peer receipt remains unchanged"
+    );
+}
+
+#[tokio::test]
+#[cfg(windows)]
+async fn availability_does_not_adopt_orphan_over_existing_proxy_topology() {
+    for (game_id_text, with_external_owner) in [("steam:1091502", false), ("steam:1091515", true)] {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new(game_id_text).expect("game id");
+        let exe_path = game_dir.path().join("Game.exe");
+
+        std::fs::write(
+            &exe_path,
+            build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
+        )
+        .expect("write exe");
+        std::fs::write(game_dir.path().join("dxgi.dll"), full_reshade_host_bytes())
+            .expect("write host");
+        std::fs::write(game_dir.path().join("renodx-cp2077.addon64"), b"addon")
+            .expect("write addon");
+        std::fs::write(
+            game_dir.path().join("ReShade.ini"),
+            "[ADDON]\r\nDisabledAddons=Generic Depth,Effect Runtime Sync\r\n",
+        )
+        .expect("write ini");
+
+        let identity = GameIdentity::new(game_id.clone(), "Cyberpunk 2077", Launcher::Steam)
+            .expect("identity")
+            .with_external_id("1091502")
+            .expect("external id");
+        let game = GameInstallation::new(
+            identity,
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(game_dir.path().to_string_lossy().replace('\\', "/"))
+                .expect("install path"),
+        )
+        .with_executable_candidate(
+            PathRef::new(exe_path.to_string_lossy().replace('\\', "/")).expect("exe path"),
+        );
+        context.storage().upsert_game(&game).expect("seed game");
+
+        let external_owner = if with_external_owner {
+            let external_dir = tempdir().expect("external AddonPath");
+            Some(seed_external_luma_owner(
+                &context,
+                &game_id,
+                external_dir.path(),
+            ))
+        } else {
+            None
+        };
+
+        let root_slot = PathRef::new(
+            game_dir
+                .path()
+                .join("dxgi.dll")
+                .to_string_lossy()
+                .replace('\\', "/"),
+        )
+        .expect("root slot");
+        let topology = GameProxyTopology {
+            id: "topology:availability-aggregate-owner".to_owned(),
+            game_id: game_id.clone(),
+            root_slot: root_slot.clone(),
+            outer: ProxyLink {
+                implementation: ProxyImplementation::OptiScaler,
+                path: root_slot,
+                receipt: FileReceipt::owned(
+                    "optiscaler:availability",
+                    Sha256Hash::new("a".repeat(64)).expect("digest"),
+                )
+                .expect("receipt"),
+            },
+            downstream: None,
+            downstream_origin: None,
+            root_prestate: ProxyRootPrestate::Absent,
+        };
+        let connection = rusqlite::Connection::open(db_dir.path().join("catalog.sqlite"))
+            .expect("fixture connection");
+        connection
         .execute(
             "INSERT INTO game_proxy_topologies (game_id, id, topology_json) VALUES (?1, ?2, ?3)",
             rusqlite::params![
@@ -371,39 +702,59 @@ async fn availability_does_not_adopt_orphan_over_existing_proxy_topology() {
         )
         .expect("topology");
 
-    let manifest = manifest(vec![title(
-        "cp2077",
-        "cp2077",
-        Architecture::X64,
-        crate::addons::renodx::types::Status::Working,
-        vec![rule(
-            crate::addons::renodx::types::MatchKind::SteamAppid,
-            "1091502",
-            100,
-        )],
-    )]);
-    let mut reshade_sources = crate::addons::renodx::test_support::reshade_sources();
-    reshade_sources.stable = None;
+        let manifest = manifest(vec![title(
+            "cp2077",
+            "cp2077",
+            Architecture::X64,
+            crate::addons::renodx::types::Status::Working,
+            vec![rule(
+                crate::addons::renodx::types::MatchKind::SteamAppid,
+                "1091502",
+                100,
+            )],
+        )]);
+        let mut reshade_sources = crate::addons::renodx::test_support::reshade_sources();
+        reshade_sources.stable = None;
 
-    let report = load_availability(&context, &manifest, &reshade_sources, &game_id)
-        .await
-        .expect("availability remains queryable");
-    assert!(matches!(report.state, RenoDxInstallState::NotInstalled));
-    assert!(
-        context
+        let report = load_availability(&context, &manifest, &reshade_sources, &game_id)
+            .await
+            .expect("availability remains queryable");
+        assert!(matches!(report.state, RenoDxInstallState::NotInstalled));
+        let raw_owner = context
             .storage()
             .get_installed_addon(&game_id)
-            .expect("get record")
-            .is_none(),
-        "aggregate-owned topology must not be independently adopted"
-    );
-    assert_eq!(
-        context
-            .storage()
-            .get_proxy_topology(&game_id)
-            .expect("get topology"),
-        Some(topology)
-    );
+            .expect("get record");
+        if let Some(external_owner) = external_owner {
+            assert!(matches!(
+                report.outcome,
+                AvailabilityOutcome::BlockedByOtherAddon {
+                    other_kind: AddonKind::Luma,
+                    unmanaged: false,
+                }
+            ));
+            assert!(
+                raw_owner.is_some_and(|stored| {
+                    stored.eq_ignoring_persistence_timestamps(&external_owner)
+                }),
+                "the external peer receipt remains authoritative with a proxy topology"
+            );
+        } else {
+            assert!(raw_owner.is_none(), "the original fixture has no raw owner");
+        }
+        assert!(
+            records::record_of_kind(&context, &game_id, AddonKind::RenoDx)
+                .expect("get RenoDX record")
+                .is_none(),
+            "the local orphan is not adopted over the topology"
+        );
+        assert_eq!(
+            context
+                .storage()
+                .get_proxy_topology(&game_id)
+                .expect("get topology"),
+            Some(topology)
+        );
+    }
 }
 
 #[test]

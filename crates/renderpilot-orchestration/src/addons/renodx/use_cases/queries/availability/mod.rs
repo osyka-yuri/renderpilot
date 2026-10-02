@@ -1,5 +1,7 @@
 //! Queries RenoDX availability for a specific game.
-use renderpilot_domain::{AddonKind, Architecture, GameId, RenoDxInstallState};
+use renderpilot_domain::{
+    AddonKind, Architecture, GameId, InstalledAddonHostKind, RenoDxInstallState,
+};
 
 use crate::Context;
 use crate::ServiceError;
@@ -47,7 +49,7 @@ pub async fn load_availability(
         analyze_and_resolve,
     )?;
     reconcile::maybe_adopt(context, &mut preflight, reshade_sources, game_id)?;
-    build_report(preflight, manifest, reshade_sources)
+    build_report(context, game_id, preflight, manifest, reshade_sources)
 }
 
 /// Pure preview of whether RenoDX can be installed for the game. Never changes
@@ -67,10 +69,12 @@ pub(crate) fn availability(
         manifest,
         analyze_and_resolve,
     )?;
-    build_report(preflight, manifest, reshade_sources)
+    build_report(context, game_id, preflight, manifest, reshade_sources)
 }
 
 fn build_report(
+    context: &Context,
+    game_id: &GameId,
     preflight: AvailabilityPreflight<RenoDxResolution>,
     manifest: &RenoDxManifest,
     reshade_sources: &ReshadeSourceCatalog,
@@ -84,8 +88,10 @@ fn build_report(
         engine_config_resolution,
     } = preflight;
     let engine_config = engine_config_report(
+        context,
+        game_id,
+        AddonKind::RenoDx,
         &engine_config_resolution,
-        record.as_ref(),
         guidance_for_resolution(&resolution),
     )?;
     // Active status is deliberately stricter than persisted ownership. Read
@@ -93,6 +99,7 @@ fn build_report(
     // preserves whether persistence still contains the RenoDX record.
     let has_persisted_record =
         crate::addons::records::record_of_kind(context, game_id, AddonKind::RenoDx)?.is_some();
+    let install_requires_shared_vulkan = install_requires_shared_vulkan(context, game_id)?;
     let mut host_report =
         host_report::reshade_report(&analysis, &resolution, record.as_ref(), reshade_sources);
     if blocked.is_none() && matches!(&resolution, RenoDxResolution::UnsupportedSettings) {
@@ -180,10 +187,22 @@ fn build_report(
         reshade_stable_supported: reshade_sources.supports_channel(ReshadeChannel::Stable),
         renodx_addon: host_report.addon,
         install_torn,
+        install_requires_shared_vulkan,
         outcome,
         manual_install,
         vulkan_layer: vulkan::layer_report(),
     })
+}
+
+fn install_requires_shared_vulkan(
+    context: &Context,
+    game_id: &GameId,
+) -> Result<bool, ServiceError> {
+    Ok(
+        crate::addons::records::record_of_kind(context, game_id, AddonKind::RenoDx)?.is_some_and(
+            |record| record.host_kind() == Some(InstalledAddonHostKind::SharedVulkanLayer),
+        ),
+    )
 }
 
 fn guidance_for_resolution(
@@ -200,8 +219,10 @@ fn guidance_for_resolution(
 }
 
 fn engine_config_report(
+    context: &Context,
+    game_id: &GameId,
+    kind: AddonKind,
     resolution: &crate::addons::engine_config::EngineIniResolution,
-    record: Option<&renderpilot_domain::InstalledAddon>,
     guidance: &[crate::addons::renodx::types::RenoDxGuidance],
 ) -> Result<EngineConfigAvailability, ServiceError> {
     let manual_only = guidance.iter().any(|item| {
@@ -227,11 +248,16 @@ fn engine_config_report(
                 .map_err(|error| ServiceError::invalid_input(error.to_string()))?,
         )
     };
+    let owner = context.storage().engine_config_journal_owner(game_id)?;
+    let journal = owner
+        .as_ref()
+        .filter(|owner| owner.kind == kind)
+        .map(|owner| &owner.journal);
     Ok(service::inspect_availability(
         resolution,
         recipe_set.as_ref(),
         manual_only,
-        record.and_then(|value| value.engine_config_journal()),
+        journal,
     ))
 }
 

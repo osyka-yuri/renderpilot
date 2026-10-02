@@ -131,6 +131,14 @@ pub(super) fn assess(
     if !storage.pending_file_mutations_for_game(game_id)?.is_empty() {
         blockers.insert(RootCorrectionBlockerKind::PendingRecovery);
     }
+    if let Some(owner) = storage.engine_config_journal_owner(game_id)? {
+        if owner.journal.is_pending() {
+            blockers.insert(RootCorrectionBlockerKind::PendingRecovery);
+        }
+        if !engine_config_owner_belongs_to_root(&owner, selected_root) {
+            blockers.insert(RootCorrectionBlockerKind::InstalledAddon);
+        }
+    }
     if let Some(addon) = storage.get_installed_addon(game_id)?
         && !addon_belongs_to_root(&addon, selected_root)
     {
@@ -164,6 +172,23 @@ pub(super) fn assess(
         cleanup_actions,
         blockers,
     })
+}
+
+fn engine_config_owner_belongs_to_root(
+    owner: &renderpilot_storage_sqlite::EngineConfigJournalOwner,
+    root: &str,
+) -> bool {
+    let journal = &owner.journal;
+    journal
+        .stable
+        .iter()
+        .chain(
+            journal
+                .pending
+                .iter()
+                .flat_map(|pending| pending.prior.iter().chain(pending.after.iter())),
+        )
+        .all(|receipt| path_belongs_to_root(&receipt.path, root))
 }
 
 fn component_belongs_to_root(component: &LibraryComponent, root: &str) -> bool {
@@ -540,6 +565,51 @@ mod tests {
                 RootCorrectionBlockerKind::PendingRecovery,
                 RootCorrectionBlockerKind::InstalledAddon,
             ]
+        );
+    }
+
+    #[test]
+    fn standalone_engine_owner_outside_selected_root_blocks_root_correction() {
+        let fixture = fixture(&["Selected/Game.exe"]);
+        let engine_ini = fixture._temp.path().join("AppData").join("Engine.ini");
+        std::fs::create_dir_all(engine_ini.parent().expect("Engine.ini parent"))
+            .expect("Engine.ini directory");
+        let recipe = crate::addons::engine_config::EngineIniRecipe::new(
+            "root.correction.test",
+            1,
+            vec![crate::addons::engine_config::EngineIniEntry {
+                section: "SystemSettings".to_owned(),
+                key: "r.AllowHDR".to_owned(),
+                value: "1".to_owned(),
+            }],
+        )
+        .expect("recipe");
+        let recipes = crate::addons::engine_config::EngineIniRecipeSet::from_recipes([&recipe])
+            .expect("recipes");
+        crate::addons::engine_config::service::apply(
+            fixture.context.storage(),
+            fixture.game.id(),
+            AddonKind::Luma,
+            &engine_ini,
+            &recipes,
+            "root-correction-engine-owner",
+        )
+        .expect("standalone Engine.ini owner");
+
+        let result = assessment(&fixture, &[]);
+
+        assert_eq!(result.status, RootCorrectionStatus::Blocked);
+        assert_eq!(
+            result.blockers,
+            vec![RootCorrectionBlockerKind::InstalledAddon]
+        );
+        assert!(
+            fixture
+                .context
+                .storage()
+                .get_installed_addon(fixture.game.id())
+                .expect("local add-on record")
+                .is_none()
         );
     }
 

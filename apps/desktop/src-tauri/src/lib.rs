@@ -267,6 +267,9 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::inspect_game_install,
         commands::add_game,
         commands::remove_game_from_catalog,
+        commands::list_retired_game_leftovers,
+        commands::clean_retired_game_leftovers,
+        commands::leave_retired_game_leftovers,
         commands::scan_auto_libraries,
         commands::start_background_refresh,
         // Remote CDN manifests (shell Refresh force path)

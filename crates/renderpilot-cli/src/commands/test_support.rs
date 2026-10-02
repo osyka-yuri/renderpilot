@@ -203,6 +203,99 @@ pub(super) fn path_string(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
+/// Builds a current ReShade Proxy host with the export evidence used by the
+/// orchestration scanner. CLI status fixtures use this to distinguish a
+/// physically present host from a persisted HostBinary origin receipt.
+pub(super) fn compatible_reshade_proxy_host() -> Vec<u8> {
+    let pe_offset = 0x80usize;
+    let coff_offset = pe_offset + 4;
+    let optional_header_offset = coff_offset + 20;
+    let optional_header_size = 0xF0usize;
+    let section_table_offset = optional_header_offset + optional_header_size;
+    let headers_end = section_table_offset + 40;
+    let section_rva = 0x1000u32;
+    let section_raw_ptr = headers_end.div_ceil(0x200) * 0x200;
+    let exports = [
+        "ReShadeVersion",
+        "ReShadeRegisterAddon",
+        "ReShadeUnregisterAddon",
+        "ReShadeRegisterEvent",
+    ];
+
+    let mut section = vec![0u8; 40 + exports.len() * 4 * 2 + exports.len() * 2];
+    let functions_offset = 40;
+    let names_offset = functions_offset + exports.len() * 4;
+    let ordinals_offset = names_offset + exports.len() * 4;
+    let mut name_rvas = Vec::with_capacity(exports.len());
+    for name in exports {
+        name_rvas.push(section_rva + section.len() as u32);
+        section.extend_from_slice(name.as_bytes());
+        section.push(0);
+    }
+    let function_stub_rva = section_rva + section.len() as u32;
+    section.push(0xC3);
+
+    for (index, name_rva) in name_rvas.iter().enumerate() {
+        let name_offset = names_offset + index * 4;
+        section[name_offset..name_offset + 4].copy_from_slice(&name_rva.to_le_bytes());
+        let function_offset = functions_offset + index * 4;
+        section[function_offset..function_offset + 4]
+            .copy_from_slice(&function_stub_rva.to_le_bytes());
+        let ordinal_offset = ordinals_offset + index * 2;
+        section[ordinal_offset..ordinal_offset + 2].copy_from_slice(&(index as u16).to_le_bytes());
+    }
+    section[20..24].copy_from_slice(&(exports.len() as u32).to_le_bytes());
+    section[24..28].copy_from_slice(&(exports.len() as u32).to_le_bytes());
+    section[28..32].copy_from_slice(&(section_rva + functions_offset as u32).to_le_bytes());
+    section[32..36].copy_from_slice(&(section_rva + names_offset as u32).to_le_bytes());
+    section[36..40].copy_from_slice(&(section_rva + ordinals_offset as u32).to_le_bytes());
+
+    let mut bytes = vec![0u8; section_raw_ptr + section.len()];
+    bytes[..2].copy_from_slice(b"MZ");
+    bytes[0x3C..0x40].copy_from_slice(&(pe_offset as u32).to_le_bytes());
+    bytes[pe_offset..pe_offset + 4].copy_from_slice(b"PE\0\0");
+    bytes[coff_offset..coff_offset + 2].copy_from_slice(&0x8664u16.to_le_bytes());
+    bytes[coff_offset + 2..coff_offset + 4].copy_from_slice(&1u16.to_le_bytes());
+    bytes[coff_offset + 16..coff_offset + 18]
+        .copy_from_slice(&(optional_header_size as u16).to_le_bytes());
+    bytes[optional_header_offset..optional_header_offset + 2]
+        .copy_from_slice(&0x20Bu16.to_le_bytes());
+    bytes[optional_header_offset + 108..optional_header_offset + 112]
+        .copy_from_slice(&16u32.to_le_bytes());
+    let export_entry = optional_header_offset + 112;
+    bytes[export_entry..export_entry + 4].copy_from_slice(&section_rva.to_le_bytes());
+    bytes[export_entry + 4..export_entry + 8].copy_from_slice(&40u32.to_le_bytes());
+    bytes[section_table_offset..section_table_offset + 8].copy_from_slice(b".edata\0\0");
+    bytes[section_table_offset + 8..section_table_offset + 12]
+        .copy_from_slice(&(section.len() as u32).to_le_bytes());
+    bytes[section_table_offset + 12..section_table_offset + 16]
+        .copy_from_slice(&section_rva.to_le_bytes());
+    bytes[section_table_offset + 16..section_table_offset + 20]
+        .copy_from_slice(&(section.len() as u32).to_le_bytes());
+    bytes[section_table_offset + 20..section_table_offset + 24]
+        .copy_from_slice(&(section_raw_ptr as u32).to_le_bytes());
+    bytes[section_raw_ptr..].copy_from_slice(&section);
+    bytes
+}
+
+/// Builds a valid AMD64 PE header for a registered game's executable fixture.
+pub(super) fn game_executable_pe() -> Vec<u8> {
+    let pe_offset = 0x80usize;
+    let coff_offset = pe_offset + 4;
+    let optional_header_offset = coff_offset + 20;
+    let optional_header_size = 0xF0usize;
+    let mut bytes = vec![0u8; optional_header_offset + optional_header_size];
+    bytes[..2].copy_from_slice(b"MZ");
+    bytes[0x3C..0x40].copy_from_slice(&(pe_offset as u32).to_le_bytes());
+    bytes[pe_offset..pe_offset + 4].copy_from_slice(b"PE\0\0");
+    bytes[coff_offset..coff_offset + 2].copy_from_slice(&0x8664u16.to_le_bytes());
+    bytes[coff_offset + 16..coff_offset + 18]
+        .copy_from_slice(&(optional_header_size as u16).to_le_bytes());
+    bytes[optional_header_offset..optional_header_offset + 2]
+        .copy_from_slice(&0x20Bu16.to_le_bytes());
+    bytes
+}
+
 pub(super) fn sample_component(
     component_id: &str,
     game_id: &str,

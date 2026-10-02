@@ -9,6 +9,7 @@ use renderpilot_domain::{
     ComponentId, ComponentRollbackBaseline, GameId, InstalledAddon, LibraryComponent,
     OptiScalerInstallState, normalized_path_key,
 };
+use renderpilot_storage_sqlite::EngineConfigJournalOwner;
 
 use crate::ServiceError;
 
@@ -24,6 +25,8 @@ pub(in crate::catalog) struct ManagedGameStateInventory {
     pub orphaned_component_ids: BTreeSet<ComponentId>,
     /// Installed add-on aggregate, when present.
     pub addon: Option<InstalledAddon>,
+    /// Independent canonical Engine.ini owner, when present.
+    pub engine_config_owner: Option<EngineConfigJournalOwner>,
     /// Dedicated OptiScaler aggregate, when present.
     pub optiscaler_state: Option<OptiScalerInstallState>,
     /// A generic OptiScaler row is never a valid substitute for the dedicated
@@ -44,6 +47,7 @@ impl ManagedGameStateInventory {
         self.pending_recovery_count == 0
             && self.component_ids.is_empty()
             && self.addon.is_none()
+            && self.engine_config_owner.is_none()
             && self.optiscaler_state.is_none()
             && self.malformed_optiscaler_addon.is_none()
             && self.nvapi_claim_count == 0
@@ -80,6 +84,7 @@ pub(in crate::catalog) fn inventory(
         }
         other => (other, None),
     };
+    let engine_config_owner = storage.engine_config_journal_owner(game_id)?;
     let nvapi_claims = storage.list_nvapi_setting_claims_for_game(game_id.as_str())?;
     let nvapi_owned_profile = storage.get_nvapi_owned_profile(game_id.as_str())?;
     let target_ids = nvapi_claims
@@ -119,6 +124,7 @@ pub(in crate::catalog) fn inventory(
         component_baselines,
         orphaned_component_ids,
         addon,
+        engine_config_owner,
         optiscaler_state: storage.get_optiscaler_install_state(game_id)?,
         malformed_optiscaler_addon,
         nvapi_claim_count: nvapi_claims.len(),

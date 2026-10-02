@@ -25,8 +25,12 @@ use super::{
 /// the exact persisted JSON token and must not deserialize/reserialize it
 /// between the read and CAS calls.
 pub trait EngineConfigJournalStore {
-    /// Reads the exact nullable journal token for one installed add-on.
-    fn engine_config_journal_token(&self, game_id: &GameId) -> AppResult<Option<String>>;
+    /// Reads the exact nullable journal token for one add-on kind.
+    fn engine_config_journal_token(
+        &self,
+        game_id: &GameId,
+        kind: AddonKind,
+    ) -> AppResult<Option<String>>;
 
     /// Replaces the token only when the expected raw token still matches.
     fn compare_and_swap_engine_config_journal(
@@ -39,8 +43,12 @@ pub trait EngineConfigJournalStore {
 }
 
 impl EngineConfigJournalStore for renderpilot_storage_sqlite::SqliteStorage {
-    fn engine_config_journal_token(&self, game_id: &GameId) -> AppResult<Option<String>> {
-        renderpilot_storage_sqlite::SqliteStorage::engine_config_journal_token(self, game_id)
+    fn engine_config_journal_token(
+        &self,
+        game_id: &GameId,
+        kind: AddonKind,
+    ) -> AppResult<Option<String>> {
+        renderpilot_storage_sqlite::SqliteStorage::engine_config_journal_token(self, game_id, kind)
     }
 
     fn compare_and_swap_engine_config_journal(
@@ -166,27 +174,32 @@ pub fn release_record<S: EngineConfigJournalStore>(
     record: &renderpilot_domain::InstalledAddon,
     operation_id: &str,
 ) -> Result<ReleaseOutcome, crate::ServiceError> {
-    // The installed row may have been read before a durable apply finished.
-    // Recover first, then read the journal token again: the storage token is
-    // the authoritative lifecycle state, not the caller's stale row copy.
-    recover_pending(store, game_id, record.kind())
+    release_record_by_kind(store, game_id, record.kind(), operation_id)
+}
+
+/// Releases an independently owned Engine.ini contribution by its canonical
+/// add-on kind. The target is still derived from the persisted receipt, so the
+/// caller cannot redirect cleanup by supplying a replacement path.
+pub fn release_record_by_kind<S: EngineConfigJournalStore>(
+    store: &S,
+    game_id: &GameId,
+    kind: AddonKind,
+    operation_id: &str,
+) -> Result<ReleaseOutcome, crate::ServiceError> {
+    // Finish any durable transition first, then read the journal again. The
+    // canonical storage token is the authoritative lifecycle state.
+    recover_pending(store, game_id, kind)
         .map_err(|error| crate::ServiceError::command_failed(error.to_string()))?;
     let raw = store
-        .engine_config_journal_token(game_id)
+        .engine_config_journal_token(game_id, kind)
         .map_err(|error| crate::ServiceError::command_failed(error.to_string()))?;
-    let journal = parse_journal(record.kind(), raw.as_deref())
+    let journal = parse_journal(kind, raw.as_deref())
         .map_err(|error| crate::ServiceError::command_failed(error.to_string()))?;
     let Some(stable) = journal.stable.as_ref() else {
         return Ok(ReleaseOutcome::NotConfigured);
     };
-    release(
-        store,
-        game_id,
-        record.kind(),
-        Path::new(&stable.path),
-        operation_id,
-    )
-    .map_err(|error| crate::ServiceError::command_failed(error.to_string()))
+    release(store, game_id, kind, Path::new(&stable.path), operation_id)
+        .map_err(|error| crate::ServiceError::command_failed(error.to_string()))
 }
 
 /// Fail-closed service error.  Publication errors are kept distinct from
@@ -560,7 +573,7 @@ pub fn recover_pending<S: EngineConfigJournalStore>(
     kind: AddonKind,
 ) -> Result<RecoveryOutcome, EngineConfigServiceError> {
     let raw = store
-        .engine_config_journal_token(game_id)
+        .engine_config_journal_token(game_id, kind)
         .map_err(storage_error)?;
     let journal = parse_journal(kind, raw.as_deref())?;
     let Some(pending) = journal.pending.as_ref() else {
@@ -641,7 +654,7 @@ pub fn apply<S: EngineConfigJournalStore>(
 ) -> Result<ApplyOutcome, EngineConfigServiceError> {
     ensure_operation_id(operation_id)?;
     let raw = store
-        .engine_config_journal_token(game_id)
+        .engine_config_journal_token(game_id, kind)
         .map_err(storage_error)?;
     let prior = parse_journal(kind, raw.as_deref())?;
     if prior.is_pending() {
@@ -715,7 +728,7 @@ pub fn release<S: EngineConfigJournalStore>(
 ) -> Result<ReleaseOutcome, EngineConfigServiceError> {
     ensure_operation_id(operation_id)?;
     let raw = store
-        .engine_config_journal_token(game_id)
+        .engine_config_journal_token(game_id, kind)
         .map_err(storage_error)?;
     let prior = parse_journal(kind, raw.as_deref())?;
     if prior.is_pending() {

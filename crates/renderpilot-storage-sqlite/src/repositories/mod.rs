@@ -9,7 +9,9 @@ pub mod game_covers;
 mod game_mutations;
 pub mod game_ui_state;
 mod games;
+mod installation_availability;
 pub(crate) mod installed_addons;
+mod local_cleanup_owners;
 pub mod nvapi;
 mod observation;
 pub(crate) mod observations;
@@ -136,6 +138,9 @@ pub use game_mutations::{
     OptiScalerAggregateMutation, OptiScalerAuxiliaryPreservation, OptiScalerPeerMutation,
     OptiScalerRetainedClaim,
 };
+pub use installation_availability::{InstallationAvailability, InstallationAvailabilityState};
+pub use installed_addons::EngineConfigJournalOwner;
+pub use local_cleanup_owners::LocalCleanupOwners;
 pub use observations::{
     AuthorityCas, CatalogReadiness, CatalogReadyProjection, ObservationOwner, StoredFileObservation,
 };
@@ -343,7 +348,8 @@ impl SqliteStorage {
         &self,
         unit: CompleteScanWriteUnit<'_>,
     ) -> AppResult<CatalogReadyProjection> {
-        self.with_transaction(|transaction| {
+        let (ready, reactivated) = self.with_transaction(|transaction| {
+            let absent_revision = prepare_absent_scan_reactivation(transaction, unit.game.id())?;
             games::upsert_game_within_transaction(transaction, unit.game)?;
             let current = observations::readiness_within_transaction(transaction, unit.game.id())?;
             if current.authority_epoch() != unit.authority.expected_epoch() {
@@ -370,8 +376,21 @@ impl SqliteStorage {
                 unit.game.id(),
                 unit.observations,
             )?;
-            complete_authority_within_transaction(transaction, unit.game.id(), unit.authority)
-        })
+            if let Some(revision) = absent_revision {
+                installation_availability::set_active_within_transaction(
+                    transaction,
+                    unit.game.id(),
+                    revision,
+                )?;
+            }
+            let ready =
+                complete_authority_within_transaction(transaction, unit.game.id(), unit.authority)?;
+            Ok((ready, absent_revision.is_some()))
+        })?;
+        if reactivated {
+            self.invalidate_catalog_projection();
+        }
+        Ok(ready)
     }
 
     /// Complete scan publication with the catalog's proven consolidation plan.
@@ -381,10 +400,11 @@ impl SqliteStorage {
         plan: &ConsolidationPlan,
         expected_conflicts: &ConsolidationConflictSummary,
     ) -> AppResult<ConsolidatedScanWriteReport> {
-        self.with_transaction(|transaction| {
+        let (report, reactivated) = self.with_transaction(|transaction| {
             transaction
                 .pragma_update(None, "defer_foreign_keys", "ON")
                 .map_err(storage_error)?;
+            let absent_revision = prepare_absent_scan_reactivation(transaction, unit.game.id())?;
             games::upsert_game_within_transaction(transaction, unit.game)?;
             let current = observations::readiness_within_transaction(transaction, unit.game.id())?;
             if current.authority_epoch() != unit.authority.expected_epoch() {
@@ -409,15 +429,29 @@ impl SqliteStorage {
                 unit.game.id(),
                 unit.observations,
             )?;
+            if let Some(revision) = absent_revision {
+                installation_availability::set_active_within_transaction(
+                    transaction,
+                    unit.game.id(),
+                    revision,
+                )?;
+            }
             let consolidation = consolidation::apply(transaction, plan)?;
             consolidation::verify_foreign_keys(transaction)?;
             let _ =
                 complete_authority_within_transaction(transaction, unit.game.id(), unit.authority)?;
-            Ok(ConsolidatedScanWriteReport {
-                scan,
-                consolidation,
-            })
-        })
+            Ok((
+                ConsolidatedScanWriteReport {
+                    scan,
+                    consolidation,
+                },
+                absent_revision.is_some(),
+            ))
+        })?;
+        if reactivated {
+            self.invalidate_catalog_projection();
+        }
+        Ok(report)
     }
 
     /// Persists a full installation scan and a proven legacy-card
@@ -569,6 +603,32 @@ fn complete_authority_within_transaction(
             "complete scan publication did not produce ready authority",
         )),
     }
+}
+
+fn prepare_absent_scan_reactivation(
+    transaction: &Transaction<'_>,
+    game_id: &renderpilot_domain::GameId,
+) -> AppResult<Option<u64>> {
+    let Some(availability) =
+        installation_availability::availability_within_transaction(transaction, game_id)?
+    else {
+        return Ok(None);
+    };
+    if !availability.is_absent() {
+        return Ok(None);
+    }
+    let registered = games::find_game_in_connection(transaction, game_id)?.ok_or_else(|| {
+        renderpilot_application::AppError::storage_failed(
+            "absent installation registration disappeared before scan publication",
+        )
+    })?;
+    installation_availability::collect_absent_local_state_within_transaction(
+        transaction,
+        game_id,
+        &renderpilot_domain::InstallRoot::new(registered.install_path().clone()),
+        false,
+    )?;
+    Ok(Some(availability.revision()))
 }
 
 #[cfg(test)]

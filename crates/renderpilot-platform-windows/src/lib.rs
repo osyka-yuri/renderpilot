@@ -26,9 +26,9 @@ pub use engine_layout::{
 pub use executable_detection::{
     ExecutableCandidate, ExecutableDetectionReport, RejectionReason, detect_executable_candidates,
     inspect_executable_candidates, inspect_executable_candidates_bounded,
-    inspect_executable_candidates_complete, is_accepted_root_game_executable,
-    is_bound_shipping_target, is_readable_windows_pe_executable, is_shipping_binary_name,
-    strip_shipping_suffix,
+    inspect_executable_candidates_complete, inspect_executable_candidates_complete_strict,
+    is_accepted_root_game_executable, is_bound_shipping_target, is_readable_windows_pe_executable,
+    is_shipping_binary_name, strip_shipping_suffix,
 };
 #[cfg(windows)]
 pub use game_libraries::launcher_launch_executable;

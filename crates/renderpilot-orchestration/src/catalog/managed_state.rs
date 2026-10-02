@@ -1,7 +1,7 @@
 //! Inventory and inverse-action planning for managed state owned by one game.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{
     AddonKind, ComponentId, GameId, InstalledAddon, InstalledAddonHostKind, NormalizedPathRelation,
@@ -22,6 +22,7 @@ pub(super) enum ManagedInverseAction {
     ReleaseRedundantComponentBaseline(ComponentId),
     UninstallOptiScaler,
     UninstallAddon(AddonKind),
+    ReleaseEngineJournal(AddonKind),
     RestoreNvapi,
 }
 
@@ -48,6 +49,9 @@ impl ManagedInverseAction {
             }
             Self::UninstallOptiScaler => "OptiScaler add-on uninstall".to_owned(),
             Self::UninstallAddon(kind) => format!("{} add-on uninstall", addon_kind_name(*kind)),
+            Self::ReleaseEngineJournal(kind) => {
+                format!("{} Engine.ini owner release", addon_kind_name(*kind))
+            }
             Self::RestoreNvapi => "NVIDIA setting claim restore".to_owned(),
         }
     }
@@ -117,6 +121,26 @@ impl ManagedCleanupPlan {
                 action: "OptiScaler add-on uninstall".to_owned(),
                 reason: error.to_string(),
             })?;
+        let engine_config_paths = inventory
+            .engine_config_owner
+            .as_ref()
+            .map(|owner| engine_config_paths(game_id, owner))
+            .transpose()?
+            .unwrap_or_default();
+        let engine_config_targets = engine_config_paths
+            .iter()
+            .map(|path| normalized_path_key(&path.to_string_lossy()))
+            .collect::<BTreeSet<_>>();
+        let release_engine_kind = inventory
+            .engine_config_owner
+            .as_ref()
+            .filter(|owner| {
+                inventory
+                    .addon
+                    .as_ref()
+                    .is_none_or(|addon| addon.kind() != owner.kind)
+            })
+            .map(|owner| owner.kind);
 
         let shared_renodx = match inventory.addon.as_ref() {
             Some(addon) if addon.kind() == AddonKind::RenoDx => match addon.host_kind() {
@@ -265,10 +289,26 @@ impl ManagedCleanupPlan {
                     ));
                 }
             }
+            for target in engine_targets.intersection(&engine_config_targets) {
+                ambiguous_targets.insert(format!(
+                    "{} add-on <> Engine.ini owner: {target}",
+                    addon_kind_name(addon.kind())
+                ));
+            }
+        }
+
+        for (component_id, targets) in &component_targets {
+            for target in targets.intersection(&engine_config_targets) {
+                ambiguous_targets.insert(format!(
+                    "{} <> Engine.ini owner: {target}",
+                    component_id.as_str()
+                ));
+            }
         }
 
         if let Some(footprint) = optiscaler_footprint.as_ref() {
             ambiguous_targets.extend(optiscaler_collisions(&component_targets, footprint));
+            ambiguous_targets.extend(engine_config_collisions(&engine_config_targets, footprint));
         }
 
         if !ambiguous_targets.is_empty() {
@@ -276,6 +316,7 @@ impl ManagedCleanupPlan {
                 &component_plans,
                 inventory.addon.as_ref(),
                 optiscaler_footprint.as_ref(),
+                &engine_config_paths,
             );
             let targets: Vec<_> = ambiguous_targets.into_iter().collect();
             let recovery_bundle = super::recovery_bundle::create_managed_cleanup_recovery_bundle(
@@ -304,6 +345,9 @@ impl ManagedCleanupPlan {
         }));
         if let Some(addon) = inventory.addon {
             actions.push(ManagedInverseAction::UninstallAddon(addon.kind()));
+        }
+        if let Some(kind) = release_engine_kind {
+            actions.push(ManagedInverseAction::ReleaseEngineJournal(kind));
         }
         if inventory.nvapi_claim_count > 0 {
             actions.push(ManagedInverseAction::RestoreNvapi);
@@ -354,6 +398,63 @@ fn optiscaler_collisions(
     collisions
 }
 
+fn engine_config_paths(
+    game_id: &GameId,
+    owner: &renderpilot_storage_sqlite::EngineConfigJournalOwner,
+) -> Result<Vec<PathBuf>, ServiceError> {
+    let mut paths = Vec::new();
+    let journal = &owner.journal;
+    for receipt in journal.stable.iter().chain(
+        journal
+            .pending
+            .iter()
+            .flat_map(|pending| pending.prior.iter().chain(pending.after.iter())),
+    ) {
+        paths.push(PathBuf::from(&receipt.path));
+    }
+    if let Some(pending) = &journal.pending {
+        let receipt = pending
+            .after
+            .as_ref()
+            .or(pending.prior.as_ref())
+            .ok_or_else(|| {
+                invalid_managed_addon_inventory(
+                    game_id,
+                    "pending Engine.ini owner has no persisted target",
+                )
+            })?;
+        let parent = Path::new(&receipt.path).parent().ok_or_else(|| {
+            invalid_managed_addon_inventory(game_id, "pending Engine.ini target has no parent")
+        })?;
+        paths.push(parent.join(&pending.stage_name));
+    }
+    Ok(paths)
+}
+
+fn engine_config_collisions(
+    engine_targets: &BTreeSet<String>,
+    footprint: &crate::addons::optiscaler::OptiScalerManagedCleanupFootprint,
+) -> BTreeSet<String> {
+    let mut collisions = BTreeSet::new();
+    for target in engine_targets {
+        for footprint_path in footprint
+            .exact_mutations
+            .iter()
+            .chain(&footprint.removed_directories)
+        {
+            if normalized_path_relation(target, &footprint_path.to_string_lossy())
+                != NormalizedPathRelation::Disjoint
+            {
+                collisions.insert(format!(
+                    "Engine.ini owner <> OptiScaler: {target} ({})",
+                    footprint_path.display()
+                ));
+            }
+        }
+    }
+    collisions
+}
+
 fn addon_engine_targets(addon: &InstalledAddon) -> BTreeSet<String> {
     addon
         .created_files()
@@ -367,6 +468,7 @@ fn cleanup_associated_paths(
     component_plans: &[super::execute::ManagedComponentRollbackPlan],
     addon: Option<&InstalledAddon>,
     optiscaler_footprint: Option<&crate::addons::optiscaler::OptiScalerManagedCleanupFootprint>,
+    engine_config_paths: &[PathBuf],
 ) -> Vec<PathBuf> {
     let mut paths = component_plans
         .iter()
@@ -392,6 +494,7 @@ fn cleanup_associated_paths(
         paths.extend(footprint.exact_mutations.iter().cloned());
         paths.extend(footprint.removed_directories.iter().cloned());
     }
+    paths.extend(engine_config_paths.iter().cloned());
     paths.sort();
     paths.dedup();
     paths

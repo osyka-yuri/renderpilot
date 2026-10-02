@@ -34,6 +34,7 @@ pub(super) struct PersistScanRequest<'a> {
     pub root_correction_recovery_bundle_path: Option<String>,
     pub prefetched_catalog_index: Option<&'a CatalogInstallIndex>,
     pub consolidation_candidates: &'a [GameId],
+    pub reactivating_from_absence: bool,
 }
 
 pub(super) fn persist_scan_result(
@@ -50,6 +51,7 @@ pub(super) fn persist_scan_result(
         root_correction_recovery_bundle_path,
         prefetched_catalog_index,
         consolidation_candidates,
+        reactivating_from_absence,
     } = request;
     let owned_catalog_index;
     let catalog_index = if let Some(index) = prefetched_catalog_index {
@@ -59,14 +61,24 @@ pub(super) fn persist_scan_result(
         &owned_catalog_index
     };
 
-    let existed = catalog_index.contains_install_path_str(game.install_path().as_str());
-    let game = reconcile_game_with_catalog(catalog_index, game);
+    let existed = !reactivating_from_absence
+        && catalog_index.contains_active_install_path_str(game.install_path().as_str());
+    let game = if reactivating_from_absence {
+        super::reconcile::reconcile_reappeared_game_with_catalog(catalog_index, game)
+    } else {
+        reconcile_game_with_catalog(catalog_index, game)
+    };
     // This must run before any component-row replacement. Xiph admission
     // checks every detected layout against existing immutable rollback state.
-    xiph_admission::admit_xiph_components(storage, &game, components)?;
+    if reactivating_from_absence {
+        xiph_admission::admit_reactivated_xiph_components(components)?;
+    } else {
+        xiph_admission::admit_xiph_components(storage, &game, components)?;
+    }
     let artifacts = build_library_artifacts(game.id(), &libraries)?;
     let observations = build_game_observations(game.id(), &libraries)?;
-    let mut changed = catalog_index.card_facts_changed(&game, components, &artifacts);
+    let mut changed = reactivating_from_absence
+        || catalog_index.card_facts_changed(&game, components, &artifacts);
     let (consolidation_plan, retained_candidate_game_ids) =
         prove_consolidation_plan(catalog_index, &game, components, consolidation_candidates);
     let conflicts = storage.inspect_consolidation_conflicts(&consolidation_plan)?;
@@ -129,9 +141,11 @@ pub(super) fn persist_scan_result(
         storage.replace_complete_game_observations(game.id(), &observations, authority)?;
     }
 
-    let generation_before_recovery = storage.catalog_generation();
-    recovery::recover_orphaned_backups(storage, game.id(), components)?;
-    changed |= storage.catalog_generation() != generation_before_recovery;
+    if !reactivating_from_absence {
+        let generation_before_recovery = storage.catalog_generation();
+        recovery::recover_orphaned_backups(storage, game.id(), components)?;
+        changed |= storage.catalog_generation() != generation_before_recovery;
+    }
 
     Ok(ScanFolderCatalogResult {
         game,
@@ -353,6 +367,10 @@ fn components_represent_same_files(
     destination_files.sort();
     source_files == destination_files
 }
+
+#[cfg(test)]
+#[path = "persist/tests.rs"]
+mod tests;
 
 #[cfg(all(test, not(windows)))]
 mod non_windows_tests {

@@ -634,6 +634,71 @@ fn app_planner_returns_true_byte_noop_for_case_insensitive_existing_path() {
 }
 
 #[test]
+fn app_rebind_keeps_the_new_executable_without_an_empty_last_app_postimage() {
+    let raw = b"; keep\r\nApps=C:\\Games\\old.exe\r\nTail=keep\r\n";
+    let plan = plan_rebind_app(
+        Some(raw),
+        Path::new(r"C:\Games\old.exe"),
+        Path::new(r"C:\Games\new.exe"),
+    )
+    .expect("rebind plan");
+
+    assert_eq!(
+        plan.change,
+        AppListChange::Replacement(b"; keep\r\nApps=C:\\Games\\new.exe\r\nTail=keep\r\n".to_vec())
+    );
+    assert_eq!(
+        plan.resulting_apps,
+        vec![PathBuf::from(r"C:\Games\new.exe")]
+    );
+}
+
+#[test]
+fn app_rebind_preserves_equivalent_new_entry_and_is_idempotent_when_old_is_absent() {
+    let raw = b"Apps=C:\\Games\\old.exe,C:\\Games\\NEW.exe\n";
+    let plan = plan_rebind_app(
+        Some(raw),
+        Path::new(r"c:\games\old.EXE"),
+        Path::new(r"c:\games\new.exe"),
+    )
+    .expect("old removed while existing new spelling is preserved");
+
+    assert_eq!(
+        plan.change,
+        AppListChange::Replacement(b"Apps=C:\\Games\\NEW.exe\n".to_vec())
+    );
+    assert_eq!(
+        plan.resulting_apps,
+        vec![PathBuf::from(r"C:\Games\NEW.exe")]
+    );
+
+    let old_absent = plan_rebind_app(
+        Some(b"Apps=C:\\Games\\new.exe\n"),
+        Path::new(r"C:\Games\old.exe"),
+        Path::new(r"C:\Games\NEW.exe"),
+    )
+    .expect("old owner is already absent");
+    assert_eq!(old_absent.change, AppListChange::Unchanged);
+}
+
+#[test]
+fn app_rebind_uses_the_existing_comparator_for_same_executable() {
+    let raw = b"Apps=C:\\Games\\DOOM.exe\r\n";
+    let plan = plan_rebind_app(
+        Some(raw),
+        Path::new(r"c:\games\doom.EXE"),
+        Path::new(r"C:\Games\doom.exe"),
+    )
+    .expect("same executable");
+
+    assert_eq!(plan.change, AppListChange::Unchanged);
+    assert_eq!(
+        plan.resulting_apps,
+        vec![PathBuf::from(r"C:\Games\DOOM.exe")]
+    );
+}
+
+#[test]
 fn app_planner_keeps_empty_apps_value_and_unknown_content_on_unregister() {
     let raw = b"# comment\nApps=C:\\Games\\DOOM.exe\nUnknown=value\n";
     let plan = plan_unregister_app(Some(raw), Path::new(r"C:\Games\DOOM.exe")).unwrap();

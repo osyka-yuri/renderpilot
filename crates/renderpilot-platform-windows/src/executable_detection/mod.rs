@@ -130,6 +130,18 @@ pub fn inspect_executable_candidates_complete(install_dir: &Path) -> ExecutableD
     inspect_executable_candidates_with_walker(install_dir, InstallTreeWalker::full())
 }
 
+/// Performs a strict complete walk for an installation boundary decision.
+///
+/// Unlike the advisory complete walk, the strict walk preserves every
+/// reachable directory branch and reports reparse points or inaccessible
+/// entries as incomplete evidence. It still performs no content hashing.
+#[must_use]
+pub fn inspect_executable_candidates_complete_strict(
+    install_dir: &Path,
+) -> ExecutableDetectionReport {
+    inspect_executable_candidates_with_walker(install_dir, InstallTreeWalker::full_strict())
+}
+
 /// Performs a complete executable walk with an explicit entry budget and
 /// cooperative cancellation.
 ///

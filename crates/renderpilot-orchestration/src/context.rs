@@ -5,11 +5,15 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 mod caches;
+mod leftovers;
 mod snapshot_cache;
 
 use self::caches::{BackgroundRefreshGate, GameDetailsCache, ReplacementUniverseCache};
+use self::leftovers::RetiredLeftoversIntentCache;
 use self::snapshot_cache::CatalogSnapshotCache;
 use crate::peer_mutation_executor::PeerMutationExecutor;
+
+pub(crate) use self::leftovers::{IssuedRetiredLeftoversIntent, RetiredLeftoversObservation};
 
 type DeveloperModeStatusProvider = dyn Fn() -> DeveloperModeStatus + Send + Sync;
 
@@ -22,6 +26,7 @@ pub struct Context {
     replacement_universe_cache: ReplacementUniverseCache,
     game_details_cache: GameDetailsCache,
     background_refresh_gate: BackgroundRefreshGate,
+    retired_leftovers_intents: RetiredLeftoversIntentCache,
     developer_mode_status_provider: Arc<DeveloperModeStatusProvider>,
 }
 
@@ -100,6 +105,7 @@ impl Context {
             replacement_universe_cache: ReplacementUniverseCache::default(),
             game_details_cache: GameDetailsCache::default(),
             background_refresh_gate: BackgroundRefreshGate::default(),
+            retired_leftovers_intents: RetiredLeftoversIntentCache::default(),
             developer_mode_status_provider: Arc::new(
                 renderpilot_platform_windows::developer_mode_status,
             ),
@@ -145,6 +151,32 @@ impl Context {
         self.catalog_scan
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Replaces the one issued retired-leftovers intent for a game.
+    pub(crate) fn issue_retired_leftovers_intent(
+        &self,
+        game_id: renderpilot_domain::GameId,
+        intent: IssuedRetiredLeftoversIntent,
+    ) {
+        self.retired_leftovers_intents.issue(game_id, intent);
+    }
+
+    /// Consumes a game's issued intent without holding the cache lock during
+    /// subsequent storage, filesystem, or mutation-boundary work.
+    pub(crate) fn consume_retired_leftovers_intent(
+        &self,
+        game_id: &renderpilot_domain::GameId,
+    ) -> Option<IssuedRetiredLeftoversIntent> {
+        self.retired_leftovers_intents.consume(game_id)
+    }
+
+    /// Removes intents for games that no longer have a current proposal.
+    pub(crate) fn retain_retired_leftovers_intents(
+        &self,
+        game_ids: &std::collections::HashSet<renderpilot_domain::GameId>,
+    ) {
+        self.retired_leftovers_intents.retain_games(game_ids);
     }
 
     pub(crate) fn catalog_snapshot(

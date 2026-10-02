@@ -51,6 +51,15 @@ pub enum InstalledAddonMutation<'a> {
     Upsert(&'a InstalledAddon),
     /// Delete the selected kind for the commit's game.
     Delete(AddonKind),
+    /// Replace one exact inactive owner after the caller's prepared filesystem
+    /// mutation has completed. This is the only admitted cross-kind file-row
+    /// transition; standalone Engine.ini ownership is not changed.
+    ReplaceExpected {
+        /// Complete durable owner observed before native preparation.
+        expected: &'a InstalledAddon,
+        /// Replacement owner after the prepared native effects are verified.
+        replacement: &'a InstalledAddon,
+    },
     /// Closed OptiScaler aggregate transition. The peer receipt, when any,
     /// is nested in this variant and cannot be committed independently.
     OptiScaler(OptiScalerAggregateMutation<'a>),
@@ -248,6 +257,40 @@ impl SqliteStorage {
                         kind,
                     )?;
                 }
+                InstalledAddonMutation::ReplaceExpected {
+                    expected,
+                    replacement,
+                } => {
+                    installed_addons::ensure_independent_peer_mutation_allowed(
+                        transaction,
+                        commit.game_id,
+                        expected.kind(),
+                    )?;
+                    installed_addons::ensure_independent_peer_mutation_allowed(
+                        transaction,
+                        commit.game_id,
+                        replacement.kind(),
+                    )?;
+                    if commit.mutation_id.is_none() {
+                        return Err(renderpilot_application::AppError::invalid_input(
+                            "expected-owner replacement requires a prepared file mutation",
+                        ));
+                    }
+                    if expected.game_id() != commit.game_id
+                        || replacement.game_id() != commit.game_id
+                    {
+                        return Err(renderpilot_application::AppError::invalid_input(
+                            "expected owner and replacement must belong to the commit game",
+                        ));
+                    }
+                    if expected.kind() == AddonKind::OptiScaler
+                        || replacement.kind() == AddonKind::OptiScaler
+                    {
+                        return Err(renderpilot_application::AppError::invalid_input(
+                            "OptiScaler cannot use expected-owner add-on replacement",
+                        ));
+                    }
+                }
                 InstalledAddonMutation::Keep
                 | InstalledAddonMutation::OptiScaler(_) => {}
             }
@@ -276,6 +319,14 @@ impl SqliteStorage {
                     !commit.baseline_mutations.is_empty(),
                 )
             }).transpose()?;
+            if matches!(commit.addon, InstalledAddonMutation::ReplaceExpected { .. })
+                && prepared_binding
+                    != Some(pending_file_mutations::PreparedMutationCommitBinding::CatalogInvalidated)
+            {
+                return Err(renderpilot_application::AppError::storage_failed(
+                    "expected-owner replacement requires an invalidated catalog prepared-file fence",
+                ));
+            }
             let skip_absent_empty_component_replacement = matches!(
                 (prepared_binding, commit.component_set),
                 (
@@ -354,6 +405,17 @@ impl SqliteStorage {
                 }
                 InstalledAddonMutation::Delete(kind) => {
                     installed_addons::delete_within_transaction(transaction, commit.game_id, kind)?;
+                }
+                InstalledAddonMutation::ReplaceExpected {
+                    expected,
+                    replacement,
+                } => {
+                    installed_addons::replace_expected_within_transaction(
+                        transaction,
+                        commit.game_id,
+                        expected,
+                        replacement,
+                    )?;
                 }
                 InstalledAddonMutation::OptiScaler(mutation) => {
                     apply_optiscaler_transition(transaction, commit.game_id, mutation)?;

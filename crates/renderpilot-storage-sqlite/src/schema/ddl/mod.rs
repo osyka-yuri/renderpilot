@@ -10,6 +10,8 @@
 //! SQL snapshot of CURRENT.
 
 pub(super) mod common;
+pub(super) mod engine_config_journals;
+pub(super) mod installation_availability;
 pub(super) mod nvapi_profile_management;
 pub(super) mod observations;
 pub(super) mod optiscaler_state;
@@ -52,6 +54,8 @@ pub(super) fn compose_baseline() -> String {
     let observations = observations::SQL;
     let optiscaler_state = optiscaler_state::baseline_sql();
     let nvapi_profile_management = nvapi_profile_management::baseline_sql();
+    let engine_config_journals = engine_config_journals::SQL;
+    let installation_availability = installation_availability::SQL;
 
     let mut sql = String::with_capacity(
         BASELINE_HEADER.len()
@@ -66,6 +70,8 @@ pub(super) fn compose_baseline() -> String {
             + observations.len()
             + optiscaler_state.len()
             + nvapi_profile_management.len()
+            + engine_config_journals.len()
+            + installation_availability.len()
             + 8,
     );
     sql.push_str(BASELINE_HEADER.trim_start());
@@ -91,6 +97,10 @@ pub(super) fn compose_baseline() -> String {
     sql.push_str(optiscaler_state);
     sql.push('\n');
     sql.push_str(nvapi_profile_management);
+    sql.push('\n');
+    sql.push_str(engine_config_journals);
+    sql.push('\n');
+    sql.push_str(installation_availability);
     sql.push('\n');
     sql
 }

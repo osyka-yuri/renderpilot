@@ -12,7 +12,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use super::apps_ini::{
-    AppListChange, AppListPlan, AppListPlanError, plan_register_app, plan_unregister_app,
+    AppListChange, AppListPlan, AppListPlanError, plan_rebind_app as plan_app_rebind,
+    plan_register_app, plan_unregister_app,
 };
 use super::manifest::layer_manifest_json;
 #[cfg(windows)]
@@ -105,6 +106,17 @@ pub struct SharedVulkanLayerObservation {
     pub registry: RegistryValueState,
 }
 
+impl SharedVulkanLayerObservation {
+    /// Classifies unregistering an app without constructing a mutation plan.
+    /// Parse failures retain the same error as the unregister planner.
+    pub fn unregister_app_outcome(
+        &self,
+        exe_path: &Path,
+    ) -> Result<AppUnregisterOutcome, LayerPlannerError> {
+        plan_unregister_app_observed(self, exe_path).map(|app| app.outcome)
+    }
+}
+
 /// Reads all canonical shared-layer participants and the complete directory
 /// entry set.  A read error is returned rather than interpreted as absence.
 pub fn observe_shared_vulkan_layer(
@@ -164,10 +176,15 @@ pub fn active_registry_value() -> RegistryValueState {
 pub enum LayerPlanOperation {
     /// Install/refresh canonical files and register one game executable.
     InstallAndRegister,
+    /// Install/refresh canonical files and atomically replace one tracked app
+    /// executable with another.
+    InstallAndRebindApp,
     /// Refresh canonical files and registration while preserving app tracking.
     Refresh,
     /// Add one executable to app tracking only.
     RegisterApp,
+    /// Atomically replace one tracked executable without changing the layer.
+    RebindApp,
     /// Remove one executable, and remove the canonical layer only when it was
     /// proven to be the last tracked executable.
     UnregisterApp,
@@ -286,8 +303,41 @@ pub fn plan_install_and_register(
     dll_bytes: &[u8],
     exe_path: &Path,
 ) -> Result<SharedVulkanLayerPlan, LayerPlannerError> {
-    let manifest = canonical_manifest_bytes().map_err(LayerPlannerError::Manifest)?;
     let app = plan_register_app_observed(&observation, exe_path)?;
+    plan_install_with_app_plan(
+        observation,
+        dll_bytes,
+        app,
+        LayerPlanOperation::InstallAndRegister,
+    )
+}
+
+/// Plans canonical installation plus one atomic old-to-new app-list transition.
+/// The current app-list bytes are parsed and rewritten once, so replacing its
+/// last old executable never creates a temporary empty-list layer cleanup.
+pub fn plan_install_and_rebind_app(
+    observation: SharedVulkanLayerObservation,
+    dll_bytes: &[u8],
+    old_exe_path: &Path,
+    new_exe_path: &Path,
+) -> Result<SharedVulkanLayerPlan, LayerPlannerError> {
+    let app = plan_app_rebind(file_bytes(&observation.apps), old_exe_path, new_exe_path)
+        .map_err(LayerPlannerError::AppList)?;
+    plan_install_with_app_plan(
+        observation,
+        dll_bytes,
+        app,
+        LayerPlanOperation::InstallAndRebindApp,
+    )
+}
+
+fn plan_install_with_app_plan(
+    observation: SharedVulkanLayerObservation,
+    dll_bytes: &[u8],
+    app: AppListPlan,
+    operation: LayerPlanOperation,
+) -> Result<SharedVulkanLayerPlan, LayerPlannerError> {
+    let manifest = canonical_manifest_bytes().map_err(LayerPlannerError::Manifest)?;
     let dll_changed = !file_matches_bytes(&observation.dll, dll_bytes);
     let manifest_changed = !file_matches_bytes(&observation.manifest, &manifest);
     let registry_changed = observation.registry != active_registry_value();
@@ -299,7 +349,7 @@ pub fn plan_install_and_register(
         apps,
         registry,
     } = observation;
-    let mut plan = base_plan(layer_dir, directory, LayerPlanOperation::InstallAndRegister);
+    let mut plan = base_plan(layer_dir, directory, operation);
     if dll_changed {
         add_file(
             &mut plan.files,
@@ -381,6 +431,31 @@ pub fn plan_register_app_only(
         registry: _,
     } = observation;
     let mut plan = base_plan(layer_dir, directory, LayerPlanOperation::RegisterApp);
+    let apps_path = plan.directory.path.join(APPS_INI_NAME);
+    add_app_change(&mut plan, apps_path, apps, app);
+    plan.directory.create_if_absent = !plan.directory.before.exists && !plan.is_noop();
+    Ok(plan)
+}
+
+/// Plans one atomic old-to-new app-list transition without rewriting canonical
+/// layer files. No canonical layer cleanup is inferred from the intermediate
+/// removal; only removal-only plans can authorize last-app cleanup.
+pub fn plan_rebind_app_only(
+    observation: SharedVulkanLayerObservation,
+    old_exe_path: &Path,
+    new_exe_path: &Path,
+) -> Result<SharedVulkanLayerPlan, LayerPlannerError> {
+    let app = plan_app_rebind(file_bytes(&observation.apps), old_exe_path, new_exe_path)
+        .map_err(LayerPlannerError::AppList)?;
+    let SharedVulkanLayerObservation {
+        layer_dir,
+        directory,
+        apps,
+        dll: _,
+        manifest: _,
+        registry: _,
+    } = observation;
+    let mut plan = base_plan(layer_dir, directory, LayerPlanOperation::RebindApp);
     let apps_path = plan.directory.path.join(APPS_INI_NAME);
     add_app_change(&mut plan, apps_path, apps, app);
     plan.directory.create_if_absent = !plan.directory.before.exists && !plan.is_noop();
@@ -817,6 +892,115 @@ mod tests {
     }
 
     #[test]
+    fn rebind_keeps_a_new_app_registered_when_the_old_app_was_the_only_entry() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join(LAYER_DLL_NAME), b"dll").unwrap();
+        std::fs::write(
+            root.path().join(LAYER_JSON_NAME),
+            canonical_manifest_bytes().unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join(APPS_INI_NAME),
+            b"Apps=C:\\Games\\old.exe\n",
+        )
+        .unwrap();
+        let observed = observation(root.path(), active_registry_value());
+        let plan = plan_rebind_app_only(
+            observed,
+            Path::new(r"C:\Games\old.exe"),
+            Path::new(r"C:\Games\new.exe"),
+        )
+        .unwrap();
+
+        assert_eq!(plan.operation, LayerPlanOperation::RebindApp);
+        assert_eq!(plan.unregister_outcome, None);
+        assert!(!plan.authorizes_canonical_layer_removal());
+        assert_eq!(plan.files.len(), 1);
+        assert_eq!(
+            plan.files[0].after,
+            FileObservation::Present(b"Apps=C:\\Games\\new.exe\n".to_vec())
+        );
+        assert!(plan.registry.is_none());
+        assert!(!plan.files.iter().any(|file| {
+            matches!(
+                file.path.file_name().and_then(|name| name.to_str()),
+                Some(LAYER_DLL_NAME | LAYER_JSON_NAME)
+            )
+        }));
+    }
+
+    #[test]
+    fn rebind_is_noop_when_old_is_absent_and_new_is_already_registered() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join(LAYER_DLL_NAME), b"dll").unwrap();
+        std::fs::write(
+            root.path().join(LAYER_JSON_NAME),
+            canonical_manifest_bytes().unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join(APPS_INI_NAME),
+            b"Apps=C:\\Games\\new.exe\n",
+        )
+        .unwrap();
+        let plan = plan_rebind_app_only(
+            observation(root.path(), active_registry_value()),
+            Path::new(r"C:\Games\old.exe"),
+            Path::new(r"C:\Games\NEW.exe"),
+        )
+        .unwrap();
+
+        assert!(plan.is_noop());
+        assert!(!plan.authorizes_canonical_layer_removal());
+    }
+
+    #[test]
+    fn install_rebind_accepts_a_pre_registered_new_executable_and_removes_only_old() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join(LAYER_DLL_NAME), b"dll").unwrap();
+        std::fs::write(
+            root.path().join(LAYER_JSON_NAME),
+            canonical_manifest_bytes().unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join(APPS_INI_NAME),
+            b"Apps=C:\\Games\\old.exe,C:\\Games\\NEW.exe\n",
+        )
+        .unwrap();
+        let plan = plan_install_and_rebind_app(
+            observation(root.path(), active_registry_value()),
+            b"dll",
+            Path::new(r"C:\Games\old.exe"),
+            Path::new(r"c:\games\new.exe"),
+        )
+        .unwrap();
+
+        assert_eq!(plan.operation, LayerPlanOperation::InstallAndRebindApp);
+        assert_eq!(plan.files.len(), 1);
+        assert_eq!(
+            plan.files[0].after,
+            FileObservation::Present(b"Apps=C:\\Games\\NEW.exe\n".to_vec())
+        );
+        assert_eq!(plan.unregister_outcome, None);
+        assert!(!plan.authorizes_canonical_layer_removal());
+    }
+
+    #[test]
+    fn rebind_rejects_malformed_apps_without_authorizing_a_postimage() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join(APPS_INI_NAME), b"Apps=a.exe\nApps=b.exe\n").unwrap();
+        let result = plan_rebind_app_only(
+            observation(root.path(), active_registry_value()),
+            Path::new(r"C:\Games\old.exe"),
+            Path::new(r"C:\Games\new.exe"),
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn refresh_preserves_apps_and_unknown_directory_entries() {
         let root = tempdir().unwrap();
         std::fs::write(
@@ -881,6 +1065,12 @@ mod tests {
         let absent =
             plan_unregister_app_only(observed.clone(), Path::new(r"C:\Games\none.exe")).unwrap();
         assert_eq!(
+            observed
+                .unregister_app_outcome(Path::new(r"C:\Games\none.exe"))
+                .unwrap(),
+            absent.unregister_outcome.unwrap()
+        );
+        assert_eq!(
             absent.unregister_outcome,
             Some(AppUnregisterOutcome::TargetAbsent)
         );
@@ -888,6 +1078,12 @@ mod tests {
 
         let others =
             plan_unregister_app_only(observed.clone(), Path::new(r"C:\Games\one.exe")).unwrap();
+        assert_eq!(
+            observed
+                .unregister_app_outcome(Path::new(r"C:\Games\one.exe"))
+                .unwrap(),
+            others.unregister_outcome.unwrap()
+        );
         assert_eq!(
             others.unregister_outcome,
             Some(AppUnregisterOutcome::RemovedOthersRemain)
@@ -911,7 +1107,11 @@ mod tests {
             apps: FileObservation::Present(b"; keep\nApps=C:\\Games\\one.exe\n".to_vec()),
             ..observed
         };
+        let last_outcome = last_observed
+            .unregister_app_outcome(Path::new(r"C:\Games\one.exe"))
+            .unwrap();
         let last = plan_unregister_app_only(last_observed, Path::new(r"C:\Games\one.exe")).unwrap();
+        assert_eq!(Some(last_outcome), last.unregister_outcome);
         assert_eq!(
             last.unregister_outcome,
             Some(AppUnregisterOutcome::RemovedLast)
@@ -945,7 +1145,12 @@ mod tests {
             unregister_app_outcome(file_bytes(&observed.apps), Path::new(r"C:\Games\one.exe")),
             AppUnregisterOutcome::Indeterminate
         );
-        assert!(plan_unregister_app_only(observed, Path::new(r"C:\Games\one.exe")).is_err());
+        let borrowed_error = observed
+            .unregister_app_outcome(Path::new(r"C:\Games\one.exe"))
+            .unwrap_err();
+        let plan_error =
+            plan_unregister_app_only(observed, Path::new(r"C:\Games\one.exe")).unwrap_err();
+        assert_eq!(borrowed_error.to_string(), plan_error.to_string());
     }
 
     #[test]

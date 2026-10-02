@@ -4,29 +4,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
-import { createClassComponent } from 'svelte/legacy';
 
 import type { D3d12ExecutableMutationAction } from '@shared/model';
 import { setLanguageMode, t } from '@shared/i18n';
 
 import { createFileSafetyNotice, type FileSafetyNotice } from '../model/file-safety-notice-policy';
 import FileSafetyConfirmationDialog from './FileSafetyConfirmationDialog.svelte';
+import FileSafetyConfirmationDialogTestHost from './FileSafetyConfirmationDialog.test-host.svelte';
 
 describe('FileSafetyConfirmationDialog', () => {
   let instance: ReturnType<typeof mount> | undefined;
-  let propUpdatingInstance: DialogInstance | undefined;
   const target = document.createElement('div');
-
-  type DialogProps = {
-    notice: FileSafetyNotice | null;
-    actions: readonly D3d12ExecutableMutationAction[];
-    onCancel: () => void;
-    onConfirm: (rememberGeneralWarning: boolean) => void;
-  };
-  type DialogInstance = {
-    $set: (props: Partial<DialogProps>) => void;
-    $destroy: () => void;
-  };
 
   beforeEach(() => {
     vi.stubGlobal(
@@ -44,8 +32,6 @@ describe('FileSafetyConfirmationDialog', () => {
       await unmount(instance);
       instance = undefined;
     }
-    propUpdatingInstance?.$destroy();
-    propUpdatingInstance = undefined;
     target.remove();
     document.body.replaceChildren();
     vi.unstubAllGlobals();
@@ -244,11 +230,14 @@ describe('FileSafetyConfirmationDialog', () => {
     };
     const generalNotice = () => createFileSafetyNotice(assessment);
     const onCancel = vi.fn();
-    propUpdatingInstance = createClassComponent({
-      component: FileSafetyConfirmationDialog,
-      target,
-      props: { notice: generalNotice(), actions: [], onCancel, onConfirm: vi.fn() },
-    }) as DialogInstance;
+    const host: { setNotice: (notice: FileSafetyNotice | null) => void } = mount(
+      FileSafetyConfirmationDialogTestHost,
+      {
+        target,
+        props: { initialNotice: generalNotice(), onCancel, onConfirm: vi.fn() },
+      },
+    );
+    instance = host;
     flushSync();
 
     function checkbox(): HTMLButtonElement {
@@ -268,45 +257,45 @@ describe('FileSafetyConfirmationDialog', () => {
       ?.click();
     expect(onCancel).toHaveBeenCalledOnce();
 
-    propUpdatingInstance.$set({ notice: null });
+    host.setNotice(null);
     flushSync();
     expect(document.body.querySelector('[role="dialog"]')?.getAttribute('data-state')).toBe(
       'closed',
     );
 
-    propUpdatingInstance.$set({ notice: generalNotice() });
+    host.setNotice(generalNotice());
     flushSync();
     expect(checkbox().getAttribute('aria-checked')).toBe('false');
     checkbox().click();
     flushSync();
 
-    propUpdatingInstance.$set({ notice: generalNotice() });
+    host.setNotice(generalNotice());
     flushSync();
     expect(checkbox().getAttribute('aria-checked')).toBe('false');
     checkbox().click();
     flushSync();
 
-    propUpdatingInstance.$set({ notice: null });
+    host.setNotice(null);
     flushSync();
     expect(document.body.querySelector('[role="dialog"]')?.getAttribute('data-state')).toBe(
       'closed',
     );
 
-    propUpdatingInstance.$set({ notice: generalNotice() });
+    host.setNotice(generalNotice());
     flushSync();
     expect(checkbox().getAttribute('aria-checked')).toBe('false');
 
-    propUpdatingInstance.$set({
-      notice: createFileSafetyNotice({
+    host.setNotice(
+      createFileSafetyNotice({
         ...assessment,
         context_token: 'detected-context',
         detected_engines: ['BattlEye'],
       }),
-    });
+    );
     flushSync();
     expect(document.body.querySelector('[data-slot="checkbox"]')).toBeNull();
 
-    propUpdatingInstance.$set({ notice: generalNotice() });
+    host.setNotice(generalNotice());
     flushSync();
     expect(checkbox().getAttribute('aria-checked')).toBe('false');
   });

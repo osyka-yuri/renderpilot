@@ -682,10 +682,7 @@ fn recover_torn_install_removes_debris_and_clears_the_sentinel() {
         !engine::is_install_torn(dir.path(), AddonKind::Luma),
         "the sentinel must clear once the folder is confirmed clean"
     );
-    assert!(!crate::addons::tool::unmanaged_files_present(
-        dir.path(),
-        AddonKind::Luma
-    ));
+    assert!(crate::addons::tool::unmanaged_matching_paths(dir.path(), AddonKind::Luma).is_empty());
 }
 
 #[test]
@@ -808,10 +805,7 @@ fn recover_torn_install_removes_a_lone_addon_bak_and_clears_the_sentinel() {
 
     assert!(!dir.path().join("Luma-Game.addon.bak").exists());
     assert!(!engine::is_install_torn(dir.path(), AddonKind::Luma));
-    assert!(!crate::addons::tool::unmanaged_files_present(
-        dir.path(),
-        AddonKind::Luma
-    ));
+    assert!(crate::addons::tool::unmanaged_matching_paths(dir.path(), AddonKind::Luma).is_empty());
 }
 
 #[test]

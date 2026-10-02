@@ -156,9 +156,10 @@ pub(crate) struct OrphanedLumaInstall {
     pub(crate) advisory_dgvoodoo_source: Option<TrackedSource>,
 }
 
-/// Adopts a local Luma payload into the per-game DB if the row is still absent.
-/// This never downloads. It records a local content identity only after the
-/// caller proved the exact manifest add-on file is present.
+/// Adopts a local Luma payload into the per-game DB only when no owner row
+/// exists. This never downloads. It records a local content identity only after
+/// the caller proved the exact manifest add-on file is present. An inactive
+/// same-kind row remains canonical until an explicit release or replacement.
 ///
 /// The caller must hold the per-game `game_mutation_lock` across reconciliation and
 /// the availability snapshot. Keeping lock ownership at the orchestration
@@ -174,6 +175,9 @@ pub(crate) fn reconcile_orphaned_install_locked(
         records::active_record_of_kind(context, &candidate.game_id, AddonKind::Luma)?
     {
         return Ok(Some(record));
+    }
+    if records::record_of_kind(context, &candidate.game_id, AddonKind::Luma)?.is_some() {
+        return Ok(None);
     }
 
     let record = build_adopted_record(candidate)?;
@@ -275,6 +279,10 @@ fn collect_files_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use renderpilot_application::GameRepository;
+    use renderpilot_domain::{
+        GameIdentity, GameInstallation, GameRuntime, Launcher, Platform, Sha256Hash,
+    };
     use tempfile::tempdir;
 
     fn game_id() -> GameId {
@@ -286,6 +294,51 @@ mod tests {
             std::fs::create_dir_all(parent).expect("create parent");
         }
         std::fs::write(path, bytes).expect("write");
+    }
+
+    fn seed_active_proxy_game(context: &Context, game_id: &GameId, root: &Path) {
+        let exe = root.join("Game.exe");
+        write(
+            &exe,
+            &crate::addons::test_support::build_pe_with_exports(
+                crate::addons::test_support::MACHINE_AMD64,
+                crate::addons::test_support::PE32_PLUS_MAGIC,
+                &[],
+            ),
+        );
+        let game = GameInstallation::new(
+            GameIdentity::new(game_id.clone(), "Luma orphan test", Launcher::Manual)
+                .expect("game identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            path_ref("game root", root).expect("game root"),
+        )
+        .with_executable_candidate(path_ref("game executable", &exe).expect("game executable"));
+        context.storage().upsert_game(&game).expect("seed game");
+    }
+
+    fn write_compatible_proxy_host(root: &Path) {
+        write(
+            &root.join("dxgi.dll"),
+            &crate::addons::test_support::build_pe_with_exports(
+                crate::addons::test_support::MACHINE_AMD64,
+                crate::addons::test_support::PE32_PLUS_MAGIC,
+                &[
+                    "ReShadeVersion",
+                    "ReShadeRegisterAddon",
+                    "ReShadeUnregisterAddon",
+                    "ReShadeRegisterEvent",
+                ],
+            ),
+        );
+    }
+
+    fn write_addon_path(game_root: &Path, addon_root: &Path) {
+        let addon_root = addon_root.to_string_lossy().replace('\\', "/");
+        write(
+            &game_root.join("ReShade.ini"),
+            format!("[ADDON]\nAddonPath={addon_root}\n").as_bytes(),
+        );
     }
 
     #[test]
@@ -304,6 +357,109 @@ mod tests {
         assert!(
             discover_orphaned_luma_payload(&[dir], "Luma-Missing.addon").is_none(),
             "another Luma add-on must not be adopted under this profile"
+        );
+    }
+
+    #[test]
+    fn orphan_adoption_persists_a_payload_when_no_owner_exists() {
+        let root = tempdir().expect("tmp");
+        let context = Context::open_at(root.path().join("catalog.sqlite")).expect("context");
+        let game_dir = tempdir().expect("game dir");
+        let game_id = GameId::new("manual:p6b-luma-ownerless").expect("game id");
+        let addon = game_dir.path().join("Luma-Game.addon");
+        write(&addon, b"new orphan payload");
+        let candidate = OrphanedLumaInstall {
+            game_id: game_id.clone(),
+            asset: "Luma-Game.zip".to_owned(),
+            addon_file: addon.clone(),
+            created_files: vec![addon],
+            advisory_host_source: None,
+            advisory_dgvoodoo_source: None,
+        };
+
+        let _guard = crate::game_mutation_lock::try_lock(&game_id).expect("game lock available");
+        let adopted = reconcile_orphaned_install_locked(&context, &candidate)
+            .expect("read-side reconciliation")
+            .expect("ownerless payload is adopted");
+        let persisted = records::record_of_kind(&context, &game_id, AddonKind::Luma)
+            .expect("raw owner query")
+            .expect("adopted owner");
+
+        assert!(adopted.eq_ignoring_persistence_timestamps(&persisted));
+        assert_eq!(persisted.kind(), AddonKind::Luma);
+        let expected_addon_path = candidate.addon_file.to_string_lossy().replace('\\', "/");
+        assert_eq!(persisted.addon_file().as_str(), expected_addon_path);
+    }
+
+    #[test]
+    fn orphan_adoption_preserves_inactive_external_managed_owner() {
+        let root = tempdir().expect("tmp");
+        let context = Context::open_at(root.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("manual:p6b-luma-retained-owner").expect("game id");
+        let game_dir = tempdir().expect("game dir");
+        seed_active_proxy_game(&context, &game_id, game_dir.path());
+        write_compatible_proxy_host(game_dir.path());
+        write_addon_path(game_dir.path(), game_dir.path());
+        let external_dir = tempdir().expect("external owner dir");
+        let owner_addon = external_dir.path().join("removed-Luma-Game.addon");
+        let managed_path = external_dir.path().join("retained-dlss.dll");
+        let owner = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::Luma,
+            path_ref("owner addon", &owner_addon).expect("owner addon path"),
+        )
+        .with_host_kind(InstalledAddonHostKind::Proxy)
+        .try_with_managed_files(vec![ManagedAddonFile::owned(
+            path_ref("managed receipt", &managed_path).expect("managed receipt path"),
+            ManagedFileBaseline::Absent,
+            Sha256Hash::new("b".repeat(64)).expect("managed receipt hash"),
+        )])
+        .expect("managed external receipt");
+        context
+            .storage()
+            .upsert_installed_addon(&owner)
+            .expect("seed inactive owner");
+
+        let addon = game_dir.path().join("Luma-Game.addon");
+        write(&addon, b"new orphan payload");
+        let candidate = OrphanedLumaInstall {
+            game_id: game_id.clone(),
+            asset: "Luma-Game.zip".to_owned(),
+            addon_file: addon.clone(),
+            created_files: vec![addon],
+            advisory_host_source: None,
+            advisory_dgvoodoo_source: None,
+        };
+        let candidate_record = build_adopted_record(&candidate).expect("valid Luma candidate");
+        assert!(
+            crate::addons::tool::record_is_active_for_game(&context, &candidate_record)
+                .expect("candidate activity")
+        );
+
+        assert!(
+            records::active_record_of_kind(&context, &game_id, AddonKind::Luma)
+                .expect("inactive external Luma owner")
+                .is_none()
+        );
+        let _guard = crate::game_mutation_lock::try_lock(&game_id).expect("game lock available");
+        assert!(
+            reconcile_orphaned_install_locked(&context, &candidate)
+                .expect("read-side reconciliation")
+                .is_none(),
+            "the candidate must not replace persisted managed ownership"
+        );
+
+        let persisted = context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("raw owner query")
+            .expect("retained owner");
+        assert!(persisted.eq_ignoring_persistence_timestamps(&owner));
+        assert_eq!(persisted.managed_files().len(), 1);
+        let expected_managed_path = managed_path.to_string_lossy().replace('\\', "/");
+        assert_eq!(
+            persisted.managed_files()[0].path().as_str().to_owned(),
+            expected_managed_path
         );
     }
 

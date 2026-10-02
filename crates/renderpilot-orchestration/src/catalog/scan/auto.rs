@@ -5,7 +5,7 @@ use renderpilot_platform_windows::{ManualFolderGameSource, game_libraries::Disco
 use crate::ServiceError;
 use crate::catalog::ScanFolderCatalogResult;
 
-use super::scan_source_impl;
+use super::scan_source_impl_observational;
 
 /// Per-install auto-scan using a shared open catalog, detector, and full
 /// catalog index.
@@ -25,7 +25,7 @@ pub(crate) fn scan_auto_in_shared_batch(
         .with_known_identity(install.identity.clone())
         .with_root_authority(RootAuthority::LauncherManifest);
 
-    scan_source_impl(
+    scan_source_impl_observational(
         super::ScanInputs { context, detector },
         &source,
         Some(catalog_index),

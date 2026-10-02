@@ -52,17 +52,10 @@ export type RenoDxStoreOptions = {
   ) => Promise<MutationSafetyTokens | null>;
 };
 
-/**
- * Creates the RenoDX store. The backend API is injected so tests can drive the
- * store with fakes; production code uses the default Tauri-bound [`renodxApi`].
- */
-export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
-  const api = options.api ?? renodxApi;
-  const onExclusivityChange = options.onExclusivityChange;
-  const requireSafetyTokens = options.requireSafetyTokens;
-
-  let availabilitySnapshot = $state<AvailabilitySnapshot>({
+function defaultAvailabilitySnapshot(): AvailabilitySnapshot {
+  return {
     hasPersistedRecord: false,
+    installRequiresSharedVulkan: false,
     engineConfig: {
       status: 'not_applicable',
       path: null,
@@ -74,7 +67,19 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     reshadeStableSupported: true,
     renodxAddon: null,
     installTorn: false,
-  });
+  };
+}
+
+/**
+ * Creates the RenoDX store. The backend API is injected so tests can drive the
+ * store with fakes; production code uses the default Tauri-bound [`renodxApi`].
+ */
+export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
+  const api = options.api ?? renodxApi;
+  const onExclusivityChange = options.onExclusivityChange;
+  const requireSafetyTokens = options.requireSafetyTokens;
+
+  let availabilitySnapshot = $state<AvailabilitySnapshot>(defaultAvailabilitySnapshot());
   let selectedReshadeChannel = $state<ReshadeChannel>('stable');
   let outcome = $state<AvailabilityOutcome | null>(null);
   type RetainedInstallMeta = {
@@ -93,20 +98,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
   }
 
   function resetAvailabilityPresentation(): void {
-    availabilitySnapshot = {
-      hasPersistedRecord: false,
-      engineConfig: {
-        status: 'not_applicable',
-        path: null,
-        can_apply: false,
-      },
-      hostDetection: 'absent',
-      hostFacts: defaultHostFacts(),
-      actions: {},
-      reshadeStableSupported: true,
-      renodxAddon: null,
-      installTorn: false,
-    };
+    availabilitySnapshot = defaultAvailabilitySnapshot();
     selectedReshadeChannel = 'stable';
     outcome = null;
     manualInstall = null;

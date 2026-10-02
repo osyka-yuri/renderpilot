@@ -1,5 +1,6 @@
 use super::*;
 
+use renderpilot_application::{GameRepository, InstalledAddonRepository};
 use renderpilot_domain::{AddonKind, GameId};
 use renderpilot_storage_sqlite::{
     BeginSharedVulkanMutation, InstalledAddonMutation, PendingSharedVulkanMutationState,
@@ -271,6 +272,247 @@ fn committed_typed_shared_root_capability_drift_is_retained_without_cleanup() {
             .expect("row")
             .is_some_and(|row| row.state == PendingSharedVulkanMutationState::Committed)
     );
+}
+
+#[test]
+fn committed_ownerless_retired_leftovers_app_list_recovery_clears_fence_with_or_without_snapshot() {
+    for retain_snapshot in [true, false] {
+        let id = if retain_snapshot {
+            "retired-leftovers-app-list-retained"
+        } else {
+            "retired-leftovers-app-list-consumed"
+        };
+        let temp = tempfile::tempdir().expect("tempdir");
+        let context = crate::Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
+        let game_root = temp.path().join("game");
+        let shared_root = temp.path().join("shared-reshade");
+        std::fs::create_dir_all(&shared_root).expect("shared root");
+        let game_id = GameId::new(format!("manual:{id}")).expect("game id");
+        let game_path =
+            renderpilot_domain::PathRef::new(game_root.to_string_lossy().replace('\\', "/"))
+                .expect("game path");
+        let game = renderpilot_domain::GameInstallation::new(
+            renderpilot_domain::GameIdentity::new(
+                game_id.clone(),
+                "Retired Vulkan cleanup fixture",
+                renderpilot_domain::Launcher::Manual,
+            )
+            .expect("game identity"),
+            renderpilot_domain::Platform::Windows,
+            renderpilot_domain::GameRuntime::NativeWindows,
+            game_path,
+        )
+        .with_root_authority(renderpilot_domain::RootAuthority::UserConfirmed);
+        context
+            .storage()
+            .upsert_game(&game)
+            .expect("game registration");
+        let target_exe = game_root.join("game.exe");
+        let addon_path = game_root.join("ReShade64.addon64");
+        let addon = renderpilot_domain::InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::RenoDx,
+            renderpilot_domain::PathRef::new(addon_path.to_string_lossy().replace('\\', "/"))
+                .expect("addon path"),
+        )
+        .with_host_kind(renderpilot_domain::InstalledAddonHostKind::SharedVulkanLayer)
+        .with_registered_exe_path(
+            renderpilot_domain::PathRef::new(target_exe.to_string_lossy().replace('\\', "/"))
+                .expect("registered executable"),
+        );
+        context
+            .storage()
+            .upsert_installed_addon(&addon)
+            .expect("shared Vulkan owner");
+        let readiness = context
+            .storage()
+            .catalog_readiness(&game_id)
+            .expect("catalog readiness");
+        context
+            .storage()
+            .mark_installation_absent(
+                &game,
+                renderpilot_storage_sqlite::AuthorityCas::new(readiness.authority_epoch()),
+            )
+            .expect("mark retired installation absent");
+
+        let other_exe = temp.path().join("other-game.exe");
+        let apps_path = shared_root.join("ReShadeApps.ini");
+        let global_dll = shared_root.join("ReShade64.dll");
+        let global_manifest = shared_root.join("ReShade64.json");
+        std::fs::write(&global_dll, b"global layer DLL").expect("global DLL");
+        std::fs::write(&global_manifest, b"global layer manifest").expect("global manifest");
+        let target_only =
+            match renderpilot_platform_windows::vulkan_layer::plan_register_app(None, &target_exe)
+                .expect("register target app")
+                .change
+            {
+                renderpilot_platform_windows::vulkan_layer::AppListChange::Replacement(bytes) => {
+                    bytes
+                }
+                renderpilot_platform_windows::vulkan_layer::AppListChange::Unchanged => {
+                    unreachable!("new target app changes the list")
+                }
+            };
+        let before_bytes = match renderpilot_platform_windows::vulkan_layer::plan_register_app(
+            Some(&target_only),
+            &other_exe,
+        )
+        .expect("register other app")
+        .change
+        {
+            renderpilot_platform_windows::vulkan_layer::AppListChange::Replacement(bytes) => bytes,
+            renderpilot_platform_windows::vulkan_layer::AppListChange::Unchanged => {
+                unreachable!("new other app changes the list")
+            }
+        };
+        let after_bytes = match renderpilot_platform_windows::vulkan_layer::plan_unregister_app(
+            Some(&before_bytes),
+            &target_exe,
+        )
+        .expect("remove retired app")
+        .change
+        {
+            renderpilot_platform_windows::vulkan_layer::AppListChange::Replacement(bytes) => bytes,
+            renderpilot_platform_windows::vulkan_layer::AppListChange::Unchanged => {
+                unreachable!("registered target app is removed")
+            }
+        };
+        let remaining_apps =
+            renderpilot_platform_windows::vulkan_layer::parse_app_list(&after_bytes)
+                .expect("other app remains");
+        assert_eq!(remaining_apps.len(), 1);
+        assert!(crate::paths::same_path(&remaining_apps[0], &other_exe));
+        std::fs::write(&apps_path, &before_bytes).expect("initial app list");
+
+        let roots = TrustedRoots::game_shared_without_game_files(&shared_root)
+            .expect("shared-only GameShared authority");
+        let initial = Manifest::empty(
+            super::super::manifest::Scope::GameShared,
+            Some(game_id.as_str().to_owned()),
+            renderpilot_domain::mutation_features::RETIRED_GAME_LEFTOVERS_UNREGISTER,
+        )
+        .to_json()
+        .expect("initial manifest");
+        context
+            .storage()
+            .try_begin_shared_vulkan_mutation(&BeginSharedVulkanMutation {
+                id: id.to_owned(),
+                scope: SharedVulkanMutationScope::GameShared,
+                game_id: Some(game_id.clone()),
+                feature: renderpilot_domain::mutation_features::RETIRED_GAME_LEFTOVERS_UNREGISTER
+                    .to_owned(),
+                initial_manifest_json: initial,
+                root_capabilities_json: roots.to_json().expect("root capabilities"),
+            })
+            .expect("reserve cleanup")
+            .assert_reserved();
+        let transaction_root = super::super::transaction_root(context.file_mutation_root(), id)
+            .expect("transaction root");
+        std::fs::create_dir_all(&transaction_root).expect("transaction root directory");
+        let plan = MutationPlan::build(Request {
+            transaction_root: transaction_root.clone(),
+            mutation_id: id.to_owned(),
+            roots: roots.clone(),
+            scope: super::super::manifest::Scope::GameShared,
+            game_id: Some(game_id.as_str().to_owned()),
+            feature: renderpilot_domain::mutation_features::RETIRED_GAME_LEFTOVERS_UNREGISTER
+                .to_owned(),
+            intents: vec![FileIntent {
+                live_path: apps_path.clone(),
+                before: Some(before_bytes),
+                after: Some(after_bytes.clone()),
+            }],
+            registry: Vec::new(),
+            registry_authority: None,
+            created_dirs: Vec::new(),
+        })
+        .expect("plan app-list-only cleanup");
+        plan.manifest
+            .validate_for_transaction(id)
+            .expect("validate manifest");
+        super::super::io::materialize_stages(&plan).expect("materialize app-list stage");
+        super::super::io::sync_prepared_artifacts(&transaction_root);
+        context
+            .storage()
+            .finish_preparing_shared_vulkan_mutation(
+                id,
+                SharedVulkanMutationScope::GameShared,
+                Some(&game_id),
+                &plan.manifest.to_json().expect("prepared manifest"),
+            )
+            .expect("publish prepared manifest");
+        super::super::io::apply_files(&transaction_root, &plan.manifest, &plan.payloads, &roots)
+            .expect("publish app-list postimage");
+        commit_shared_fixture(&context, &game_id, id);
+        let snapshot = match &plan.manifest.files[0].before {
+            super::super::manifest::FileBefore::Snapshot { snapshot_path, .. } => {
+                transaction_root.join(snapshot_path)
+            }
+            super::super::manifest::FileBefore::Absent => unreachable!("preimage was captured"),
+        };
+        if !retain_snapshot {
+            std::fs::remove_file(&snapshot).expect("ordinary cleanup consumed preimage");
+        }
+
+        let owners = context
+            .storage()
+            .read_local_cleanup_owners(&game_id)
+            .expect("committed owners");
+        assert!(owners.addon().is_none());
+        assert_eq!(snapshot.exists(), retain_snapshot);
+        let row = context
+            .storage()
+            .pending_shared_vulkan_mutation()
+            .expect("pending row")
+            .expect("committed fence remains");
+        assert_eq!(row.id, id);
+        assert_eq!(row.scope, SharedVulkanMutationScope::GameShared);
+        assert_eq!(row.game_id.as_ref(), Some(&game_id));
+        assert_eq!(
+            row.feature,
+            renderpilot_domain::mutation_features::RETIRED_GAME_LEFTOVERS_UNREGISTER
+        );
+        assert_eq!(row.state, PendingSharedVulkanMutationState::Committed);
+
+        let registry = FakeRegistry {
+            value: RefCell::new(RegistryValueState::Present {
+                value_type: 4,
+                raw_bytes: vec![0; 4],
+            }),
+        };
+        let registry_before = registry.value.borrow().clone();
+        super::super::recovery::recover_pending_with_roots(&context, &roots, Some(&registry))
+            .expect("ordinary committed app-list recovery");
+
+        assert!(
+            context
+                .storage()
+                .pending_shared_vulkan_mutation()
+                .expect("cleared committed fence")
+                .is_none()
+        );
+        assert!(!transaction_root.exists());
+        assert_eq!(
+            std::fs::read(&apps_path).expect("retained app list"),
+            after_bytes
+        );
+        let retained_apps = renderpilot_platform_windows::vulkan_layer::parse_app_list(
+            &std::fs::read(&apps_path).expect("retained app list"),
+        )
+        .expect("parse retained app list");
+        assert_eq!(retained_apps.len(), 1);
+        assert!(crate::paths::same_path(&retained_apps[0], &other_exe));
+        assert_eq!(
+            std::fs::read(&global_dll).expect("global DLL retained"),
+            b"global layer DLL"
+        );
+        assert_eq!(
+            std::fs::read(&global_manifest).expect("global manifest retained"),
+            b"global layer manifest"
+        );
+        assert_eq!(*registry.value.borrow(), registry_before);
+    }
 }
 
 #[test]

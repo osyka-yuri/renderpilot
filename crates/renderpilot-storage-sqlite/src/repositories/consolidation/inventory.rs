@@ -1,6 +1,9 @@
 //! Read-only collection of filesystem paths required by recovery bundles.
 
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::{RenoDxConfigReceipt, normalized_path_key};
@@ -8,6 +11,7 @@ use rusqlite::{Connection, OptionalExtension, named_params};
 
 use super::{ConsolidationPlan, validation::validate_plan};
 use crate::error::{storage_context, storage_error};
+use crate::repositories::EngineConfigJournalOwner;
 
 pub(in crate::repositories) fn recovery_file_paths(
     connection: &Connection,
@@ -69,6 +73,13 @@ pub(in crate::repositories) fn recovery_file_paths(
                 collect_json_strings(&value, &mut values);
             }
         }
+        if let Some(owner) =
+            crate::repositories::installed_addons::engine_config_journal_owner_on_connection(
+                connection, game_id,
+            )?
+        {
+            collect_engine_journal_paths(&owner, &mut values);
+        }
         // The RenoDX receipt is deliberately not fed through the generic JSON
         // walker: its baseline is opaque user data and must never become a
         // recovery path. Only its typed, exact ReShade.ini path is inventory.
@@ -102,6 +113,30 @@ pub(in crate::repositories) fn recovery_file_paths(
         by_key.entry(key).or_insert(path);
     }
     Ok(by_key.into_values().collect())
+}
+
+fn collect_engine_journal_paths(owner: &EngineConfigJournalOwner, output: &mut Vec<String>) {
+    if let Some(stable) = owner.journal.stable.as_ref() {
+        output.push(stable.path.clone());
+    }
+    if let Some(pending) = owner.journal.pending.as_ref() {
+        if let Some(prior) = pending.prior.as_ref() {
+            output.push(prior.path.clone());
+        }
+        if let Some(after) = pending.after.as_ref() {
+            output.push(after.path.clone());
+        }
+        if let Some(receipt) = pending.prior.as_ref().or(pending.after.as_ref())
+            && let Some(parent) = Path::new(&receipt.path).parent()
+        {
+            output.push(
+                parent
+                    .join(&pending.stage_name)
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+    }
 }
 
 fn collect_text_rows(

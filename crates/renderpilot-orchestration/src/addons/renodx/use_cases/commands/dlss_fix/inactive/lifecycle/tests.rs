@@ -395,6 +395,40 @@ fn retry_recovery_cleans_pending_v2_without_host_or_network_work() {
     let game_root = tempdir().expect("game root");
     let context = Context::open_at(db_root.path().join("catalog.sqlite")).expect("context");
     let game_id = GameId::new("manual:dlss-retry-recovery").expect("game id");
+    let exe = game_root.path().join("Game.exe");
+    fs::write(
+        &exe,
+        crate::addons::renodx::test_support::build_pe_with_exports(
+            crate::addons::renodx::test_support::MACHINE_AMD64,
+            crate::addons::renodx::test_support::PE32_PLUS_MAGIC,
+            &[],
+        ),
+    )
+    .expect("game executable");
+    let host = game_root.path().join("dxgi.dll");
+    let host_bytes = crate::addons::renodx::test_support::build_pe_with_exports(
+        crate::addons::renodx::test_support::MACHINE_AMD64,
+        crate::addons::renodx::test_support::PE32_PLUS_MAGIC,
+        &[
+            "ReShadeVersion",
+            "ReShadeRegisterAddon",
+            "ReShadeUnregisterAddon",
+            "ReShadeRegisterEvent",
+        ],
+    );
+    fs::write(&host, &host_bytes).expect("compatible ReShade host");
+    let game = GameInstallation::new(
+        GameIdentity::new(game_id.clone(), "DLSS retry recovery", Launcher::Manual)
+            .expect("game identity"),
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(game_root.path().to_string_lossy()).expect("game root"),
+    )
+    .with_executable_candidate(PathRef::new(exe.to_string_lossy()).expect("game executable"));
+    context
+        .storage()
+        .upsert_game(&game)
+        .expect("register active game");
     let addon = game_root.path().join("renodx-game.addon64");
     fs::write(&addon, b"addon").expect("addon");
     let record = InstalledAddon::new(
@@ -440,6 +474,7 @@ fn retry_recovery_cleans_pending_v2_without_host_or_network_work() {
         !target.exists(),
         "recovery must not apply the pending payload"
     );
+    assert_eq!(fs::read(host).expect("host remains unchanged"), host_bytes);
 }
 
 #[test]

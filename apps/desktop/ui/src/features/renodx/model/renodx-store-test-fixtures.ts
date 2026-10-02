@@ -101,6 +101,7 @@ export function availability(
 ): AvailabilityReport {
   return {
     has_persisted_record: false,
+    install_requires_shared_vulkan: false,
     host_detection: 'absent',
     host_facts: DEFAULT_HOST_FACTS,
     actions: {

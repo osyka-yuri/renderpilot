@@ -337,3 +337,51 @@ fn renodx_inventory_extracts_only_the_typed_ini_path_from_a_receipt() {
     assert!(matches_path("C:/Games/Example/D3D12/ReShade.ini"));
     assert!(!matches_path("C:/Users/user/secret.txt"));
 }
+
+#[test]
+fn standalone_engine_journal_owner_path_is_in_recovery_inventory_without_addon_row() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let destination = game("game:destination", "C:/Games/Example");
+    let source = game("manual:child", "C:/Games/Example/D3D12");
+    storage.upsert_game(&destination).expect("destination");
+    storage.upsert_game(&source).expect("source");
+    let receipt = renderpilot_domain::EngineConfigReceipt {
+        schema_version: 1,
+        path: "C:/Games/Example/D3D12/Engine.ini".to_owned(),
+        file_created: false,
+        encoding: "utf8".to_owned(),
+        before_digest: "0".repeat(64),
+        after_digest: "1".repeat(64),
+        recipe_fingerprint: "2".repeat(64),
+        contributions: Vec::new(),
+        created_headers: Vec::new(),
+        created_header_prefixes: Vec::new(),
+        created_header_groups: Vec::new(),
+        created_header_ordinals: Vec::new(),
+    };
+    let journal = renderpilot_domain::EngineConfigJournal {
+        stable: Some(receipt),
+        pending: None,
+    };
+    storage
+        .compare_and_swap_engine_config_journal(
+            source.id(),
+            renderpilot_domain::AddonKind::RenoDx,
+            None,
+            Some(&journal),
+        )
+        .expect("independent journal owner");
+    assert!(
+        storage
+            .get_installed_addon(source.id())
+            .expect("no local row")
+            .is_none()
+    );
+
+    let paths = storage
+        .list_consolidation_recovery_file_paths(&consolidation_plan(&destination, &[&source]))
+        .expect("inventory");
+    assert!(paths.iter().any(|path| {
+        path.to_string_lossy().replace('\\', "/") == "C:/Games/Example/D3D12/Engine.ini"
+    }));
+}

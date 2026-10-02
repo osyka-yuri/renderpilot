@@ -225,6 +225,20 @@ impl InstalledAddon {
     /// classified explicitly.
     #[must_use]
     pub fn eq_ignoring_persistence_timestamps(&self, other: &Self) -> bool {
+        self.eq_ignoring_timestamps_and_engine_config_journal(other)
+            && self.engine_config_journal == other.engine_config_journal
+    }
+
+    /// Returns whether this record is the result of releasing the original
+    /// Engine.ini journal without changing any other durable install data.
+    /// Database-managed persistence timestamps may differ.
+    #[must_use]
+    pub fn is_engine_config_release_of(&self, original: &Self) -> bool {
+        self.engine_config_journal.is_none()
+            && self.eq_ignoring_timestamps_and_engine_config_journal(original)
+    }
+
+    fn eq_ignoring_timestamps_and_engine_config_journal(&self, other: &Self) -> bool {
         let Self {
             game_id,
             kind,
@@ -240,7 +254,7 @@ impl InstalledAddon {
             reshade_channel,
             registered_exe_path,
             renodx_config_receipt,
-            engine_config_journal,
+            engine_config_journal: _,
         } = self;
         let Self {
             game_id: other_game_id,
@@ -257,7 +271,7 @@ impl InstalledAddon {
             reshade_channel: other_reshade_channel,
             registered_exe_path: other_registered_exe_path,
             renodx_config_receipt: other_renodx_config_receipt,
-            engine_config_journal: other_engine_config_journal,
+            engine_config_journal: _,
         } = other;
 
         game_id == other_game_id
@@ -272,7 +286,6 @@ impl InstalledAddon {
             && reshade_channel == other_reshade_channel
             && registered_exe_path == other_registered_exe_path
             && renodx_config_receipt == other_renodx_config_receipt
-            && engine_config_journal == other_engine_config_journal
     }
 
     /// Attaches host metadata to the install.
@@ -567,5 +580,30 @@ mod tests {
 
         let changed = retimestamped.with_addon_version("2.0.0");
         assert!(!record.eq_ignoring_persistence_timestamps(&changed));
+    }
+
+    #[test]
+    fn engine_config_release_requires_a_cleared_journal_and_same_ownership() {
+        let original = InstalledAddon::new(
+            GameId::new("steam:1").expect("game id"),
+            AddonKind::Luma,
+            PathRef::new("C:/Games/Test/luma.addon64").expect("addon path"),
+        )
+        .with_engine_config_journal(Some(EngineConfigJournal::default()))
+        .expect("valid journal");
+        let released = original
+            .clone()
+            .with_engine_config_journal(None)
+            .expect("release journal");
+
+        assert!(released.is_engine_config_release_of(&original));
+        assert!(!released.eq_ignoring_persistence_timestamps(&original));
+        assert!(!original.is_engine_config_release_of(&original));
+        let retimestamped_release = released.clone().with_timestamps(Some(30), Some(40));
+        assert!(retimestamped_release.is_engine_config_release_of(&original));
+
+        let changed_owner = released
+            .with_created_file(PathRef::new("C:/Games/Test/extra.dll").expect("extra owned file"));
+        assert!(!changed_owner.is_engine_config_release_of(&original));
     }
 }

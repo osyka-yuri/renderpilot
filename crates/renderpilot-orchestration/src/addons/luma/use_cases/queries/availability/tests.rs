@@ -12,7 +12,8 @@ use crate::addons::matching::MatchKind;
 use renderpilot_application::{GameRepository, InstalledAddonRepository};
 use renderpilot_domain::InstalledAddon;
 use renderpilot_domain::{
-    Architecture, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+    Architecture, GameIdentity, GameInstallation, GameRuntime, InstalledAddonHostKind, Launcher,
+    PathRef, Platform,
 };
 use tempfile::tempdir;
 
@@ -33,6 +34,25 @@ fn seed_game(context: &Context, game_id: &GameId, appid: &str, game_dir: &Path, 
     context.storage().upsert_game(&game).expect("seed game");
 }
 
+fn seed_external_renodx_owner(
+    context: &Context,
+    game_id: &GameId,
+    external_dir: &Path,
+) -> InstalledAddon {
+    let addon_path = external_dir.join("renodx-dishonored.addon64");
+    std::fs::write(&addon_path, b"external RenoDX payload").expect("write external payload");
+    let addon_path = PathRef::new(addon_path.to_string_lossy().replace('\\', "/"))
+        .expect("external add-on path");
+    let record = InstalledAddon::new(game_id.clone(), AddonKind::RenoDx, addon_path.clone())
+        .with_host_kind(InstalledAddonHostKind::Proxy)
+        .with_created_file(addon_path);
+    context
+        .storage()
+        .upsert_installed_addon(&record)
+        .expect("seed external RenoDX owner");
+    record
+}
+
 fn curated_manifest(appid: &str) -> LumaManifest {
     let mut m = manifest(vec![title(
         "dishonored-2",
@@ -43,6 +63,127 @@ fn curated_manifest(appid: &str) -> LumaManifest {
     )]);
     "6.7.0".clone_into(&mut m.min_reshade_version);
     m
+}
+
+#[test]
+fn engine_config_report_uses_only_matching_standalone_owner_without_addon_record() {
+    use renderpilot_domain::{EngineConfigJournal, EngineConfigTransition};
+
+    fn report_status(
+        owner_kind: AddonKind,
+        pending: bool,
+    ) -> crate::addons::engine_config::service::EngineConfigStatus {
+        let temp = tempdir().expect("temp");
+        let context = Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new(format!("manual:luma-engine-owner-{owner_kind:?}-{pending}"))
+            .expect("game id");
+        let owner_target = temp.path().join("external").join("Engine.ini");
+        let report_target = temp.path().join("game-config").join("Engine.ini");
+        std::fs::create_dir_all(owner_target.parent().expect("owner parent"))
+            .expect("owner directory");
+        std::fs::create_dir_all(report_target.parent().expect("report parent"))
+            .expect("report directory");
+
+        let guidance = engine_ini_guidance();
+        let recipe = guidance.engine_ini.as_ref().expect("typed recipe");
+        let recipes = EngineIniRecipeSet::from_recipes([recipe]).expect("recipe set");
+        crate::addons::engine_config::service::apply(
+            context.storage(),
+            &game_id,
+            owner_kind,
+            &owner_target,
+            &recipes,
+            "luma-availability-owner-apply",
+        )
+        .expect("persist standalone owner");
+
+        if pending {
+            let owner = context
+                .storage()
+                .engine_config_journal_owner(&game_id)
+                .expect("read canonical owner")
+                .expect("owner");
+            let stable = owner.journal.stable.clone().expect("stable receipt");
+            let pending_journal = EngineConfigJournal {
+                stable: Some(stable.clone()),
+                pending: Some(EngineConfigTransition {
+                    operation_id: "luma-availability-owner-pending".to_owned(),
+                    stage_name: ".renderpilot-engine-luma-availability-owner-pending.stage"
+                        .to_owned(),
+                    prior: Some(stable.clone()),
+                    after: None,
+                    before_digest: stable.after_digest.clone(),
+                    after_digest: stable.after_digest,
+                }),
+            };
+            assert!(
+                context
+                    .storage()
+                    .compare_and_swap_engine_config_journal(
+                        &game_id,
+                        owner_kind,
+                        Some(&owner.raw_token),
+                        Some(&pending_journal),
+                    )
+                    .expect("save pending owner")
+            );
+        }
+
+        assert!(
+            context
+                .storage()
+                .get_installed_addon(&game_id)
+                .expect("local add-on record")
+                .is_none()
+        );
+        let report = super::engine_config_report(
+            &context,
+            &game_id,
+            AddonKind::Luma,
+            &crate::addons::engine_config::EngineIniResolution::ReadyToCreate(report_target),
+            &[guidance],
+        )
+        .expect("Engine.ini availability");
+        report.status
+    }
+
+    assert_eq!(
+        report_status(AddonKind::Luma, false),
+        crate::addons::engine_config::service::EngineConfigStatus::NeedsRepair,
+        "a stable Luma journal is visible without a local InstalledAddon row"
+    );
+    assert_eq!(
+        report_status(AddonKind::Luma, true),
+        crate::addons::engine_config::service::EngineConfigStatus::RecoveryRequired,
+        "a Pending Luma journal remains visible without a local row"
+    );
+    assert_eq!(
+        report_status(AddonKind::RenoDx, false),
+        crate::addons::engine_config::service::EngineConfigStatus::Ready,
+        "a RenoDX owner is not interpreted as Luma ownership"
+    );
+}
+
+fn engine_ini_guidance() -> crate::addons::luma::types::LumaGuidance {
+    use crate::addons::luma::types::LumaGuidanceKind;
+
+    let recipe = crate::addons::engine_config::EngineIniRecipe::new(
+        "luma.availability.engine.owner",
+        1,
+        vec![crate::addons::engine_config::EngineIniEntry {
+            section: "SystemSettings".to_owned(),
+            key: "r.LumaAvailabilityOwner".to_owned(),
+            value: "1".to_owned(),
+        }],
+    )
+    .expect("recipe");
+    crate::addons::luma::types::LumaGuidance {
+        id: "luma.availability.engine.owner".to_owned(),
+        kind: LumaGuidanceKind::EngineIni,
+        fallback_text: "Apply the reviewed Engine.ini setting.".to_owned(),
+        code: Some("[SystemSettings]\nr.LumaAvailabilityOwner=1".to_owned()),
+        engine_ini: Some(recipe),
+    }
 }
 
 fn reshade_host_bytes() -> Vec<u8> {
@@ -128,6 +269,152 @@ fn availability_reports_installable_for_a_curated_match_with_no_host() {
     ));
     assert!(report.actions.install.is_some());
     assert_eq!(report.state, LumaInstallState::NotInstalled);
+}
+
+#[tokio::test]
+async fn availability_load_allows_install_with_an_inactive_external_renodx_owner() {
+    let db_dir = tempdir().expect("db dir");
+    let game_dir = tempdir().expect("game dir");
+    let external_dir = tempdir().expect("external AddonPath");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("steam:403648").expect("game id");
+    let exe_path = game_dir.path().join("Dishonored2.exe");
+    std::fs::write(
+        &exe_path,
+        build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
+    )
+    .expect("write exe");
+    seed_game(&context, &game_id, "403640", game_dir.path(), &exe_path);
+    let owner = seed_external_renodx_owner(&context, &game_id, external_dir.path());
+
+    let report = load_availability(
+        &context,
+        &curated_manifest("403640"),
+        &reshade_sources(),
+        &game_id,
+    )
+    .await
+    .expect("availability");
+
+    assert!(matches!(
+        report.outcome,
+        AvailabilityOutcome::Installable { .. }
+    ));
+    assert_eq!(report.state, LumaInstallState::NotInstalled);
+    assert!(
+        context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("read external owner")
+            .is_some_and(|stored| stored.eq_ignoring_persistence_timestamps(&owner)),
+        "availability leaves the raw external-owner receipt unchanged"
+    );
+}
+
+#[tokio::test]
+async fn availability_keeps_unrelated_unmanaged_renodx_files_blocking_an_external_owner() {
+    let db_dir = tempdir().expect("db dir");
+    let game_dir = tempdir().expect("game dir");
+    let external_dir = tempdir().expect("external AddonPath");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("steam:403650").expect("game id");
+    let exe_path = game_dir.path().join("Dishonored2.exe");
+    std::fs::write(
+        &exe_path,
+        build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
+    )
+    .expect("write exe");
+    seed_game(&context, &game_id, "403640", game_dir.path(), &exe_path);
+    let owner = seed_external_renodx_owner(&context, &game_id, external_dir.path());
+    std::fs::write(game_dir.path().join("renodx-untracked.addon64"), b"unowned")
+        .expect("write unrelated peer file");
+
+    let report = load_availability(
+        &context,
+        &curated_manifest("403640"),
+        &reshade_sources(),
+        &game_id,
+    )
+    .await
+    .expect("availability");
+
+    assert!(matches!(
+        report.outcome,
+        AvailabilityOutcome::BlockedByOtherAddon {
+            other_kind: AddonKind::RenoDx,
+            unmanaged: true,
+        }
+    ));
+    assert_eq!(report.state, LumaInstallState::NotInstalled);
+    assert!(
+        context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("read external owner")
+            .is_some_and(|stored| stored.eq_ignoring_persistence_timestamps(&owner)),
+        "the blocked peer receipt remains unchanged"
+    );
+}
+
+#[tokio::test]
+async fn availability_uses_the_install_root_for_an_inactive_local_peer_receipt() {
+    let db_dir = tempdir().expect("db dir");
+    let install_root = tempdir().expect("install root");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    let game_id = GameId::new("steam:403651").expect("game id");
+    let exe_path = install_root
+        .path()
+        .join("Game")
+        .join("Binaries")
+        .join("Win64")
+        .join("Dishonored2.exe");
+    std::fs::create_dir_all(exe_path.parent().expect("exe parent")).expect("nested game dir");
+    std::fs::write(
+        &exe_path,
+        build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
+    )
+    .expect("write exe");
+    seed_game(&context, &game_id, "403640", install_root.path(), &exe_path);
+    let local_receipt = PathRef::new(
+        install_root
+            .path()
+            .join("renodx-local.addon64")
+            .to_string_lossy()
+            .replace('\\', "/"),
+    )
+    .expect("local add-on path");
+    let owner = InstalledAddon::new(game_id.clone(), AddonKind::RenoDx, local_receipt)
+        .with_host_kind(InstalledAddonHostKind::Proxy);
+    context
+        .storage()
+        .upsert_installed_addon(&owner)
+        .expect("seed inactive local receipt");
+
+    let report = load_availability(
+        &context,
+        &curated_manifest("403640"),
+        &reshade_sources(),
+        &game_id,
+    )
+    .await
+    .expect("availability");
+
+    assert!(matches!(
+        report.outcome,
+        AvailabilityOutcome::BlockedByOtherAddon {
+            other_kind: AddonKind::RenoDx,
+            unmanaged: false,
+        }
+    ));
+    assert_eq!(report.state, LumaInstallState::NotInstalled);
+    assert!(
+        context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("read local owner")
+            .is_some_and(|stored| stored.eq_ignoring_persistence_timestamps(&owner)),
+        "the local receipt remains authoritative"
+    );
 }
 
 #[test]

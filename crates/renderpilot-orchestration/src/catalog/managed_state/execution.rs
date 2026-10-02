@@ -108,6 +108,15 @@ fn execute_game_action(
         ManagedInverseAction::UninstallAddon(AddonKind::OptiScaler) => Err(
             ServiceError::invalid_input("OptiScaler must use its dedicated cleanup action"),
         ),
+        ManagedInverseAction::ReleaseEngineJournal(kind) => {
+            crate::addons::engine_config::service::release_record_by_kind(
+                context.storage(),
+                game_id,
+                *kind,
+                &format!("managed-remove-engine-{}", ulid::Ulid::generate()),
+            )
+            .map(|_| ())
+        }
         ManagedInverseAction::RestoreNvapi => {
             crate::nvapi::ops::restore_game_setting_claims(context, guard, game_id.as_str())
         }

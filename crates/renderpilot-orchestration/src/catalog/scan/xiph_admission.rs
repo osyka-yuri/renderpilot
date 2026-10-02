@@ -98,6 +98,23 @@ pub(super) fn admit_xiph_components(
     Ok(())
 }
 
+/// Reappearance has already established that the stored game was durably
+/// absent. Its component baselines, installed add-on bindings, and prior
+/// component identities may be stale and are cleared atomically with Complete
+/// publication. Validate the fresh cross-directory Xiph sidecar evidence
+/// without consulting or importing those retired catalog records.
+pub(super) fn admit_reactivated_xiph_components(
+    components: &[LibraryComponent],
+) -> Result<(), ServiceError> {
+    for candidate in components
+        .iter()
+        .filter(|component| is_cross_xiph(component))
+    {
+        admit_classic_sidecars(candidate)?;
+    }
+    Ok(())
+}
+
 fn normalized_paths(files: &[ComponentFile]) -> BTreeSet<String> {
     files
         .iter()
@@ -252,6 +269,65 @@ mod tests {
                 .expect("components"),
             vec![old_component],
             "admission performs no catalog write"
+        );
+    }
+
+    #[test]
+    fn reactivated_install_ignores_retired_xiph_baselines_but_checks_fresh_sidecars() {
+        let temp = tempfile::tempdir().expect("root");
+        let root = temp.path().join("Game");
+        let game = GameInstallation::new(
+            GameIdentity::new(
+                GameId::new("manual:xiph-reactivated").expect("game id"),
+                "Xiph reappeared",
+                Launcher::Manual,
+            )
+            .expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(root.to_string_lossy().replace('\\', "/")).expect("root"),
+        );
+        let candidate = split_component_at(
+            game.id().as_str(),
+            &root.to_string_lossy().replace('\\', "/"),
+        );
+        let stale_id = ComponentId::new("component:retired-xiph").expect("stale id");
+        let stale_component = LibraryComponent::new(
+            stale_id.clone(),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            LibraryTechnology::XiphVorbis,
+            Swappability::BundleOnly,
+        )
+        .with_file(candidate.files()[0].clone());
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("game");
+        storage
+            .replace_components_for_game(game.id(), std::slice::from_ref(&stale_component))
+            .expect("retired component");
+        storage
+            .recover_component_rollback_baseline(
+                game.id(),
+                &stale_id,
+                &ComponentRollbackBaseline::new(vec![candidate.files()[0].clone()]),
+            )
+            .expect("retired baseline");
+
+        assert!(admit_xiph_components(&storage, &game, std::slice::from_ref(&candidate)).is_err());
+        admit_reactivated_xiph_components(std::slice::from_ref(&candidate))
+            .expect("retired catalog baseline does not veto current scan");
+
+        let first_sidecar = std::path::Path::new(candidate.files()[0].path().as_str());
+        std::fs::create_dir_all(first_sidecar.parent().expect("parent"))
+            .expect("create first member parent");
+        std::fs::write(
+            crate::fs::backup_path(first_sidecar).expect("first sidecar"),
+            b"only one retired backup",
+        )
+        .expect("write partial backup");
+        assert!(
+            admit_reactivated_xiph_components(std::slice::from_ref(&candidate)).is_err(),
+            "fresh sidecar validation still rejects incomplete split Xiph backups"
         );
     }
 

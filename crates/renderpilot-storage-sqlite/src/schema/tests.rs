@@ -137,6 +137,13 @@ fn reduce_current_to_v14(connection: &Connection) {
         .expect("reduce physical schema to v14");
     connection
         .execute_batch(
+            "DROP TRIGGER IF EXISTS trg_games_create_installation_availability;
+             DROP TABLE IF EXISTS installation_availability;
+             DROP TABLE IF EXISTS game_engine_config_journals;",
+        )
+        .expect("remove schema-v22-only structures from the v14 fixture");
+    connection
+        .execute_batch(
             "CREATE TABLE nvapi_setting_baselines (
                 game_id TEXT NOT NULL,
                 setting_key TEXT NOT NULL,

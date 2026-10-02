@@ -24,10 +24,11 @@ use renderpilot_domain::{AddonKind, GameId};
 use crate::addons::errors;
 use crate::{Context, ServiceError};
 
+use super::external_proxy_owner::InactiveExternalProxyOwner;
 use super::records;
 use super::tool;
 
-/// Why [`check_blocked`] found the other tool already present.
+/// Why [`check_blocked_with_external_owner`] found the other tool already present.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExclusivityBlockKind {
     /// An `installed_addons` ownership record for the other kind exists.
@@ -43,17 +44,40 @@ pub(crate) struct ExclusivityBlock {
     pub(crate) kind: ExclusivityBlockKind,
 }
 
-/// Checks whether `requesting` is blocked from installing/acting for `game_id` by
-/// the other addon tool. `game_dir`, when known, backstops the DB check with an
-/// on-disk scan; pass `None` when the install target isn't resolved yet (the
-/// authoritative DB check still runs on its own).
-pub(crate) fn check_blocked(
+/// Narrow install preflight for an exact inactive external Proxy owner. It
+/// discounts only the old owner's receipt-proved unmanaged-signature paths;
+/// every other record and matching path remains blocking.
+pub(crate) fn check_blocked_with_external_owner(
     context: &Context,
     game_id: &GameId,
     requesting: AddonKind,
     scan_dirs: Option<&[&Path]>,
+    owner: Option<&InactiveExternalProxyOwner>,
 ) -> Result<Option<ExclusivityBlock>, ServiceError> {
-    if let Some(foreign) = records::foreign_record(context, game_id, requesting)? {
+    if let Some(owner) = owner {
+        use renderpilot_application::InstalledAddonRepository;
+        use renderpilot_domain::InstalledAddonHostKind;
+
+        let current = context.storage().get_installed_addon(game_id)?;
+        if current.as_ref() != Some(&owner.record)
+            || !matches!(
+                owner.record.host_kind(),
+                None | Some(InstalledAddonHostKind::Proxy)
+            )
+            || !matches!(owner.record.kind(), AddonKind::RenoDx | AddonKind::Luma)
+            || !(owner.record.kind() == requesting
+                || tool::exclusive_peers(requesting).contains(&owner.record.kind()))
+            || tool::record_is_active_for_game(context, &owner.record)?
+        {
+            return Err(ServiceError::invalid_input(
+                "inactive Proxy owner changed during install preparation; retry the install",
+            ));
+        }
+    }
+
+    if let Some(foreign) = records::foreign_record(context, game_id, requesting)?
+        && owner.is_none_or(|owner| owner.record != foreign)
+    {
         return Ok(Some(ExclusivityBlock {
             other: foreign.kind(),
             kind: ExclusivityBlockKind::Record,
@@ -71,7 +95,17 @@ pub(crate) fn check_blocked(
     // Use `tool::TOOLS` / exclusive_peers so adding more mutually-exclusive
     // addons only requires updating the registration table.
     for &other in tool::exclusive_peers(requesting) {
-        if tool::unmanaged_files_present_in_dirs(dirs, other) {
+        let owner_paths = owner.map(|owner| owner.unmanaged_paths.as_slice());
+        let has_unowned_match = tool::unmanaged_matching_paths_in_dirs(dirs, other)
+            .into_iter()
+            .any(|path| {
+                !owner_paths.is_some_and(|owned| {
+                    owned
+                        .iter()
+                        .any(|owned_path| crate::paths::same_path(&path, owned_path))
+                })
+            });
+        if has_unowned_match {
             return Ok(Some(ExclusivityBlock {
                 other,
                 kind: ExclusivityBlockKind::UnmanagedFiles,
@@ -92,7 +126,29 @@ pub(crate) fn ensure_not_blocked(
     requesting: AddonKind,
     scan_dirs: Option<&[&Path]>,
 ) -> Result<(), ServiceError> {
-    let Some(block) = check_blocked(context, game_id, requesting, scan_dirs)? else {
+    ensure_not_blocked_with_candidate(context, game_id, requesting, scan_dirs, None)
+}
+
+pub(crate) fn ensure_not_blocked_with_external_owner(
+    context: &Context,
+    game_id: &GameId,
+    requesting: AddonKind,
+    scan_dirs: Option<&[&Path]>,
+    owner: &InactiveExternalProxyOwner,
+) -> Result<(), ServiceError> {
+    ensure_not_blocked_with_candidate(context, game_id, requesting, scan_dirs, Some(owner))
+}
+
+fn ensure_not_blocked_with_candidate(
+    context: &Context,
+    game_id: &GameId,
+    requesting: AddonKind,
+    scan_dirs: Option<&[&Path]>,
+    owner: Option<&InactiveExternalProxyOwner>,
+) -> Result<(), ServiceError> {
+    let Some(block) =
+        check_blocked_with_external_owner(context, game_id, requesting, scan_dirs, owner)?
+    else {
         return Ok(());
     };
     let unmanaged = block.kind == ExclusivityBlockKind::UnmanagedFiles;
@@ -121,6 +177,15 @@ mod tests {
     use super::*;
     use crate::Context;
 
+    fn check_blocked(
+        context: &Context,
+        game_id: &GameId,
+        requesting: AddonKind,
+        scan_dirs: Option<&[&Path]>,
+    ) -> Result<Option<ExclusivityBlock>, ServiceError> {
+        check_blocked_with_external_owner(context, game_id, requesting, scan_dirs, None)
+    }
+
     fn seed_record(context: &Context, kind: AddonKind, path: &str) {
         let record = InstalledAddon::new(
             GameId::new("steam:1").expect("game id"),
@@ -134,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn check_blocked_skips_unmanaged_peers_when_requesting_kind_has_a_record() {
+    fn check_blocked_keeps_peer_backstop_for_an_inactive_requesting_record() {
         let db_dir = tempdir().expect("tempdir");
         let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
         let game_id = GameId::new("steam:1").expect("game id");
@@ -144,12 +209,11 @@ mod tests {
         std::fs::write(dir.path().join("renodx-cp2077.addon64"), b"x").expect("write peer debris");
         let dirs = [dir.path()];
 
-        assert!(
-            check_blocked(&context, &game_id, AddonKind::Luma, Some(&dirs))
-                .expect("query")
-                .is_none(),
-            "own record must suppress unmanaged peer blocks"
-        );
+        let block = check_blocked(&context, &game_id, AddonKind::Luma, Some(&dirs))
+            .expect("query")
+            .expect("an inactive raw record does not suppress the unmanaged peer backstop");
+        assert_eq!(block.other, AddonKind::RenoDx);
+        assert_eq!(block.kind, ExclusivityBlockKind::UnmanagedFiles);
     }
 
     #[test]
@@ -247,10 +311,65 @@ mod tests {
     }
 
     #[test]
+    fn exact_legacy_proxy_owner_path_is_filtered_but_other_probe_paths_still_block() {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("steam:1").expect("game id");
+        let owned_payload = game_dir.path().join("renodx-old.addon64");
+        std::fs::write(&owned_payload, b"old owner").expect("old payload");
+        let record = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::RenoDx,
+            PathRef::new(owned_payload.to_string_lossy()).expect("payload path"),
+        );
+        context
+            .storage()
+            .upsert_installed_addon(&record)
+            .expect("store legacy owner");
+        let record = context
+            .storage()
+            .get_installed_addon(&game_id)
+            .expect("reload persisted owner")
+            .expect("owner exists");
+        let owner = crate::addons::external_proxy_owner::InactiveExternalProxyOwner {
+            record,
+            unmanaged_paths: vec![owned_payload],
+        };
+        let dirs = [game_dir.path()];
+
+        assert!(
+            check_blocked_with_external_owner(
+                &context,
+                &game_id,
+                AddonKind::Luma,
+                Some(&dirs),
+                Some(&owner),
+            )
+            .expect("legacy Proxy candidate")
+            .is_none(),
+            "the exact receipt-owned signature path must be filtered"
+        );
+
+        let unowned = game_dir.path().join("renodx-untracked.addon32");
+        std::fs::write(&unowned, b"unowned").expect("unmanaged RenoDX file");
+        let block = check_blocked_with_external_owner(
+            &context,
+            &game_id,
+            AddonKind::Luma,
+            Some(&dirs),
+            Some(&owner),
+        )
+        .expect("preserve other path block")
+        .expect("unowned path must still block");
+        assert_eq!(block.kind, ExclusivityBlockKind::UnmanagedFiles);
+    }
+
+    #[test]
     fn unmanaged_renodx_detects_addon_file_case_insensitively() {
         let dir = tempdir().expect("tempdir");
         std::fs::write(dir.path().join("RenoDX-cp2077.Addon64"), b"x").expect("write");
-        assert!(tool::unmanaged_files_present(dir.path(), AddonKind::RenoDx));
+        assert!(!tool::unmanaged_matching_paths(dir.path(), AddonKind::RenoDx).is_empty());
     }
 
     #[test]
@@ -258,17 +377,14 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         std::fs::write(dir.path().join("game.exe"), b"x").expect("write");
         std::fs::write(dir.path().join("dxgi.dll"), b"x").expect("write");
-        assert!(!tool::unmanaged_files_present(
-            dir.path(),
-            AddonKind::RenoDx
-        ));
+        assert!(tool::unmanaged_matching_paths(dir.path(), AddonKind::RenoDx).is_empty());
     }
 
     #[test]
     fn unmanaged_luma_detects_addon_file() {
         let dir = tempdir().expect("tempdir");
         std::fs::write(dir.path().join("Luma-Dishonored_2.addon"), b"x").expect("write");
-        assert!(tool::unmanaged_files_present(dir.path(), AddonKind::Luma));
+        assert!(!tool::unmanaged_matching_paths(dir.path(), AddonKind::Luma).is_empty());
     }
 
     #[test]
@@ -276,14 +392,14 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         std::fs::create_dir(dir.path().join("Luma")).expect("mkdir");
         std::fs::write(dir.path().join("Luma").join("Global.hlsl"), b"x").expect("write");
-        assert!(tool::unmanaged_files_present(dir.path(), AddonKind::Luma));
+        assert!(!tool::unmanaged_matching_paths(dir.path(), AddonKind::Luma).is_empty());
     }
 
     #[test]
     fn unmanaged_luma_ignores_an_empty_luma_directory() {
         let dir = tempdir().expect("tempdir");
         std::fs::create_dir(dir.path().join("Luma")).expect("mkdir");
-        assert!(!tool::unmanaged_files_present(dir.path(), AddonKind::Luma));
+        assert!(tool::unmanaged_matching_paths(dir.path(), AddonKind::Luma).is_empty());
     }
 
     #[test]
@@ -291,28 +407,25 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         std::fs::create_dir(dir.path().join("Luma")).expect("mkdir");
         std::fs::write(dir.path().join("Luma").join("readme.txt"), b"notes").expect("write");
-        assert!(!tool::unmanaged_files_present(dir.path(), AddonKind::Luma));
+        assert!(tool::unmanaged_matching_paths(dir.path(), AddonKind::Luma).is_empty());
     }
 
     #[test]
     fn unmanaged_luma_ignores_addon_bak_siblings() {
         let dir = tempdir().expect("tempdir");
         std::fs::write(dir.path().join("Luma-Game.addon.bak"), b"x").expect("write");
-        assert!(!tool::unmanaged_files_present(dir.path(), AddonKind::Luma));
+        assert!(tool::unmanaged_matching_paths(dir.path(), AddonKind::Luma).is_empty());
     }
 
     #[test]
     fn unmanaged_luma_ignores_renodx_files_and_vice_versa() {
         let dir = tempdir().expect("tempdir");
         std::fs::write(dir.path().join("renodx-cp2077.addon64"), b"x").expect("write");
-        assert!(!tool::unmanaged_files_present(dir.path(), AddonKind::Luma));
+        assert!(tool::unmanaged_matching_paths(dir.path(), AddonKind::Luma).is_empty());
 
         let dir2 = tempdir().expect("tempdir");
         std::fs::write(dir2.path().join("Luma-Game.addon"), b"x").expect("write");
-        assert!(!tool::unmanaged_files_present(
-            dir2.path(),
-            AddonKind::RenoDx
-        ));
+        assert!(tool::unmanaged_matching_paths(dir2.path(), AddonKind::RenoDx).is_empty());
     }
 
     #[test]

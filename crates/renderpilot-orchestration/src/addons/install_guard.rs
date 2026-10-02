@@ -2,10 +2,11 @@
 //!
 //! Callers hold the per-game [`crate::game_mutation_lock`] before calling these helpers.
 
-use renderpilot_domain::{AddonKind, GameId};
+use renderpilot_domain::AddonKind;
 
 use crate::addons::engine;
 use crate::addons::exclusivity;
+use crate::addons::external_proxy_owner::InactiveExternalProxyOwner;
 use crate::addons::game_analysis::{GameAnalysis, install_target_dir};
 use crate::addons::reshade::InstallRoots;
 use crate::{Context, ServiceError};
@@ -18,17 +19,15 @@ pub(crate) fn resolve_install_scan_roots(
     Ok(InstallRoots::resolve_from_ini(&dir))
 }
 
-/// Ensures the requesting tool is not blocked by a peer, then recovers a torn
-/// framework install when its sentinel is present. OptiScaler owns a separate
-/// journal and never enters this framework-only guard.
-///
-/// The user-facing block message comes from
-/// [`crate::addons::tool::AddonTool::exclusive_block_message`].
-pub(crate) fn guard_exclusivity_and_torn(
+/// Same install guard with the one explicit exception supported by external
+/// receipt replacement: ignore only exact matching files in a verified
+/// inactive Proxy owner's receipt closure.
+pub(crate) fn guard_exclusivity_and_torn_with_external_owner(
     context: &Context,
-    game_id: &GameId,
+    game_id: &renderpilot_domain::GameId,
     kind: AddonKind,
     roots: &InstallRoots,
+    owner: Option<&InactiveExternalProxyOwner>,
 ) -> Result<(), ServiceError> {
     let scan_dirs = roots.scan_dir_paths();
     let feature = match kind {
@@ -41,7 +40,18 @@ pub(crate) fn guard_exclusivity_and_torn(
         }
     };
     crate::file_mutation::ensure_feature_allowed_with_proxy_topology(context, game_id, feature)?;
-    exclusivity::ensure_not_blocked(context, game_id, kind, Some(scan_dirs.as_slice()))?;
+    match owner {
+        Some(owner) => exclusivity::ensure_not_blocked_with_external_owner(
+            context,
+            game_id,
+            kind,
+            Some(scan_dirs.as_slice()),
+            owner,
+        )?,
+        None => {
+            exclusivity::ensure_not_blocked(context, game_id, kind, Some(scan_dirs.as_slice()))?
+        }
+    }
     if engine::is_install_torn(roots.sentinel_dir(), kind) {
         match kind {
             AddonKind::Luma => {

@@ -3,7 +3,7 @@
 //! Inactive records produce the existing durable workset; active proxy topologies
 //! produce the complete peer transition consumed by the peer executor.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use renderpilot_application::{GameRepository, ProxyTopologyRepository};
 use renderpilot_domain::{
@@ -17,8 +17,9 @@ use crate::addons::luma::errors;
 use crate::addons::luma::peer::{
     LumaPeerRootAuthority, PlannedManagedDlssRelease, compose_active_uninstall,
 };
-use crate::addons::mutation_targets::DurableWorkset;
+use crate::addons::mutation_targets::{DurableWorkset, MutationTargets};
 use crate::addons::records;
+use crate::addons::shared_vulkan_mutation::FileIntent;
 use crate::catalog::cascade::{CascadeResult, ValidatedRollbackPlan};
 use crate::peer_mutation_executor::ExactEndpointProgram;
 use crate::{Context, ServiceError};
@@ -28,6 +29,8 @@ pub(super) struct UninstallApply {
     pub(super) record: InstalledAddon,
     pub(super) rollback_specs: Vec<ValidatedRollbackPlan>,
     pub(super) next_components: Vec<LibraryComponent>,
+    pub(super) current_components: Vec<LibraryComponent>,
+    pub(super) has_catalog_claim: bool,
     pub(super) release_plans: Vec<PlannedDlss>,
     pub(super) rolled_back_ids: Vec<ComponentId>,
 }
@@ -43,6 +46,75 @@ pub(super) enum UninstallPlan {
 pub(super) struct InactiveUninstallPlan {
     pub(super) apply: UninstallApply,
     pub(super) workset: DurableWorkset,
+}
+
+/// Read-only preparation for an explicit replacement of an inactive external
+/// owner. It carries the existing uninstall plan without its Engine/catalog
+/// commit effects so the caller can include these exact paths in its outer
+/// durable replacement transaction.
+pub(crate) struct PreparedExternalOwnerRelease {
+    apply: UninstallApply,
+    targets: MutationTargets,
+}
+
+impl PreparedExternalOwnerRelease {
+    pub(crate) fn targets(&self) -> &MutationTargets {
+        &self.targets
+    }
+
+    pub(crate) fn next_components(&self) -> &[LibraryComponent] {
+        &self.apply.next_components
+    }
+
+    pub(crate) fn baseline_mutations(
+        &self,
+    ) -> Vec<renderpilot_storage_sqlite::ComponentBaselineMutation<'_>> {
+        self.apply
+            .rolled_back_ids
+            .iter()
+            .map(
+                |component_id| renderpilot_storage_sqlite::ComponentBaselineMutation::Delete {
+                    component_id,
+                },
+            )
+            .collect()
+    }
+
+    /// Confirms this prepared release can participate in an SVAM file-only
+    /// transaction without changing the existing game catalog projection.
+    pub(crate) fn ensure_no_catalog_effects(&self) -> Result<(), ServiceError> {
+        if self.apply.has_catalog_claim
+            || !self.apply.rollback_specs.is_empty()
+            || !self.apply.rolled_back_ids.is_empty()
+            || self.apply.current_components != self.apply.next_components
+        {
+            return Err(ServiceError::invalid_input(
+                "Luma external release has catalog effects that cannot join a file-only Shared Vulkan transaction",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Returns exact file-only before/after images for the existing SVAM
+    /// participant composer. The receipt and coordinated-file plans are read
+    /// again here so unsupported or drifted operations fail before any write.
+    pub(crate) fn file_intents_for_shared_vulkan(&self) -> Result<Vec<FileIntent>, ServiceError> {
+        self.ensure_no_catalog_effects()?;
+        receipt_file_intents(&self.apply)
+    }
+
+    /// Applies only receipt-bounded filesystem reversals. Engine journal
+    /// release, catalog mutation, and cascade journaling belong to the outer
+    /// replacement commit.
+    pub(crate) fn apply_filesystem_only(&self) -> Result<(), ServiceError> {
+        super::execute::execute_external_owner_release_files(&self.apply)
+    }
+
+    /// Records cascade completion only after the outer owner replacement has
+    /// committed successfully.
+    pub(crate) fn journal_after_commit(&self, context: &Context, game_id: &GameId) {
+        super::execute::journal_cascade_after_commit(context, game_id, &self.apply);
+    }
 }
 
 /// Owned active-topology inputs kept alive through peer preparation, apply,
@@ -189,6 +261,72 @@ fn plan_inactive_uninstall(
         }
     })?;
 
+    let (apply, targets) =
+        plan_inactive_uninstall_apply(context, game_id, record, Some(game_root))?;
+    let workset = targets.resolve_workset()?;
+
+    Ok(UninstallPlan::Inactive(Box::new(InactiveUninstallPlan {
+        apply,
+        workset,
+    })))
+}
+
+/// Prepares the same inactive-owner reversal as ordinary uninstall, but omits
+/// the current game root from its mutation scope. The caller validates that
+/// every resulting receipt path and operation root is disjoint from that root.
+pub(super) fn plan_external_owner_release(
+    context: &Context,
+    game_id: &GameId,
+    record: InstalledAddon,
+    current_game_root: &Path,
+) -> Result<PreparedExternalOwnerRelease, ServiceError> {
+    let (apply, targets) = plan_inactive_uninstall_apply(context, game_id, record, None)?;
+    validate_external_targets(current_game_root, &targets)?;
+    Ok(PreparedExternalOwnerRelease { apply, targets })
+}
+
+fn validate_external_targets(
+    current_game_root: &Path,
+    targets: &MutationTargets,
+) -> Result<(), ServiceError> {
+    for path in targets.paths.iter().chain(&targets.roots) {
+        if !path.is_absolute() {
+            return Err(ServiceError::invalid_input(format!(
+                "Luma external owner has a non-absolute receipt operation path: {}",
+                path.display()
+            )));
+        }
+        let candidate = crate::paths::canonical_candidate(path).map_err(|error| {
+            ServiceError::invalid_input(format!(
+                "Luma external owner receipt path is invalid: {}: {error}",
+                path.display()
+            ))
+        })?;
+        if !matches!(
+            normalized_path_relation(
+                &current_game_root.to_string_lossy(),
+                &candidate.to_string_lossy(),
+            ),
+            NormalizedPathRelation::Disjoint
+        ) {
+            return Err(ServiceError::invalid_input(format!(
+                "Luma external owner receipt operation overlaps the current game root: {}",
+                path.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn plan_inactive_uninstall_apply(
+    context: &Context,
+    game_id: &GameId,
+    record: InstalledAddon,
+    game_root: Option<PathBuf>,
+) -> Result<(UninstallApply, MutationTargets), ServiceError> {
+    use renderpilot_application::ComponentRepository;
+
+    let current_components = context.storage().list_components_for_game(game_id)?;
     let owned_paths = records::owned_managed_paths(&record);
     let cascade = crate::catalog::cascade::cascade_for_managed_paths(
         context.storage(),
@@ -208,6 +346,7 @@ fn plan_inactive_uninstall(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let has_catalog_claim = cascade.catalog_claim().is_some();
     let crate::catalog::cascade::CascadeResult {
         rollback_specs,
         next_components,
@@ -215,26 +354,238 @@ fn plan_inactive_uninstall(
         ..
     } = cascade;
 
-    let targets = crate::addons::luma::mutation_targets::uninstall_targets(
-        game_root,
-        &record,
-        mutation_paths,
-    );
-    let workset = targets.resolve_workset()?;
+    let targets = match game_root {
+        Some(game_root) => crate::addons::luma::mutation_targets::uninstall_targets(
+            game_root,
+            &record,
+            mutation_paths,
+        ),
+        None => MutationTargets::for_record(&record, [], mutation_paths),
+    };
 
     let rolled_back_ids: Vec<_> = rollback_specs
         .iter()
         .map(|spec| spec.component_id().clone())
         .collect();
 
-    Ok(UninstallPlan::Inactive(Box::new(InactiveUninstallPlan {
-        apply: UninstallApply {
+    Ok((
+        UninstallApply {
             record,
             rollback_specs,
             next_components,
+            current_components,
+            has_catalog_claim,
             release_plans,
             rolled_back_ids,
         },
-        workset,
-    })))
+        targets,
+    ))
+}
+
+fn receipt_file_intents(apply: &UninstallApply) -> Result<Vec<FileIntent>, ServiceError> {
+    use std::collections::HashSet;
+
+    let created = apply
+        .record
+        .created_files()
+        .iter()
+        .map(|path| PathBuf::from(path.as_str()))
+        .collect::<Vec<_>>();
+    let backed_up = apply
+        .record
+        .backed_up_files()
+        .iter()
+        .map(|path| PathBuf::from(path.as_str()))
+        .collect::<Vec<_>>();
+    let backed_keys = backed_up
+        .iter()
+        .map(PathBuf::as_path)
+        .collect::<HashSet<_>>();
+
+    let mut intents = Vec::new();
+    for path in &created {
+        if backed_keys.contains(path.as_path()) {
+            continue;
+        }
+        if let Some(before) = read_regular_file_optional(path)? {
+            intents.push(FileIntent {
+                live_path: path.clone(),
+                before: Some(before),
+                after: None,
+            });
+        }
+    }
+    for path in backed_up {
+        let backup = crate::fs::backup_path(&path).map_err(|error| {
+            ServiceError::invalid_input(format!("Luma external backup receipt is invalid: {error}"))
+        })?;
+        let Some(restored) = read_regular_file_optional(&backup)? else {
+            // The ordinary engine treats a missing backup as a no-op.
+            continue;
+        };
+        let before = read_regular_file_optional(&path)?;
+        intents.push(FileIntent {
+            live_path: path,
+            before,
+            after: Some(restored.clone()),
+        });
+        intents.push(FileIntent {
+            live_path: backup,
+            before: Some(restored),
+            after: None,
+        });
+    }
+
+    for planned in &apply.release_plans {
+        append_managed_release_intents(planned, &mut intents)?;
+    }
+
+    let mut seen = HashSet::new();
+    for intent in &intents {
+        if !seen.insert(crate::paths::normalized_key(&intent.live_path)) {
+            return Err(ServiceError::invalid_input(format!(
+                "Luma external release has overlapping file participants at {}",
+                intent.live_path.display()
+            )));
+        }
+    }
+    Ok(intents)
+}
+
+fn append_managed_release_intents(
+    planned: &PlannedDlss,
+    intents: &mut Vec<FileIntent>,
+) -> Result<(), ServiceError> {
+    use crate::coordinated_files::CoordinatedFilePlan;
+
+    match &planned.action {
+        CoordinatedFilePlan::Keep => Ok(()),
+        CoordinatedFilePlan::Reuse { path, sha256 } => {
+            require_file_hash(path, std::slice::from_ref(sha256))
+        }
+        CoordinatedFilePlan::RestoreAndRelease {
+            path,
+            baseline_sha256,
+            expected_live,
+        } => {
+            let before = read_regular_file_optional(path)?.ok_or_else(|| {
+                ServiceError::invalid_input(format!(
+                    "managed Luma release target disappeared: {}",
+                    path.display()
+                ))
+            })?;
+            require_bytes_hash(path, &before, expected_live)?;
+            let backup = crate::fs::backup_path(path).map_err(|error| {
+                ServiceError::invalid_input(format!(
+                    "managed Luma release backup is invalid: {error}"
+                ))
+            })?;
+            let restored = read_regular_file_optional(&backup)?.ok_or_else(|| {
+                ServiceError::invalid_input(format!(
+                    "managed Luma release baseline disappeared: {}",
+                    backup.display()
+                ))
+            })?;
+            require_bytes_hash(&backup, &restored, std::slice::from_ref(baseline_sha256))?;
+            intents.push(FileIntent {
+                live_path: path.clone(),
+                before: Some(before),
+                after: Some(restored.clone()),
+            });
+            intents.push(FileIntent {
+                live_path: backup,
+                before: Some(restored),
+                after: None,
+            });
+            Ok(())
+        }
+        CoordinatedFilePlan::RemoveAndRelease {
+            path,
+            expected_live,
+        } => {
+            let before = read_regular_file_optional(path)?.ok_or_else(|| {
+                ServiceError::invalid_input(format!(
+                    "managed Luma release target disappeared: {}",
+                    path.display()
+                ))
+            })?;
+            require_bytes_hash(path, &before, expected_live)?;
+            let backup = crate::fs::backup_path(path).map_err(|error| {
+                ServiceError::invalid_input(format!(
+                    "managed Luma release backup is invalid: {error}"
+                ))
+            })?;
+            if read_regular_file_optional(&backup)?.is_some() {
+                return Err(ServiceError::invalid_input(format!(
+                    "managed Luma release unexpectedly has a baseline sidecar: {}",
+                    backup.display()
+                )));
+            }
+            intents.push(FileIntent {
+                live_path: path.clone(),
+                before: Some(before),
+                after: None,
+            });
+            Ok(())
+        }
+        other => Err(ServiceError::invalid_input(format!(
+            "Luma external release contains an unsupported coordinated-file operation: {other:?}"
+        ))),
+    }
+}
+
+fn read_regular_file_optional(path: &Path) -> Result<Option<Vec<u8>>, ServiceError> {
+    use std::io::ErrorKind;
+
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(ServiceError::command_failed(format!(
+                "cannot inspect Luma external release participant {}: {error}",
+                path.display()
+            )));
+        }
+    };
+    if !metadata.file_type().is_file() {
+        return Err(ServiceError::invalid_input(format!(
+            "Luma external release participant is not a regular file: {}",
+            path.display()
+        )));
+    }
+    std::fs::read(path).map(Some).map_err(|error| {
+        ServiceError::command_failed(format!(
+            "cannot read Luma external release participant {}: {error}",
+            path.display()
+        ))
+    })
+}
+
+fn require_file_hash(
+    path: &Path,
+    expected: &[renderpilot_domain::Sha256Hash],
+) -> Result<(), ServiceError> {
+    let bytes = read_regular_file_optional(path)?.ok_or_else(|| {
+        ServiceError::invalid_input(format!(
+            "managed Luma release target disappeared: {}",
+            path.display()
+        ))
+    })?;
+    require_bytes_hash(path, &bytes, expected)
+}
+
+fn require_bytes_hash(
+    path: &Path,
+    bytes: &[u8],
+    expected: &[renderpilot_domain::Sha256Hash],
+) -> Result<(), ServiceError> {
+    let actual = renderpilot_detection::sha256_bytes(bytes)?;
+    if expected.contains(&actual) {
+        Ok(())
+    } else {
+        Err(ServiceError::invalid_input(format!(
+            "Luma managed release participant changed after planning: {}",
+            path.display()
+        )))
+    }
 }

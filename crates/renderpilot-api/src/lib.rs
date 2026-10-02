@@ -55,8 +55,10 @@ pub fn gc_cover_orphans_on_startup(context: &renderpilot_orchestration::Context)
 
 pub use self::catalog::{
     QueryGameCardsRequest, ValidatedCatalogRefreshOutput, bootstrap_games_catalog,
-    get_catalog_setting, get_game_details, query_game_cards, refresh_catalog_snapshot_revision,
-    refresh_validated_catalog_snapshot, set_catalog_setting, set_game_favorite, set_game_hidden,
+    clean_retired_game_leftovers, get_catalog_setting, get_game_details,
+    leave_retired_game_leftovers, list_retired_game_leftovers, query_game_cards,
+    refresh_catalog_snapshot_revision, refresh_validated_catalog_snapshot, set_catalog_setting,
+    set_game_favorite, set_game_hidden,
 };
 pub use self::covers::{
     ClearGameCoverOutput, clear_game_cover, clear_game_cover_with_observation, fetch_game_cover,

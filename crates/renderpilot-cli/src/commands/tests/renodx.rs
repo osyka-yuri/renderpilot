@@ -4,7 +4,7 @@ use renderpilot_orchestration::domain::{
 };
 use tempfile::TempDir;
 
-use super::{CatalogFixture, args};
+use super::{CatalogFixture, args, path_string, sample_game};
 
 struct RenoFixture {
     _game_dir: TempDir,
@@ -44,6 +44,28 @@ impl RenoFixture {
             "host-digest",
         ))
     }
+
+    fn register_active_game(&self, fixture: &CatalogFixture) {
+        let root = self._game_dir.path();
+        let exe = root.join("RenoGame.exe");
+        std::fs::write(&exe, super::super::test_support::game_executable_pe())
+            .expect("write game executable");
+        std::fs::write(
+            root.join("dxgi.dll"),
+            super::super::test_support::compatible_reshade_proxy_host(),
+        )
+        .expect("write compatible current ReShade Proxy host");
+
+        let game = sample_game(
+            &self.game_id,
+            "RenoDX CLI status fixture",
+            &path_string(root),
+        )
+        .with_executable_candidate(
+            PathRef::new(exe.to_string_lossy()).expect("game executable path"),
+        );
+        fixture.store_game(&game);
+    }
 }
 
 #[test]
@@ -63,6 +85,7 @@ fn renodx_status_reports_not_installed_for_a_game_without_an_addon() {
 fn renodx_status_reports_installed_after_a_record_is_stored() {
     let reno = RenoFixture::new();
     let fixture = CatalogFixture::new("renodx-status-installed");
+    reno.register_active_game(&fixture);
     fixture
         .storage()
         .upsert_installed_addon(&reno.installed_record())
@@ -190,6 +213,9 @@ fn renodx_check_updates_reports_unknown_for_installed_when_catalogue_unavailable
 fn renodx_status_omits_host_origin_when_no_host_entry_is_recorded() {
     let reno = RenoFixture::new();
     let fixture = CatalogFixture::new("renodx-status-local-file");
+    // The current compatible host exists, but this local-file receipt has no
+    // HostBinary tracked source, so status must omit only the recorded origin.
+    reno.register_active_game(&fixture);
     let local_file = InstalledAddon::new(
         reno.game_id(),
         AddonKind::RenoDx,

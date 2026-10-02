@@ -3,6 +3,7 @@ use rusqlite::named_params;
 
 use crate::{error::storage_error, sqlite_clock};
 
+use super::super::game_mutations::InstalledAddonMutation;
 use super::super::{
     SqliteStorage, installed_addons, peer_aggregate_reservations, shared_artifacts,
 };
@@ -45,14 +46,25 @@ impl SqliteStorage {
             )?;
             if let Some(game_id) = game_id {
                 match addon {
-                    super::super::game_mutations::InstalledAddonMutation::Keep => {}
-                    super::super::game_mutations::InstalledAddonMutation::Upsert(addon) => {
+                    InstalledAddonMutation::Keep => {}
+                    InstalledAddonMutation::Upsert(addon) => {
                         installed_addons::upsert_within_transaction(transaction, addon)?;
                     }
-                    super::super::game_mutations::InstalledAddonMutation::Delete(kind) => {
+                    InstalledAddonMutation::Delete(kind) => {
                         installed_addons::delete_within_transaction(transaction, game_id, kind)?;
                     }
-                    super::super::game_mutations::InstalledAddonMutation::OptiScaler(_) => {
+                    InstalledAddonMutation::ReplaceExpected {
+                        expected,
+                        replacement,
+                    } => {
+                        installed_addons::replace_expected_within_transaction(
+                            transaction,
+                            game_id,
+                            expected,
+                            replacement,
+                        )?;
+                    }
+                    InstalledAddonMutation::OptiScaler(_) => {
                         return Err(renderpilot_application::AppError::invalid_input(
                             "shared Vulkan mutations cannot commit an OptiScaler aggregate",
                         ));

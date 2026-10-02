@@ -2,7 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
-use renderpilot_domain::{Architecture, SharedArtifactKind};
+use renderpilot_application::InstalledAddonRepository;
+use renderpilot_domain::{
+    AddonKind, Architecture, GameId, InstalledAddonHostKind, SharedArtifactKind,
+};
 
 use crate::addons::renodx::dto::vulkan::VulkanLayerManagementReport;
 use crate::addons::renodx::errors;
@@ -40,6 +43,17 @@ pub(crate) enum PreparedInstallChange {
         download: crate::addons::reshade::fetch::Download,
         layer_dir: PathBuf,
     },
+    /// Inactive reinstall transition that may release a previous Shared Vulkan
+    /// app binding, register the current Vulkan executable, or do both.
+    ReconcileApps {
+        old_exe_path: Option<PathBuf>,
+        new_exe_path: Option<PathBuf>,
+        source: Option<(
+            crate::addons::reshade::source::ReshadeSource,
+            crate::addons::reshade::fetch::Download,
+        )>,
+        layer_dir: PathBuf,
+    },
 }
 
 pub(crate) struct SharedLayerTransactionInput {
@@ -63,6 +77,37 @@ impl PreparedInstallChange {
         Option<renderpilot_platform_windows::vulkan_layer::SharedVulkanLayerPlan>,
         ServiceError,
     > {
+        self.resolve_locked_plan_inner(false)
+    }
+
+    /// Resolves an inactive reinstall's app plan while the final shared lock is
+    /// held. Another game's persisted binding keeps the old executable
+    /// registered, so it is omitted from this game's release plan.
+    pub(crate) fn resolve_locked_inactive_plan(
+        &self,
+        context: &Context,
+        game_id: &GameId,
+    ) -> Result<
+        Option<renderpilot_platform_windows::vulkan_layer::SharedVulkanLayerPlan>,
+        ServiceError,
+    > {
+        let preserve_previous = match self {
+            Self::ReconcileApps {
+                old_exe_path: Some(old_exe_path),
+                ..
+            } => other_game_owns_shared_executable(context, game_id, old_exe_path)?,
+            _ => false,
+        };
+        self.resolve_locked_plan_inner(preserve_previous)
+    }
+
+    fn resolve_locked_plan_inner(
+        &self,
+        preserve_previous_binding: bool,
+    ) -> Result<
+        Option<renderpilot_platform_windows::vulkan_layer::SharedVulkanLayerPlan>,
+        ServiceError,
+    > {
         let (layer_dir, exe_path, download) = match self {
             Self::NotNeeded => return Ok(None),
             Self::RegisterApp {
@@ -76,6 +121,9 @@ impl PreparedInstallChange {
                 download,
                 ..
             } => (layer_dir, exe_path, Some(download.bytes.as_slice())),
+            Self::ReconcileApps { .. } => {
+                return self.resolve_reconcile_plan(preserve_previous_binding);
+            }
         };
         let detection = require_mutable_layer(if download.is_some() {
             "installing"
@@ -111,6 +159,98 @@ impl PreparedInstallChange {
         Ok(Some(plan))
     }
 
+    fn resolve_reconcile_plan(
+        &self,
+        preserve_previous_binding: bool,
+    ) -> Result<
+        Option<renderpilot_platform_windows::vulkan_layer::SharedVulkanLayerPlan>,
+        ServiceError,
+    > {
+        let Self::ReconcileApps {
+            old_exe_path,
+            new_exe_path,
+            source,
+            layer_dir,
+        } = self
+        else {
+            return Err(ServiceError::command_failed(
+                "inactive reinstall shared plan has the wrong transition type",
+            ));
+        };
+        let old_exe_path = if preserve_previous_binding {
+            None
+        } else {
+            old_exe_path.as_deref()
+        };
+        if old_exe_path.is_none() && new_exe_path.is_none() {
+            return Ok(None);
+        }
+
+        let operation = match (source, new_exe_path) {
+            (Some(_), Some(_)) => "installing",
+            (_, Some(_)) => "registering",
+            (_, None) => "unregistering",
+        };
+        let detection = require_mutable_layer(operation)?;
+        if source.is_none()
+            && new_exe_path.is_some()
+            && detection != VulkanLayerDetection::Installed
+        {
+            return Err(errors::invalid(
+                "the shared Vulkan layer changed before the final commit; retry the operation"
+                    .to_owned(),
+            ));
+        }
+        let registry = crate::addons::renodx::platform::vulkan::native_registry()
+            .ok_or_else(errors::vulkan_unsupported_platform)?;
+        let observation = renderpilot_platform_windows::vulkan_layer::observe_shared_vulkan_layer(
+            registry, layer_dir,
+        )
+        .map_err(|error| {
+            errors::failed(format!("failed to inspect shared Vulkan layer: {error}"))
+        })?;
+        let plan = match (source, old_exe_path, new_exe_path.as_deref()) {
+            (Some((_, download)), Some(old), Some(new)) if !crate::paths::same_path(old, new) => {
+                renderpilot_platform_windows::vulkan_layer::plan_install_and_rebind_app(
+                    observation,
+                    &download.bytes,
+                    old,
+                    new,
+                )
+            }
+            (Some((_, download)), _, Some(new)) => {
+                renderpilot_platform_windows::vulkan_layer::plan_install_and_register(
+                    observation,
+                    &download.bytes,
+                    new,
+                )
+            }
+            (None, Some(old), Some(new)) if !crate::paths::same_path(old, new) => {
+                renderpilot_platform_windows::vulkan_layer::plan_rebind_app_only(
+                    observation,
+                    old,
+                    new,
+                )
+            }
+            (None, _, Some(new)) => {
+                renderpilot_platform_windows::vulkan_layer::plan_register_app_only(observation, new)
+            }
+            (None, Some(old), None) => {
+                renderpilot_platform_windows::vulkan_layer::plan_unregister_app_only(
+                    observation,
+                    old,
+                )
+            }
+            (Some(_), _, None) | (None, None, None) => {
+                return Err(ServiceError::command_failed(
+                    "inactive reinstall has no executable binding to reconcile",
+                ));
+            }
+        }
+        .map_err(|error| errors::failed(error.to_string()))?;
+        Ok(Some(plan))
+    }
+
     /// Moves the locked plan and any downloaded source into the combined
     /// transaction input without retaining a pre-lock platform plan.
     pub(crate) fn into_transaction_input(
@@ -134,8 +274,34 @@ impl PreparedInstallChange {
                 layer_dir,
                 source: Some((source, download)),
             }),
+            Self::ReconcileApps {
+                source, layer_dir, ..
+            } => Some(SharedLayerTransactionInput {
+                plan,
+                layer_dir,
+                source,
+            }),
         }
     }
+}
+
+fn other_game_owns_shared_executable(
+    context: &Context,
+    game_id: &GameId,
+    exe_path: &Path,
+) -> Result<bool, ServiceError> {
+    Ok(context
+        .storage()
+        .list_installed_addons()?
+        .into_iter()
+        .any(|record| {
+            record.game_id() != game_id
+                && record.kind() == AddonKind::RenoDx
+                && record.host_kind() == Some(InstalledAddonHostKind::SharedVulkanLayer)
+                && record
+                    .registered_exe_path()
+                    .is_some_and(|path| crate::paths::same_path(Path::new(path.as_str()), exe_path))
+        }))
 }
 
 /// Resolves and downloads any shared Vulkan host change without writing the
@@ -190,6 +356,58 @@ pub(crate) async fn prepare_for_install(
         exe_path,
         source,
         download,
+        layer_dir,
+    })
+}
+
+/// Prepares the inactive install variant with the phase-one prior owner. Active
+/// peer installs keep their established preparation path and never infer an old
+/// binding from inactive catalog metadata.
+pub(crate) async fn prepare_for_inactive_install(
+    request: PrepareInstallRequest<'_>,
+    previous_shared_vulkan_exe_path: Option<&Path>,
+) -> Result<PreparedInstallChange, ServiceError> {
+    if matches!(request.plan.host_kind, HostKind::Vulkan) {
+        let old_exe_path = previous_shared_vulkan_exe_path.map(Path::to_path_buf);
+        let prepared = prepare_for_install(request).await?;
+        return match prepared {
+            PreparedInstallChange::RegisterApp {
+                exe_path,
+                layer_dir,
+            } => Ok(PreparedInstallChange::ReconcileApps {
+                old_exe_path,
+                new_exe_path: Some(exe_path),
+                source: None,
+                layer_dir,
+            }),
+            PreparedInstallChange::Install {
+                exe_path,
+                source,
+                download,
+                layer_dir,
+            } => Ok(PreparedInstallChange::ReconcileApps {
+                old_exe_path,
+                new_exe_path: Some(exe_path),
+                source: Some((source, download)),
+                layer_dir,
+            }),
+            PreparedInstallChange::NotNeeded | PreparedInstallChange::ReconcileApps { .. } => {
+                Err(ServiceError::command_failed(
+                    "inactive Vulkan install did not prepare an app registration",
+                ))
+            }
+        };
+    }
+
+    let Some(old_exe_path) = previous_shared_vulkan_exe_path else {
+        return Ok(PreparedInstallChange::NotNeeded);
+    };
+    require_mutable_layer("unregistering")?;
+    let layer_dir = vulkan::layer_dir().ok_or_else(errors::vulkan_unsupported_platform)?;
+    Ok(PreparedInstallChange::ReconcileApps {
+        old_exe_path: Some(old_exe_path.to_path_buf()),
+        new_exe_path: None,
+        source: None,
         layer_dir,
     })
 }

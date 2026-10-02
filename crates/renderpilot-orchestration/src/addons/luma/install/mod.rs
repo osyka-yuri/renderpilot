@@ -188,18 +188,12 @@ impl PreparedInstall {
 /// Removes only the generic add-on-engine payload. Compound uninstall uses this
 /// after coordinated files and intersecting catalog components were unwound.
 ///
-/// Delegates to [`engine::uninstall_tree`] (the generic list-based reversal plus
-/// best-effort empty-directory cleanup, bounded to the add-on's own directory) --
-/// Luma never writes `ReShade.ini`, but an empty pre-existing config can be
-/// recorded as part of an adopted runtime and removed with it. Whenever this
-/// record owns the ReShade host, its `ReShade.log`/rotated logs are removed too.
+/// Reverses the recorded generic file lists through the receipt-only helper,
+/// including best-effort empty-directory cleanup bounded to the add-on's own
+/// directory. Luma never writes `ReShade.ini`, but an empty pre-existing config
+/// can be recorded as part of an adopted runtime and removed with it. Whenever
+/// this record owns the ReShade host, its `ReShade.log`/rotated logs are removed too.
 pub(crate) fn uninstall_engine_files(record: &InstalledAddon) -> Result<(), ServiceError> {
-    let boundary = Path::new(record.addon_file().as_str())
-        .parent()
-        .ok_or_else(|| {
-            errors::failed("Luma install record's add-on file has no parent directory".to_owned())
-        })?;
-
     let log_base_path =
         crate::addons::tracking::owned_proxy_host_path(record).and_then(|host_path| {
             host_path
@@ -207,11 +201,7 @@ pub(crate) fn uninstall_engine_files(record: &InstalledAddon) -> Result<(), Serv
                 .map(|dir| scan::resolve_paths(dir, Some(&host_path)).effective_base_path)
         });
 
-    engine::uninstall_tree(
-        &path_bufs(record.created_files()),
-        &path_bufs(record.backed_up_files()),
-        boundary,
-    )?;
+    uninstall_engine_files_receipt_only(record)?;
 
     // Defense in depth: if this install recorded host provenance / a channel,
     // remove any leftover known owned proxy even when it was missing from
@@ -223,6 +213,24 @@ pub(crate) fn uninstall_engine_files(record: &InstalledAddon) -> Result<(), Serv
         scan::remove_reshade_logs_best_effort(&base_path);
     }
     Ok(())
+}
+
+/// Reverses only the generic file lists explicitly recorded on an add-on row.
+/// External-owner replacement must not infer an unrecorded proxy or discover
+/// host-adjacent logs/configuration from the current runtime.
+pub(crate) fn uninstall_engine_files_receipt_only(
+    record: &InstalledAddon,
+) -> Result<(), ServiceError> {
+    let boundary = Path::new(record.addon_file().as_str())
+        .parent()
+        .ok_or_else(|| {
+            errors::failed("Luma install record's add-on file has no parent directory".to_owned())
+        })?;
+    engine::uninstall_tree(
+        &path_bufs(record.created_files()),
+        &path_bufs(record.backed_up_files()),
+        boundary,
+    )
 }
 
 /// Removes a Luma-owned ReShade proxy that may have been left on disk after the

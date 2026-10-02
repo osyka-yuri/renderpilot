@@ -4,9 +4,9 @@ use std::collections::{BTreeSet, HashSet};
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::{
-    AddonKind, EngineConfigJournal, GameId, GameProxyTopology, OptiScalerAdoptionState,
-    OptiScalerInstallState, OptiScalerInstallStateParts, OptiScalerPrerequisiteBinding, PathRef,
-    ProxyImplementation, Sha256Hash, from_persisted,
+    GameId, GameProxyTopology, OptiScalerAdoptionState, OptiScalerInstallState,
+    OptiScalerInstallStateParts, OptiScalerPrerequisiteBinding, PathRef, ProxyImplementation,
+    Sha256Hash, from_persisted,
 };
 use rusqlite::{Connection, OptionalExtension, Row, named_params};
 
@@ -271,12 +271,10 @@ pub(in crate::repositories) fn inspect_conflicts(
                 blocking.insert(table.to_owned());
             }
         }
-        // A pending Engine.ini publication must be recovered/finalized by its
-        // owning add-on before game identity consolidation.  Copying that raw
-        // token to a rebased row would make the stage/path ownership ambiguous;
-        // stable journals are safe to copy as part of the ordinary row move.
+        // Pending Engine.ini publication belongs to the standalone journal
+        // owner and must be recovered before identity consolidation.
         if destination_pending || engine_config_journal_is_pending(connection, source_id)? {
-            blocking.insert("installed_addons".to_owned());
+            blocking.insert("game_engine_config_journals".to_owned());
         }
         if row_exists(connection, "installed_addons", destination)?
             && row_exists(connection, "installed_addons", source_id)?
@@ -295,13 +293,15 @@ pub(in crate::repositories) fn inspect_conflicts(
                     "reshade_channel",
                     "registered_exe_path",
                     "renodx_config_receipt_json",
-                    "engine_config_journal_json",
                 ],
                 destination,
                 source_id,
             )?
         {
             blocking.insert("installed_addons".to_owned());
+        }
+        if engine_config_journals_conflict(connection, destination, source_id)? {
+            blocking.insert("game_engine_config_journals".to_owned());
         }
         if row_exists(connection, "game_covers", destination)?
             && row_exists(connection, "game_covers", source_id)?
@@ -436,34 +436,36 @@ pub(in crate::repositories) fn inspect_conflicts(
 }
 
 fn engine_config_journal_is_pending(connection: &Connection, game_id: &str) -> AppResult<bool> {
-    let raw = connection
-        .query_row(
-            "SELECT kind, engine_config_journal_json
-               FROM installed_addons WHERE game_id = :game_id",
-            named_params! { ":game_id": game_id },
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
-        )
-        .optional()
-        .map_err(storage_error)?;
-    let Some((kind, Some(raw))) = raw else {
-        return Ok(false);
-    };
-    let kind: AddonKind = mapping::enum_from_text(&kind)?;
-    let journal: EngineConfigJournal = mapping::deserialize_json(&raw)?;
-    if journal.is_empty() {
-        return Err(storage_error(
-            "empty Engine.ini journal must be stored as SQL NULL",
-        ));
-    }
-    journal
-        .validate_for_kind(kind)
-        .map_err(|error| storage_error(error.to_string()))?;
-    if mapping::serialize_json(&journal)? != raw {
-        return Err(storage_error(
-            "cannot consolidate a non-canonical Engine.ini journal",
-        ));
-    }
-    Ok(journal.is_pending())
+    let game_id = GameId::new(game_id).map_err(crate::error::invalid_row)?;
+    Ok(
+        crate::repositories::installed_addons::engine_config_journal_owner_on_connection(
+            connection, &game_id,
+        )?
+        .is_some_and(|owner| owner.journal.is_pending()),
+    )
+}
+
+fn engine_config_journals_conflict(
+    connection: &Connection,
+    destination: &str,
+    source: &str,
+) -> AppResult<bool> {
+    let destination_id = GameId::new(destination).map_err(crate::error::invalid_row)?;
+    let source_id = GameId::new(source).map_err(crate::error::invalid_row)?;
+    let destination =
+        crate::repositories::installed_addons::engine_config_journal_owner_on_connection(
+            connection,
+            &destination_id,
+        )?;
+    let source = crate::repositories::installed_addons::engine_config_journal_owner_on_connection(
+        connection, &source_id,
+    )?;
+    Ok(match (destination, source) {
+        (Some(destination), Some(source)) => {
+            destination.kind != source.kind || destination.raw_token != source.raw_token
+        }
+        _ => false,
+    })
 }
 
 fn inspect_source_to_source_conflicts(
@@ -491,7 +493,6 @@ fn inspect_source_to_source_conflicts(
                         "reshade_channel",
                         "registered_exe_path",
                         "renodx_config_receipt_json",
-                        "engine_config_journal_json",
                     ][..],
                 ),
                 ("game_covers", &["file_name"][..]),
@@ -506,6 +507,10 @@ fn inspect_source_to_source_conflicts(
                 {
                     blocking.insert(table.to_owned());
                 }
+            }
+
+            if engine_config_journals_conflict(connection, left_id, right_id)? {
+                blocking.insert("game_engine_config_journals".to_owned());
             }
 
             if keyed_rows_differ(

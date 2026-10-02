@@ -42,6 +42,13 @@ pub(crate) enum ScopeSpec<'a> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum GameAddonMutation<'a> {
     Upsert(&'a InstalledAddon),
+    /// One exact owner replacement committed with the shared Vulkan row.
+    /// This is intentionally transient and is accepted only by the matching
+    /// prepared SVAM storage fence.
+    ReplaceExpected {
+        expected: &'a InstalledAddon,
+        replacement: &'a InstalledAddon,
+    },
     Delete(AddonKind),
 }
 
@@ -96,6 +103,13 @@ impl<'a> GameAddonMutation<'a> {
     fn storage(self) -> InstalledAddonMutation<'a> {
         match self {
             Self::Upsert(record) => InstalledAddonMutation::Upsert(record),
+            Self::ReplaceExpected {
+                expected,
+                replacement,
+            } => InstalledAddonMutation::ReplaceExpected {
+                expected,
+                replacement,
+            },
             Self::Delete(kind) => InstalledAddonMutation::Delete(kind),
         }
     }
@@ -110,6 +124,20 @@ impl<'a> ScopeSpec<'a> {
         Self::GameShared {
             game_id,
             addon: GameAddonMutation::Upsert(record),
+        }
+    }
+
+    pub(crate) fn game_replace_expected(
+        game_id: &'a GameId,
+        expected: &'a InstalledAddon,
+        replacement: &'a InstalledAddon,
+    ) -> Self {
+        Self::GameShared {
+            game_id,
+            addon: GameAddonMutation::ReplaceExpected {
+                expected,
+                replacement,
+            },
         }
     }
 
