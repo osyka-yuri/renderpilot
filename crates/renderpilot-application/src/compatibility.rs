@@ -83,7 +83,8 @@ pub enum SwapCompatibilityError {
     InvalidExternalAliasRequirement,
     /// An alias proof was supplied for a canonical Xiph deployment.
     UnexpectedExternalAliasRequirement,
-    /// Vendor deployments may only use plain canonical catalog artifacts.
+    /// Vendor deployments require one coherent plain package style, or exact
+    /// reviewed Unreal names that match the installed aliases.
     VendorCandidateMustUsePlainNames,
     /// Preserving one vendor alias would leave a canonical DLL imported by the
     /// candidate unavailable at runtime.
@@ -167,7 +168,7 @@ impl std::fmt::Display for SwapCompatibilityError {
                 "external alias proof was supplied for a canonical Xiph deployment"
             }
             Self::VendorCandidateMustUsePlainNames => {
-                "vendor-suffixed Xiph deployment requires plain canonical candidate DLL names"
+                "vendor-suffixed Xiph deployment requires plain canonical candidate DLL names or exact reviewed Unreal aliases"
             }
             Self::ConflictingExternalAliasRequirement => {
                 "required vendor alias conflicts with a canonical candidate dependency"

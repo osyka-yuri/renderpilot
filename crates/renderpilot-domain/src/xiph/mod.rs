@@ -194,6 +194,77 @@ mod tests {
     }
 
     #[test]
+    fn unreal_catalog_names_preserve_the_existing_lib_vendor_runtime_identity() {
+        assert_eq!(
+            XiphNamingProfile::from_styles([XiphNameStyle::Unreal]),
+            XiphNamingProfile::Unreal
+        );
+        let unreal_names = [
+            (XiphMember::VorbisFile, "libvorbisfile_64.dll"),
+            (XiphMember::VorbisEnc, "libvorbisenc_64.dll"),
+            (XiphMember::Vorbis, "libvorbis_64.dll"),
+            (XiphMember::Ogg, "libogg_64.dll"),
+        ];
+        for (member, name) in unreal_names {
+            assert_eq!(
+                classify_canonical_file_name(name),
+                Some((member, XiphNameStyle::Unreal))
+            );
+            let runtime = parse_runtime_file_name(name)
+                .expect("reviewed Unreal name parses as runtime alias")
+                .expect("Xiph runtime member");
+            assert_eq!(runtime.member(), member);
+            assert_eq!(runtime.base_style(), XiphNameStyle::Lib);
+            assert_eq!(runtime.vendor_suffix(), Some("_64"));
+            assert!(runtime.is_vendor());
+        }
+
+        let extended = parse_runtime_file_name("libvorbis_64_more.dll")
+            .expect("arbitrary valid vendor suffix remains parseable")
+            .expect("Xiph runtime member");
+        assert_eq!(extended.base_style(), XiphNameStyle::Lib);
+        assert_eq!(extended.vendor_suffix(), Some("_64_more"));
+
+        let layout = detect_layout(&[
+            member(
+                "libvorbisfile_64.dll",
+                &["libvorbis_64.dll", "libogg_64.dll"],
+            ),
+            member("libvorbis_64.dll", &["libogg_64.dll"]),
+            member("libogg_64.dll", &[]),
+        ])
+        .expect("shared Unreal runtime graph");
+        assert_eq!(layout.naming_profile(), XiphNamingProfile::Lib);
+        assert_eq!(
+            layout.topology().vendor_discriminator(),
+            "vendor-topology-v1-c792fb369a519e40bb3bda22747d014575a6d1139108e0d54dc2d4d7b7597734"
+        );
+    }
+
+    #[test]
+    fn runtime_alias_candidate_policy_preserves_exact_unreal_names() {
+        let runtime = parse_runtime_file_name("libvorbis_64.dll")
+            .expect("runtime name")
+            .expect("Vorbis");
+        assert!(runtime.accepts_candidate_file_name("libvorbis_64.dll"));
+        assert!(runtime.accepts_candidate_file_name("vorbis.dll"));
+        assert!(!runtime.accepts_candidate_file_name("libvorbis.dll"));
+        assert!(!runtime.accepts_candidate_file_name("libvorbis-0.dll"));
+        assert!(!runtime.accepts_candidate_file_name("libvorbis_64_more.dll"));
+
+        let other_vendor = parse_runtime_file_name("libvorbis_64_more.dll")
+            .expect("runtime name")
+            .expect("Vorbis");
+        assert!(!other_vendor.accepts_candidate_file_name("libvorbis_64.dll"));
+
+        let canonical = parse_runtime_file_name("libvorbis.dll")
+            .expect("runtime name")
+            .expect("Vorbis");
+        assert!(canonical.accepts_candidate_file_name("libvorbis.dll"));
+        assert!(!canonical.accepts_candidate_file_name("libvorbis_64.dll"));
+    }
+
+    #[test]
     fn runtime_parser_rejects_every_suffix_boundary() {
         let too_long_suffix = (0..8).map(|_| "a".repeat(32)).collect::<Vec<_>>().join("_");
         let invalid = vec![

@@ -28,8 +28,11 @@ use crate::catalog::execute::rollback_component;
 use super::fs_ops::{perform_transition_apply_fs, revert_to_baseline_fs};
 use super::planning::{fsr_members_to_remove, planned_target_files};
 use super::types::{PlannedFile, PreparedApplySwap, PreparedD3d12Execution};
+use xiph_pe::{synthetic_xiph_pe, synthetic_xiph_pe_with_delay};
 
+mod unreal_xiph_lifecycle;
 mod xiph_lifecycle;
+mod xiph_pe;
 
 const HEX64: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -851,101 +854,6 @@ fn path_as_ref(path: &Path) -> PathRef {
 
 fn sha_of(path: &Path) -> Sha256Hash {
     renderpilot_detection::sha256_file(path).expect("hash file")
-}
-
-/// Builds a deliberately tiny, parseable PE32+ Xiph fixture.  The production
-/// boundary re-reads both imports and public exports, so a byte blob or a
-/// filename-only fixture would not exercise the DIDE transition path.
-fn synthetic_xiph_pe(public_export: &str, static_imports: &[&str]) -> Vec<u8> {
-    const PE_OFFSET: usize = 0x80;
-    const COFF_HEADER_LEN: usize = 20;
-    const OPTIONAL_HEADER_SIZE: usize = 0xf0;
-    const SECTION_RVA: u32 = 0x1000;
-    const SECTION_RAW_POINTER: usize = 0x200;
-    const PE32_PLUS_DATA_DIRECTORIES_OFFSET: usize = 112;
-    const DATA_DIRECTORY_ENTRY_LEN: usize = 8;
-    const EXPORT_DIRECTORY_LEN: usize = 40;
-    const IMPORT_DESCRIPTOR_LEN: usize = 20;
-
-    let coff_offset = PE_OFFSET + 4;
-    let optional_offset = coff_offset + COFF_HEADER_LEN;
-    let section_offset = optional_offset + OPTIONAL_HEADER_SIZE;
-    let export_functions_offset = EXPORT_DIRECTORY_LEN;
-    let export_names_offset = export_functions_offset + 4;
-    let export_ordinals_offset = export_names_offset + 4;
-    let import_offset = export_ordinals_offset + 2;
-    let import_len = (static_imports.len() + 1) * IMPORT_DESCRIPTOR_LEN;
-    let export_name_offset = import_offset + import_len;
-
-    let mut section = vec![0; export_name_offset];
-    section.extend_from_slice(public_export.as_bytes());
-    section.push(0);
-
-    let mut import_name_rvas = Vec::with_capacity(static_imports.len());
-    for import in static_imports {
-        import_name_rvas.push(SECTION_RVA + u32::try_from(section.len()).expect("fixture size"));
-        section.extend_from_slice(import.as_bytes());
-        section.push(0);
-    }
-    let function_rva = SECTION_RVA + u32::try_from(section.len()).expect("fixture size");
-    section.push(0xc3); // mapped byte: the export parser only needs a valid target.
-
-    section[20..24].copy_from_slice(&1u32.to_le_bytes());
-    section[24..28].copy_from_slice(&1u32.to_le_bytes());
-    section[28..32].copy_from_slice(
-        &(SECTION_RVA + u32::try_from(export_functions_offset).expect("fixture offset"))
-            .to_le_bytes(),
-    );
-    section[32..36].copy_from_slice(
-        &(SECTION_RVA + u32::try_from(export_names_offset).expect("fixture offset")).to_le_bytes(),
-    );
-    section[36..40].copy_from_slice(
-        &(SECTION_RVA + u32::try_from(export_ordinals_offset).expect("fixture offset"))
-            .to_le_bytes(),
-    );
-    section[export_functions_offset..export_functions_offset + 4]
-        .copy_from_slice(&function_rva.to_le_bytes());
-    section[export_names_offset..export_names_offset + 4].copy_from_slice(
-        &(SECTION_RVA + u32::try_from(export_name_offset).expect("fixture offset")).to_le_bytes(),
-    );
-    section[export_ordinals_offset..export_ordinals_offset + 2]
-        .copy_from_slice(&0u16.to_le_bytes());
-    for (index, name_rva) in import_name_rvas.iter().enumerate() {
-        let descriptor = import_offset + index * IMPORT_DESCRIPTOR_LEN;
-        section[descriptor..descriptor + 4].copy_from_slice(&SECTION_RVA.to_le_bytes());
-        section[descriptor + 12..descriptor + 16].copy_from_slice(&name_rva.to_le_bytes());
-    }
-
-    let mut bytes = vec![0; SECTION_RAW_POINTER + section.len()];
-    bytes[0..2].copy_from_slice(b"MZ");
-    bytes[0x3c..0x40].copy_from_slice(&(PE_OFFSET as u32).to_le_bytes());
-    bytes[PE_OFFSET..PE_OFFSET + 4].copy_from_slice(b"PE\0\0");
-    bytes[coff_offset..coff_offset + 2].copy_from_slice(&0x8664u16.to_le_bytes());
-    bytes[coff_offset + 2..coff_offset + 4].copy_from_slice(&1u16.to_le_bytes());
-    bytes[coff_offset + 16..coff_offset + 18]
-        .copy_from_slice(&(OPTIONAL_HEADER_SIZE as u16).to_le_bytes());
-    bytes[optional_offset..optional_offset + 2].copy_from_slice(&0x20bu16.to_le_bytes());
-    let data_directories = optional_offset + PE32_PLUS_DATA_DIRECTORIES_OFFSET;
-    bytes[data_directories - 4..data_directories].copy_from_slice(&16u32.to_le_bytes());
-    bytes[data_directories..data_directories + 4].copy_from_slice(&SECTION_RVA.to_le_bytes());
-    bytes[data_directories + 4..data_directories + 8]
-        .copy_from_slice(&(EXPORT_DIRECTORY_LEN as u32).to_le_bytes());
-    let import_directory = data_directories + DATA_DIRECTORY_ENTRY_LEN;
-    bytes[import_directory..import_directory + 4].copy_from_slice(
-        &(SECTION_RVA + u32::try_from(import_offset).expect("fixture offset")).to_le_bytes(),
-    );
-    bytes[import_directory + 4..import_directory + 8]
-        .copy_from_slice(&(import_len as u32).to_le_bytes());
-    bytes[section_offset..section_offset + 8].copy_from_slice(b".rdata\0\0");
-    bytes[section_offset + 8..section_offset + 12]
-        .copy_from_slice(&(section.len() as u32).to_le_bytes());
-    bytes[section_offset + 12..section_offset + 16].copy_from_slice(&SECTION_RVA.to_le_bytes());
-    bytes[section_offset + 16..section_offset + 20]
-        .copy_from_slice(&(section.len() as u32).to_le_bytes());
-    bytes[section_offset + 20..section_offset + 24]
-        .copy_from_slice(&(SECTION_RAW_POINTER as u32).to_le_bytes());
-    bytes[SECTION_RAW_POINTER..].copy_from_slice(&section);
-    bytes
 }
 
 fn observed_xiph_file(path: &Path) -> ComponentFile {

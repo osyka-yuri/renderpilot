@@ -9,12 +9,23 @@ pub enum XiphNameStyle {
     Lib,
     /// Libtool ABI-major names such as `libvorbisfile-3.dll`.
     AbiMajor,
+    /// Reviewed Unreal package names such as `libvorbis_64.dll`.
+    ///
+    /// Runtime parsing retains `Lib` with an opaque `_64` suffix.
+    Unreal,
 }
 
 impl XiphNameStyle {
     /// Every reviewed basename convention in stable order.
-    pub const ALL: [Self; 3] = [Self::Plain, Self::Lib, Self::AbiMajor];
+    pub const ALL: [Self; 4] = [Self::Plain, Self::Lib, Self::AbiMajor, Self::Unreal];
 }
+
+/// Runtime base styles; Unreal names parse as `Lib` plus `_64`.
+const RUNTIME_NAME_STYLES: [XiphNameStyle; 3] = [
+    XiphNameStyle::Plain,
+    XiphNameStyle::Lib,
+    XiphNameStyle::AbiMajor,
+];
 
 /// Aggregate naming profile of a validated deployment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -25,7 +36,9 @@ pub enum XiphNamingProfile {
     Lib,
     /// Every member uses the libtool ABI-major convention.
     AbiMajor,
-    /// The import graph is valid but the deployment mixes conventions.
+    /// Every member uses [`XiphNameStyle::Unreal`] catalog names.
+    Unreal,
+    /// The runtime profile is unavailable or the deployment mixes conventions.
     Mixed,
 }
 
@@ -37,6 +50,7 @@ impl XiphNamingProfile {
             Self::Plain => "plain",
             Self::Lib => "lib",
             Self::AbiMajor => "abi",
+            Self::Unreal => "unreal",
             Self::Mixed => "mixed",
         }
     }
@@ -55,6 +69,7 @@ impl XiphNamingProfile {
             XiphNameStyle::Plain => Self::Plain,
             XiphNameStyle::Lib => Self::Lib,
             XiphNameStyle::AbiMajor => Self::AbiMajor,
+            XiphNameStyle::Unreal => Self::Unreal,
         }
     }
 }
@@ -101,10 +116,8 @@ impl XiphMember {
 
 /// Classifies one reviewed canonical Xiph DLL basename case-insensitively.
 ///
-/// This parser intentionally does not accept vendor-suffixed runtime names.
-/// Callers that inspect names observed in a game directory should use
-/// [`parse_runtime_file_name`] instead; keeping this function canonical-only
-/// prevents catalog/library validation from accidentally broadening its input.
+/// Accepts exact catalog names, including Unreal `_64` names. Use
+/// [`parse_runtime_file_name`] for arbitrary vendor suffixes and runtime identity.
 #[must_use]
 pub fn classify_canonical_file_name(name: &str) -> Option<(XiphMember, XiphNameStyle)> {
     for member in XiphMember::ALL {
@@ -174,6 +187,28 @@ impl XiphRuntimeFileName {
     pub const fn is_vendor(&self) -> bool {
         self.suffix.is_some()
     }
+
+    /// Returns whether a catalog name satisfies this runtime member's naming contract.
+    ///
+    /// Canonical names require an exact match. Vendor aliases accept plain names
+    /// for the same member or Unreal names matching the installed basename.
+    #[must_use]
+    pub fn accepts_candidate_file_name(&self, candidate_name: &str) -> bool {
+        let Some((member, style)) = classify_canonical_file_name(candidate_name) else {
+            return false;
+        };
+        if member != self.member {
+            return false;
+        }
+
+        if self.is_vendor() {
+            style == XiphNameStyle::Plain
+                || (style == XiphNameStyle::Unreal
+                    && candidate_name.eq_ignore_ascii_case(&self.normalized_name))
+        } else {
+            candidate_name.eq_ignore_ascii_case(&self.normalized_name)
+        }
+    }
 }
 
 /// A malformed candidate runtime Xiph basename.
@@ -209,7 +244,9 @@ impl std::error::Error for XiphRuntimeFileNameError {}
 ///
 /// `Ok(None)` means that the basename is unrelated to the reviewed Xiph
 /// family. A name that looks like an Xiph basename but violates the runtime
-/// grammar returns `Err`, allowing PE import validation to fail closed.
+/// grammar returns `Err`, allowing PE import validation to fail closed. An
+/// exact Unreal `_64` package spelling remains the `Lib` runtime style with
+/// the opaque `_64` vendor suffix.
 pub fn parse_runtime_file_name(
     name: &str,
 ) -> Result<Option<XiphRuntimeFileName>, XiphRuntimeFileNameError> {
@@ -221,7 +258,7 @@ pub fn parse_runtime_file_name(
     }
 
     let normalized = name.to_ascii_lowercase();
-    if let Some((member, style)) = classify_canonical_file_name(&normalized) {
+    if let Some((member, style)) = classify_runtime_canonical_file_name(&normalized) {
         return Ok(Some(XiphRuntimeFileName {
             member,
             style,
@@ -312,6 +349,18 @@ fn looks_like_xiph_name(name: &str) -> bool {
     })
 }
 
+/// Classifies runtime base names without catalog-only Unreal spellings.
+fn classify_runtime_canonical_file_name(name: &str) -> Option<(XiphMember, XiphNameStyle)> {
+    for member in XiphMember::ALL {
+        for style in RUNTIME_NAME_STYLES {
+            if name.eq_ignore_ascii_case(file_name(member, style)) {
+                return Some((member, style));
+            }
+        }
+    }
+    None
+}
+
 /// Recognizes a reviewed canonical stem and a possible vendor-suffixed form.
 fn looks_like_canonical_or_vendor_stem(
     name: &str,
@@ -358,7 +407,7 @@ fn has_malformed_canonical_extension(name: &str) -> bool {
 fn runtime_base_for_stem(stem: &str) -> Option<(XiphMember, XiphNameStyle, &'static str)> {
     let mut selected: Option<(XiphMember, XiphNameStyle, &'static str)> = None;
     for member in XiphMember::ALL {
-        for style in XiphNameStyle::ALL {
+        for style in RUNTIME_NAME_STYLES {
             let Some(base) = file_name(member, style).strip_suffix(".dll") else {
                 continue;
             };
@@ -394,5 +443,9 @@ pub const fn file_name(member: XiphMember, style: XiphNameStyle) -> &'static str
         (XiphMember::VorbisEnc, XiphNameStyle::AbiMajor) => "libvorbisenc-2.dll",
         (XiphMember::Vorbis, XiphNameStyle::AbiMajor) => "libvorbis-0.dll",
         (XiphMember::Ogg, XiphNameStyle::AbiMajor) => "libogg-0.dll",
+        (XiphMember::VorbisFile, XiphNameStyle::Unreal) => "libvorbisfile_64.dll",
+        (XiphMember::VorbisEnc, XiphNameStyle::Unreal) => "libvorbisenc_64.dll",
+        (XiphMember::Vorbis, XiphNameStyle::Unreal) => "libvorbis_64.dll",
+        (XiphMember::Ogg, XiphNameStyle::Unreal) => "libogg_64.dll",
     }
 }

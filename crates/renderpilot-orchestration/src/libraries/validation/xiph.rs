@@ -42,6 +42,7 @@ pub(super) fn validate_identity(package: &LibraryPackage) -> Result<(), ServiceE
         Some("plain") => xiph::XiphNameStyle::Plain,
         Some("lib") => xiph::XiphNameStyle::Lib,
         Some("abi") => xiph::XiphNameStyle::AbiMajor,
+        Some("unreal") => xiph::XiphNameStyle::Unreal,
         _ => return Err(noncanonical_package(package)),
     };
     if variant.next().is_some() {
@@ -78,7 +79,8 @@ pub(super) fn validate_identity(package: &LibraryPackage) -> Result<(), ServiceE
                     && member.install_as == xiph::file_name(semantic_member, profile)
                     && member.role == if index == 0 { "primary" } else { "support" }
             });
-    if components.len() != 2
+    if (profile == xiph::XiphNameStyle::Unreal && package.target.architecture != Architecture::X64)
+        || components.len() != 2
         || &package.release.version != vorbis_version
         || package.release.channel != ReleaseChannel::Stable
         || package.package_id != expected_package_id

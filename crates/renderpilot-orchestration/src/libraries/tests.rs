@@ -309,6 +309,71 @@ fn xiph_catalog(dynamic_crt: bool) -> LibraryCatalog {
     catalog
 }
 
+fn xiph_unreal_catalog(topology: &str, architecture: Architecture) -> LibraryCatalog {
+    let mut catalog = xiph_catalog(false);
+    let xiph_vendor = catalog
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .expect("Xiph vendor fixture");
+    let file_name = |component: &str| match component {
+        "vorbis" => "libvorbis_64.dll",
+        "vorbisfile" => "libvorbisfile_64.dll",
+        "vorbisenc" => "libvorbisenc_64.dll",
+        "ogg" => "libogg_64.dll",
+        _ => panic!("unexpected Xiph component {component}"),
+    };
+
+    xiph_vendor
+        .artifacts
+        .retain(|artifact| topology != "embedded_ogg" || artifact.library_id != "xiph_ogg");
+    for artifact in &mut xiph_vendor.artifacts {
+        let component = artifact
+            .library_id
+            .strip_prefix("xiph_")
+            .expect("Xiph fixture artifact");
+        artifact.file_name = file_name(component).to_owned();
+        artifact.architecture = architecture;
+        let mut imports = vec!["kernel32.dll".to_owned()];
+        match component {
+            "vorbis" if topology == "shared" => imports.push(file_name("ogg").to_owned()),
+            "vorbisfile" if topology == "shared" => {
+                imports.extend([file_name("ogg").to_owned(), file_name("vorbis").to_owned()]);
+            }
+            "vorbisfile" | "vorbisenc" => imports.push(file_name("vorbis").to_owned()),
+            "vorbis" | "ogg" => {}
+            _ => panic!("unexpected Xiph component {component}"),
+        }
+        artifact.pe_imports = Some(PeImportProfile {
+            regular: PeImportSet::from_observed_names(imports).expect("Unreal imports"),
+            delay: PeImportSet::default(),
+        });
+    }
+
+    let package = xiph_vendor
+        .packages
+        .first_mut()
+        .expect("Xiph package fixture");
+    package.variant = format!("{topology}.unreal");
+    package.target.architecture = architecture;
+    package.package_id = format!(
+        "xiph_vorbis.vorbis-1.3.7.ogg-1.3.6.r1.{}.{}",
+        match architecture {
+            Architecture::X86 => "x86",
+            Architecture::X64 => "x64",
+        },
+        package.variant
+    );
+    package
+        .members
+        .retain(|member| topology != "embedded_ogg" || member.component != "ogg");
+    for member in &mut package.members {
+        member.install_as = file_name(&member.component).to_owned();
+    }
+    package.revision_sha256 = package_revision(package);
+    catalog
+}
+
 pub(super) fn openvr_catalog(repository: &str) -> LibraryCatalog {
     let dll_bytes = b"openvr-api-fixture";
     let dll_sha256 = hex::encode(Sha256::digest(dll_bytes));
@@ -429,6 +494,197 @@ fn canonical_xiph_catalog_is_validated_with_all_runtime_members() {
         "windows-2025-vs2026@20260720.1"
     );
     assert!(wire.get("source_build").is_none());
+}
+
+#[test]
+fn xiph_unreal_profiles_validate_exact_files_and_build_catalog_artifacts() {
+    let profiles: [(&str, &[&str]); 2] = [
+        (
+            "shared",
+            &[
+                "libvorbis_64.dll",
+                "libvorbisfile_64.dll",
+                "libvorbisenc_64.dll",
+                "libogg_64.dll",
+            ],
+        ),
+        (
+            "embedded_ogg",
+            &[
+                "libvorbis_64.dll",
+                "libvorbisfile_64.dll",
+                "libvorbisenc_64.dll",
+            ],
+        ),
+    ];
+    for (topology, expected_names) in profiles {
+        let catalog = super::resolved::ValidatedCatalog::new(xiph_unreal_catalog(
+            topology,
+            Architecture::X64,
+        ))
+        .expect("reviewed Unreal Xiph catalog");
+        let resolved = catalog
+            .packages()
+            .find(|resolved| {
+                resolved.package().technology == "xiph_vorbis"
+                    && resolved.package().variant == format!("{topology}.unreal")
+            })
+            .expect("Unreal Xiph package");
+        let artifact = build_catalog_artifact(&resolved, None)
+            .expect("valid catalog adapter")
+            .expect("supported Xiph package");
+        let actual_names = artifact
+            .files()
+            .iter()
+            .map(|file| file.install_as().expect("catalog install name"))
+            .collect::<Vec<_>>();
+        assert_eq!(actual_names.as_slice(), expected_names);
+        let receipt = artifact
+            .metadata()
+            .catalog_package_receipt()
+            .expect("source-build receipt");
+        let wire = serde_json::to_value(receipt).expect("receipt JSON");
+        assert_eq!(wire["provenance"]["kind"], "source_build");
+        assert_eq!(wire["provenance"]["build_revision"], serde_json::json!(1));
+    }
+}
+
+#[test]
+fn xiph_unreal_catalog_rejects_mixed_generic_32_bit_and_invalid_graphs() {
+    let mut mixed_names = xiph_unreal_catalog("shared", Architecture::X64);
+    let package = mixed_names
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .and_then(|vendor| vendor.packages.first_mut())
+        .expect("Xiph package");
+    package.members[1].install_as = "vorbisfile.dll".to_owned();
+    package.revision_sha256 = package_revision(package);
+    assert!(
+        super::resolved::ValidatedCatalog::new(mixed_names)
+            .expect_err("mixed Unreal member names must fail")
+            .to_string()
+            .contains("not a canonical Xiph")
+    );
+
+    let mut generic_vendor_suffix = xiph_unreal_catalog("shared", Architecture::X64);
+    let package = generic_vendor_suffix
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .and_then(|vendor| vendor.packages.first_mut())
+        .expect("Xiph package");
+    package.members[0].install_as = "libvorbis_64_rwdi.dll".to_owned();
+    package.revision_sha256 = package_revision(package);
+    assert!(
+        super::resolved::ValidatedCatalog::new(generic_vendor_suffix)
+            .expect_err("catalog package must not accept generic vendor aliases")
+            .to_string()
+            .contains("not a canonical Xiph")
+    );
+
+    let mut wrong_bits = xiph_unreal_catalog("shared", Architecture::X64);
+    let package = wrong_bits
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .and_then(|vendor| vendor.packages.first_mut())
+        .expect("Xiph package");
+    package.members[0].install_as = "libvorbis_32.dll".to_owned();
+    package.revision_sha256 = package_revision(package);
+    assert!(
+        super::resolved::ValidatedCatalog::new(wrong_bits)
+            .expect_err("catalog package must not accept _32 names")
+            .to_string()
+            .contains("not a canonical Xiph")
+    );
+
+    let wrong_architecture = xiph_unreal_catalog("shared", Architecture::X86);
+    assert!(
+        super::resolved::ValidatedCatalog::new(wrong_architecture)
+            .expect_err("Unreal naming is X64 only")
+            .to_string()
+            .contains("not a canonical Xiph")
+    );
+
+    let mut malformed_graph = xiph_unreal_catalog("shared", Architecture::X64);
+    let xiph = malformed_graph
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .expect("Xiph vendor");
+    let wrapper = xiph
+        .artifacts
+        .iter_mut()
+        .find(|artifact| artifact.library_id == "xiph_vorbisfile")
+        .expect("vorbisfile artifact");
+    wrapper.pe_imports = Some(PeImportProfile {
+        regular: PeImportSet::from_observed_names(vec![
+            "kernel32.dll".to_owned(),
+            "libvorbis_64.dll".to_owned(),
+        ])
+        .expect("malformed graph fixture"),
+        delay: PeImportSet::default(),
+    });
+    assert!(
+        super::resolved::ValidatedCatalog::new(malformed_graph)
+            .expect_err("Unreal package must preserve the exact import graph")
+            .to_string()
+            .contains("invalid Xiph import graph")
+    );
+}
+
+#[test]
+#[ignore = "requires the pinned PR44 Xiph producer snapshot in RENDERPILOT_XIPH_CATALOG"]
+fn producer_xiph_catalog_matches_consumer_contract() {
+    let path = std::env::var_os("RENDERPILOT_XIPH_CATALOG")
+        .expect("set RENDERPILOT_XIPH_CATALOG to the pinned producer snapshot");
+    let bytes = std::fs::read(path).expect("read pinned producer Xiph snapshot");
+    let snapshot: LibraryVendorSnapshot =
+        serde_json::from_slice(&bytes).expect("parse producer vendor snapshot");
+    let producer = LibraryVendorCatalog {
+        vendor: snapshot.vendor,
+        generated_at: snapshot.generated_at,
+        legal_documents: snapshot.legal_documents,
+        artifacts: snapshot.artifacts,
+        packages: snapshot.packages,
+    };
+    let mut catalog = xiph_catalog(false);
+    catalog.vendors.retain(|vendor| vendor.vendor.id != "xiph");
+    catalog.vendors.push(producer);
+
+    let validated =
+        super::resolved::ValidatedCatalog::new(catalog).expect("validate producer Xiph snapshot");
+    let mut has_shared_unreal = false;
+    let mut has_embedded_ogg_unreal = false;
+    let mut package_count = 0;
+    for resolved in validated
+        .packages()
+        .filter(|resolved| resolved.package().technology == "xiph_vorbis")
+    {
+        package_count += 1;
+        match resolved.package().variant.as_str() {
+            "shared.unreal" => has_shared_unreal = true,
+            "embedded_ogg.unreal" => has_embedded_ogg_unreal = true,
+            _ => {}
+        }
+        let artifact = build_catalog_artifact(&resolved, None)
+            .expect("adapt producer Xiph package")
+            .expect("supported producer Xiph package");
+        assert_eq!(artifact.files().len(), resolved.package().members.len());
+        let receipt = artifact
+            .metadata()
+            .catalog_package_receipt()
+            .expect("producer source provenance receipt");
+        let receipt_json = serde_json::to_value(receipt).expect("producer receipt JSON");
+        assert_eq!(receipt_json["provenance"]["kind"], "source_build");
+    }
+    assert!(package_count > 0, "producer snapshot has Xiph packages");
+    assert!(has_shared_unreal, "producer snapshot has shared.unreal");
+    assert!(
+        has_embedded_ogg_unreal,
+        "producer snapshot has embedded_ogg.unreal"
+    );
 }
 
 #[test]

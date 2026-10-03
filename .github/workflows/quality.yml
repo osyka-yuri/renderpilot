@@ -15,6 +15,7 @@ permissions:
 
 env:
   RENDERPILOT_LIBRARIES_CONTRACT_REF: 5b774d97f5a20d0e9cdf7b6260501f33cdb70fe1
+  RENDERPILOT_XIPH_CONTRACT_REF: 000448b5a64d7ca4badb9c533509dab2a07a159b
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   # Deny rustc warnings for workspace packages (Cargo 1.97+). Prefer this over
@@ -195,7 +196,7 @@ jobs:
           retention-days: 7
 
   libraries-contract:
-    name: Libraries V2 producer contract
+    name: Libraries producer contracts
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -203,9 +204,14 @@ jobs:
         shell: bash
         env:
           PRODUCER_REF: ${{ env.RENDERPILOT_LIBRARIES_CONTRACT_REF }}
+          XIPH_REF: ${{ env.RENDERPILOT_XIPH_CONTRACT_REF }}
         run: |
           if [[ ! "$PRODUCER_REF" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::RENDERPILOT_LIBRARIES_CONTRACT_REF must be a full commit SHA"
+            exit 1
+          fi
+          if [[ ! "$XIPH_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::RENDERPILOT_XIPH_CONTRACT_REF must be a full commit SHA"
             exit 1
           fi
       - name: Checkout RenderPilot
@@ -218,6 +224,15 @@ jobs:
           repository: osyka-yuri/renderpilot-libraries
           ref: ${{ env.RENDERPILOT_LIBRARIES_CONTRACT_REF }}
           path: .contracts/renderpilot-libraries
+          persist-credentials: false
+      - name: Checkout pinned Xiph catalog
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osyka-yuri/renderpilot-libraries
+          ref: ${{ env.RENDERPILOT_XIPH_CONTRACT_REF }}
+          path: .contracts/renderpilot-xiph
+          sparse-checkout: libraries/v1/vendors/xiph.json
+          sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Install Rust toolchain
         run: rustup show
@@ -243,3 +258,13 @@ jobs:
             libraries::revision::tests::producer_v2_golden_fixture_matches_rust_projection \
             --locked -- --ignored --exact 2>&1 | tee contract-test.log
           grep -Eq 'test result: ok\. 1 passed; 0 failed; 0 ignored' contract-test.log
+      - name: Verify the Xiph catalog and Unreal runtime contracts
+        shell: bash
+        env:
+          RENDERPILOT_XIPH_CATALOG: ${{ github.workspace }}/.contracts/renderpilot-xiph/libraries/v1/vendors/xiph.json
+        run: |
+          set -o pipefail
+          cargo test -p renderpilot-orchestration \
+            libraries::tests::producer_xiph_catalog_matches_consumer_contract \
+            --locked -- --ignored --exact 2>&1 | tee xiph-contract-test.log
+          grep -Eq 'test result: ok\. 1 passed; 0 failed; 0 ignored' xiph-contract-test.log

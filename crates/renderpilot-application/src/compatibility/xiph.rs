@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use renderpilot_domain::{
-    ComponentFile, LibraryArtifact, LibraryComponent, PeCompatibilityProfile,
+    Architecture, ComponentFile, LibraryArtifact, LibraryComponent, PeCompatibilityProfile,
     xiph::{self, XiphLayout, XiphMember, XiphNameStyle, XiphRuntimeFileName},
 };
 
@@ -19,13 +19,13 @@ pub(super) fn validate_artifact(artifact: &LibraryArtifact) -> Result<(), SwapCo
         return Err(SwapCompatibilityError::InvalidArtifactMetadata);
     }
 
-    // Artifacts are intentionally catalog-only. Runtime aliases such as
-    // `vorbis_vs2010_x64_rwdi.dll` describe one game's loader contract, not a
-    // package format RenderPilot accepts into Libraries.
+    // Catalog names include the exact Unreal `_64` basenames, but no
+    // arbitrary vendor suffixes.
     let classified = classify_canonical_files(
         artifact.files(),
         SwapCompatibilityError::InvalidArtifactMetadata,
     )?;
+    validate_unreal_style_family(&classified, SwapCompatibilityError::InvalidArtifactMetadata)?;
     validate_layout(classified.values())?;
     for (member, classified_file) in &classified {
         if classified_file.profile.architecture() != target.architecture()
@@ -58,16 +58,9 @@ pub(super) fn ensure_transition_compatible(
     )
 }
 
-/// Validates a concrete Xiph deployment when the orchestration layer has
-/// either completed its strict whole-root observation of exact external
-/// loader aliases or explicitly established that no alias is required. A
-/// proven empty alias set is meaningful: the complete observation found zero
-/// regular/delay bindings. It does not prove that the runtime cannot load the
-/// DLLs dynamically.
-///
-/// This is deliberately `pub(crate)`: external-import proof belongs to the
-/// orchestration layer, while the pure application resolver owns the resulting
-/// compatibility decision.
+/// Validates a Xiph deployment using orchestration's external-import proof.
+/// Vendor aliases require a complete game-root scan of regular/delay imports.
+/// An empty proven set records zero bindings; dynamic loading is not observed.
 pub(crate) fn ensure_transition_compatible_with_external_aliases(
     component: &LibraryComponent,
     artifact: &LibraryArtifact,
@@ -76,9 +69,8 @@ pub(crate) fn ensure_transition_compatible_with_external_aliases(
     ensure_transition_compatible_inner(component, artifact, Some(aliases))
 }
 
-/// Checks the semantic package ABI used for candidate presentation. This never
-/// authorizes a vendor transition: preview/apply must call the explicit-proof
-/// function above before any operation can be planned.
+/// Checks the package ABI for candidate presentation. Vendor transitions must
+/// use [`ensure_transition_compatible_with_external_aliases`] before planning.
 pub(crate) fn ensure_candidate_compatible_without_alias_proof(
     component: &LibraryComponent,
     artifact: &LibraryArtifact,
@@ -101,6 +93,7 @@ fn ensure_transition_compatible_inner(
         artifact.files(),
         SwapCompatibilityError::InvalidArtifactMetadata,
     )?;
+    validate_unreal_style_family(&candidates, SwapCompatibilityError::NamingFamilyMismatch)?;
 
     let vendor_layout = installed.values().any(|file| file.runtime.is_vendor());
 
@@ -108,10 +101,12 @@ fn ensure_transition_compatible_inner(
         if let Some(aliases) = aliases {
             validate_vendor_alias_requirements(&installed, aliases)?;
         }
-        if candidates
-            .values()
-            .any(|candidate| candidate.runtime.base_style() != XiphNameStyle::Plain)
-        {
+        if candidates.values().any(|candidate| {
+            !matches!(
+                candidate.name_style,
+                XiphNameStyle::Plain | XiphNameStyle::Unreal
+            )
+        }) {
             return Err(SwapCompatibilityError::VendorCandidateMustUsePlainNames);
         }
     } else if aliases
@@ -125,11 +120,9 @@ fn ensure_transition_compatible_inner(
         let candidate_file = candidates
             .get(member)
             .ok_or(SwapCompatibilityError::IncompleteXiphPackage)?;
-        if !vendor_layout
-            && !candidate_file
-                .runtime
-                .normalized_name()
-                .eq_ignore_ascii_case(installed_file.runtime.normalized_name())
+        if !installed_file
+            .runtime
+            .accepts_candidate_file_name(candidate_file.runtime.normalized_name())
         {
             return Err(SwapCompatibilityError::NamingFamilyMismatch);
         }
@@ -182,6 +175,7 @@ struct ClassifiedFile<'a> {
     file: &'a ComponentFile,
     profile: &'a PeCompatibilityProfile,
     runtime: XiphRuntimeFileName,
+    name_style: XiphNameStyle,
 }
 
 fn classify_runtime_files<'a>(
@@ -204,6 +198,7 @@ fn classify_runtime_files<'a>(
                     ClassifiedFile {
                         file,
                         profile,
+                        name_style: runtime.base_style(),
                         runtime,
                     },
                 )
@@ -226,13 +221,16 @@ fn classify_canonical_files<'a>(
     for file in files {
         let name =
             runtime_file_name(file).ok_or(SwapCompatibilityError::InvalidArtifactMetadata)?;
-        let (member, _) = xiph::classify_canonical_file_name(name)
+        let (member, name_style) = xiph::classify_canonical_file_name(name)
             .ok_or(SwapCompatibilityError::NamingFamilyMismatch)?;
         let runtime = xiph::parse_runtime_file_name(name)
             .ok()
             .flatten()
             .ok_or(SwapCompatibilityError::NamingFamilyMismatch)?;
         let profile = file.pe_compatibility().ok_or(missing_profile)?;
+        if name_style == XiphNameStyle::Unreal && profile.architecture() != Architecture::X64 {
+            return Err(SwapCompatibilityError::InvalidArtifactMetadata);
+        }
         if profile.imports().is_none()
             || classified
                 .insert(
@@ -240,6 +238,7 @@ fn classify_canonical_files<'a>(
                     ClassifiedFile {
                         file,
                         profile,
+                        name_style,
                         runtime,
                     },
                 )
@@ -252,6 +251,21 @@ fn classify_canonical_files<'a>(
         return Err(SwapCompatibilityError::IncompleteXiphPackage);
     }
     Ok(classified)
+}
+
+fn validate_unreal_style_family(
+    files: &BTreeMap<XiphMember, ClassifiedFile<'_>>,
+    error: SwapCompatibilityError,
+) -> Result<(), SwapCompatibilityError> {
+    let mut is_unreal_family = None;
+    for file in files.values() {
+        let is_unreal = file.name_style == XiphNameStyle::Unreal;
+        if is_unreal_family.is_some_and(|expected| expected != is_unreal) {
+            return Err(error);
+        }
+        is_unreal_family = Some(is_unreal);
+    }
+    Ok(())
 }
 
 fn validate_layout<'a>(
@@ -633,6 +647,189 @@ mod tests {
             ),
             Err(SwapCompatibilityError::ExternalAliasProofRequired),
         );
+    }
+
+    #[test]
+    fn unreal_catalog_artifacts_are_x64_and_reject_mixed_or_arbitrary_names() {
+        let valid = artifact(
+            Architecture::X64,
+            &[
+                (
+                    "libvorbisfile_64.dll",
+                    &["libvorbis_64.dll", "libogg_64.dll"],
+                ),
+                ("libvorbisenc_64.dll", &["libvorbis_64.dll"]),
+                ("libvorbis_64.dll", &["libogg_64.dll"]),
+                ("libogg_64.dll", &[]),
+            ],
+        );
+        assert_eq!(validate_artifact(&valid), Ok(()));
+
+        let x86 = artifact(
+            Architecture::X86,
+            &[
+                ("libvorbis_64.dll", &["libogg_64.dll"]),
+                ("libogg_64.dll", &[]),
+            ],
+        );
+        assert_eq!(
+            validate_artifact(&x86),
+            Err(SwapCompatibilityError::InvalidArtifactMetadata)
+        );
+
+        let mixed = artifact(
+            Architecture::X64,
+            &[
+                ("libvorbisfile_64.dll", &["libvorbis.dll"]),
+                ("libvorbis.dll", &[]),
+            ],
+        );
+        assert_eq!(
+            validate_artifact(&mixed),
+            Err(SwapCompatibilityError::InvalidArtifactMetadata)
+        );
+
+        let arbitrary = artifact(Architecture::X64, &[("libvorbis_64_more.dll", &[])]);
+        assert!(validate_artifact(&arbitrary).is_err());
+    }
+
+    #[test]
+    fn unreal_runtime_aliases_require_exact_names_and_complete_external_proof() {
+        let installed = unreal_component("_64");
+        let candidate = artifact(
+            Architecture::X64,
+            &[
+                (
+                    "libvorbisfile_64.dll",
+                    &["libvorbis_64.dll", "libogg_64.dll"],
+                ),
+                ("libvorbis_64.dll", &["libogg_64.dll"]),
+                ("libogg_64.dll", &[]),
+            ],
+        );
+        let required_aliases = ExternalAliasRequirements::Proven(BTreeSet::from([
+            "libvorbisfile_64.dll".to_owned(),
+            "libvorbis_64.dll".to_owned(),
+        ]));
+
+        assert_eq!(validate_artifact(&candidate), Ok(()));
+        assert_eq!(
+            ensure_transition_compatible_with_external_aliases(
+                &installed,
+                &candidate,
+                &required_aliases,
+            ),
+            Ok(())
+        );
+        for proof in [
+            ExternalAliasRequirements::NotRequired,
+            ExternalAliasRequirements::Unproven,
+        ] {
+            assert_eq!(
+                ensure_transition_compatible_with_external_aliases(&installed, &candidate, &proof,),
+                Err(SwapCompatibilityError::ExternalAliasProofRequired)
+            );
+        }
+        assert_eq!(
+            ensure_transition_compatible_with_external_aliases(
+                &installed,
+                &candidate,
+                &ExternalAliasRequirements::Proven(BTreeSet::from([
+                    "libvorbisfile_64_more.dll".to_owned(),
+                ])),
+            ),
+            Err(SwapCompatibilityError::InvalidExternalAliasRequirement)
+        );
+
+        let wrong_family = artifact(
+            Architecture::X64,
+            &[
+                ("libvorbisfile.dll", &["libvorbis.dll", "libogg.dll"]),
+                ("libvorbis.dll", &["libogg.dll"]),
+                ("libogg.dll", &[]),
+            ],
+        );
+        assert_eq!(
+            ensure_transition_compatible_with_external_aliases(
+                &installed,
+                &wrong_family,
+                &ExternalAliasRequirements::Proven(BTreeSet::new()),
+            ),
+            Err(SwapCompatibilityError::VendorCandidateMustUsePlainNames)
+        );
+
+        let wrong_abi = artifact(
+            Architecture::X64,
+            &[
+                ("libvorbisfile-3.dll", &["libvorbis-0.dll", "libogg-0.dll"]),
+                ("libvorbis-0.dll", &["libogg-0.dll"]),
+                ("libogg-0.dll", &[]),
+            ],
+        );
+        assert_eq!(
+            ensure_transition_compatible_with_external_aliases(
+                &installed,
+                &wrong_abi,
+                &ExternalAliasRequirements::Proven(BTreeSet::new()),
+            ),
+            Err(SwapCompatibilityError::VendorCandidateMustUsePlainNames)
+        );
+
+        let mismatched_runtime = unreal_component("_64_more");
+        assert_eq!(
+            ensure_transition_compatible_with_external_aliases(
+                &mismatched_runtime,
+                &candidate,
+                &ExternalAliasRequirements::Proven(BTreeSet::new()),
+            ),
+            Err(SwapCompatibilityError::NamingFamilyMismatch)
+        );
+
+        let changed_topology = artifact(
+            Architecture::X64,
+            &[
+                ("libvorbisfile_64.dll", &["libvorbis_64.dll"]),
+                ("libvorbis_64.dll", &["libogg_64.dll"]),
+                ("libogg_64.dll", &[]),
+            ],
+        );
+        assert_eq!(
+            ensure_transition_compatible_with_external_aliases(
+                &installed,
+                &changed_topology,
+                &ExternalAliasRequirements::Proven(BTreeSet::new()),
+            ),
+            Err(SwapCompatibilityError::UnexpectedDependency)
+        );
+    }
+
+    fn unreal_component(suffix: &str) -> LibraryComponent {
+        component_from_files(vec![
+            member_with_exports(
+                &format!("libvorbisfile{suffix}.dll"),
+                Architecture::X64,
+                &[
+                    &format!("libvorbis{suffix}.dll"),
+                    &format!("libogg{suffix}.dll"),
+                ],
+                &["ov_open"],
+                16,
+            ),
+            member_with_exports(
+                &format!("libvorbis{suffix}.dll"),
+                Architecture::X64,
+                &[&format!("libogg{suffix}.dll")],
+                &["vorbis_info_init"],
+                17,
+            ),
+            member_with_exports(
+                &format!("libogg{suffix}.dll"),
+                Architecture::X64,
+                &[],
+                &["ogg_sync_init"],
+                18,
+            ),
+        ])
     }
 
     fn artifact(architecture: Architecture, files: &[(&str, &[&str])]) -> LibraryArtifact {

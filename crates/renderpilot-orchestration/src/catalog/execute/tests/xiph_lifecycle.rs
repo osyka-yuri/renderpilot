@@ -1,4 +1,4 @@
-//! Real detector-to-apply-to-rollback lifecycle coverage for Gothic-style Xiph.
+//! Cross-directory Xiph lifecycle with a proven empty external import set.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -23,8 +23,8 @@ use super::{
 };
 
 #[test]
-fn gothic_cross_directory_xiph_empty_import_proof_plans_and_applies() {
-    let mut fixture = GothicXiphFixture::setup();
+fn cross_directory_xiph_empty_import_proof_uses_plain_package() {
+    let mut fixture = CrossDirectoryXiphFixture::setup();
     fixture.initial_normal_scan_and_register();
     fixture.assert_game_payload_intact();
     fixture.plan_and_apply();
@@ -38,7 +38,7 @@ fn gothic_cross_directory_xiph_empty_import_proof_plans_and_applies() {
     fixture.assert_game_payload_intact();
 }
 
-struct GothicXiphFixture {
+struct CrossDirectoryXiphFixture {
     _root: tempfile::TempDir,
     context: Context,
     game: GameInstallation,
@@ -59,7 +59,7 @@ struct GothicXiphFixture {
     new_ogg_bytes: Vec<u8>,
 }
 
-impl GothicXiphFixture {
+impl CrossDirectoryXiphFixture {
     fn setup() -> Self {
         let root = tempfile::tempdir().expect("root");
         let game_dir = root.path().join("game");
@@ -97,7 +97,7 @@ impl GothicXiphFixture {
 
         let game = sample_game_at(&game_dir);
         let artifact = LibraryArtifact::new(
-            ArtifactId::new("artifact:gothic-cross-directory-empty-proof").expect("artifact id"),
+            ArtifactId::new("artifact:cross-directory-empty-proof").expect("artifact id"),
             LibraryTechnology::XiphVorbis,
             "vorbisfile.dll",
             vec![

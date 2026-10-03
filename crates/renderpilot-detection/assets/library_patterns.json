@@ -233,6 +233,30 @@
       "kind": "exact",
       "platform": "windows",
       "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libogg_64.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbis_64.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbisfile_64.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbisenc_64.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
     }
   ]
 }

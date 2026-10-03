@@ -18,6 +18,20 @@ cargo test -p renderpilot-orchestration \
   --locked -- --ignored --exact
 ```
 
+## Xiph Unreal packages
+
+The X64-only variants `shared.unreal` and `embedded_ogg.unreal` use `libvorbis_64.dll`, `libvorbisfile_64.dll` and `libvorbisenc_64.dll`; shared packages also contain `libogg_64.dll`. Installation keeps these compiled basenames and writes only members already present in the game. Other vendor suffixes, including `_vs2010_x64_rwdi`, retain their import-driven alias policy.
+
+Runtime parsing represents `_64` as an opaque `Lib` suffix to preserve component identity. Vendor-suffixed deployments require a complete game-root scan of regular and delay imports, including when no external bindings are found. Apply revalidates the proof; candidates must preserve required external basenames and the internal import graph.
+
+CI pins the producer snapshot with `RENDERPILOT_XIPH_CONTRACT_REF`. To run its contract test locally, set `RENDERPILOT_XIPH_CATALOG` to that snapshot:
+
+```bash
+cargo test -p renderpilot-orchestration \
+  libraries::tests::producer_xiph_catalog_matches_consumer_contract \
+  --locked -- --ignored --exact
+```
+
 ## Add-on manifests
 
 Current tool manifests use versioned paths: RenoDX primary is `addons/v2/renodx.json` and Luma primary is `addons/v2/luma.json`. Luma v1 at `addons/v1/luma.json` remains a legacy-client compatibility contract; the current client does not fall back to it. If the RenoDX v2 CDN request is unavailable at the transport layer, the client may use the CDN v1 compatibility document at `addons/v1/renodx.json`; a valid but incompatible or malformed v2 response is terminal. ReShade remains on `addons/v1/reshade.json`; OptiScaler remains on `addons/v1/optiscaler.json`, with compatibility knowledge at `addons/v1/optiscaler-compatibility.json`. These documents define supported profiles, source locations, expected files, hashes, compatibility evidence, dependencies, and stable localization identifiers. Every user-visible catalog message needs a stable ID and a reviewed English fallback.
