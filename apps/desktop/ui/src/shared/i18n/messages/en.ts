@@ -11,6 +11,50 @@ import type { ParamsForMessage } from './params';
  */
 export const en = defineSourceCatalog({
   // ── App shell / navigation ──
+  'leftovers.title': 'RenderPilot leftovers',
+  'leftovers.description':
+    'These games are no longer installed, but RenderPilot files and settings remain. Review the list before cleanup.',
+  'leftovers.leaveHint':
+    'Keep leaves these items unchanged and hides this prompt until they change.',
+  'leftovers.leave': 'Keep',
+  'leftovers.clean': 'Remove',
+  'leftovers.cleaning': 'Removing…',
+  'leftovers.category.vulkanRegistration': 'Game registration in the Vulkan layer',
+  'leftovers.category.engineConfig': 'Engine.ini settings',
+  'leftovers.category.optiscalerFile': 'OptiScaler file',
+  'leftovers.category.addonFile': 'Add-on file',
+  'leftovers.category.componentFile': 'Modified component',
+  'leftovers.category.privateCustody': 'Original game file backup',
+  'leftovers.category.directory': 'Folder',
+  'leftovers.issue.unsupportedOwner': 'RenderPilot cannot remove these items yet.',
+  'leftovers.issue.unprovenOwnership': 'Could not confirm that these items belong to RenderPilot.',
+  'leftovers.issue.modifiedFile': 'The file has changed and will be kept.',
+  'leftovers.issue.privateOriginalCustody':
+    'This backup contains an original game file and will be kept.',
+  'leftovers.issue.foreignPending':
+    'Another operation is unfinished. These leftovers cannot be removed yet.',
+  'leftovers.issue.pendingConflict': 'An unfinished operation is blocking cleanup.',
+  'leftovers.issue.unavailableTarget':
+    'The path is unavailable. Check the drive connection and file access.',
+  'leftovers.issue.nativeAuthorityUnavailable':
+    'Could not access the system settings needed for cleanup.',
+  'leftovers.issue.activeOwnershipConflict':
+    'These items belong to a current installation and will be kept.',
+  'leftovers.issue.staleIntent':
+    'The game state has changed. Review the updated list before trying again.',
+  'leftovers.issue.operationFailed': 'Cleanup could not be completed. You can try again.',
+  'leftovers.outcome.removed': 'Removed',
+  'leftovers.outcome.released': 'RenderPilot changes removed',
+  'leftovers.outcome.alreadyAbsent': 'Already absent',
+  'leftovers.outcome.recovered': 'Previous cleanup completed',
+  'leftovers.outcome.preservedForeign': 'Other operation left unchanged',
+  'leftovers.outcome.blocked': 'Kept unchanged',
+  'leftovers.outcome.failed': 'Could not remove',
+  'leftovers.status.complete': 'Cleanup complete',
+  'leftovers.status.partial': 'Some leftovers remain',
+  'leftovers.status.blocked': 'Leftovers were kept',
+  'leftovers.status.stale': 'The game state has changed',
+
   'nav.games': 'Games',
   'nav.libraries': 'Libraries',
   'nav.settings': 'Settings',

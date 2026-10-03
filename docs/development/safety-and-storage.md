@@ -30,6 +30,14 @@ Pending file mutations are recorded durably in SQLite around filesystem work. St
 
 The completed operation journal is best-effort, informational history. Failure to append history after a successful filesystem result must not turn a completed change into a destructive retry. Correctness comes from current hashes, verified baselines, pending-mutation state, and package receipts rather than from treating history as an undo log.
 
+## Removed games and leftover cleanup
+
+A confirmed missing game, or a directory containing only exactly recorded RenderPilot remnants, leaves the active catalog. An unavailable drive, unreadable path, unknown file, or changed file does not prove removal. Scanning only observes files and updates catalog metadata.
+
+Existing installation records remain useful while their recorded remnants exist. The cleanup dialog shows current files and supported external changes, accepts a backend-issued intent, and rechecks the game and ownership before removal. Missing files are omitted; when local remnants are gone, the existing ordered metadata collection runs. A reinstalled game receives fresh scan facts and uses the ordinary installer.
+
+Explicit cleanup removes unchanged owned files and recorded empty directories without restoring game files or recreating a directory. Engine.ini release preserves user settings; Vulkan cleanup removes this game's app registration while retaining the shared layer and other apps. Unsupported or changed objects are preserved and reported. Successful steps remain completed after a later failure, and retry observes only remaining objects. Leave suppresses an unchanged proposal. NVIDIA operations remain under their existing lifecycle and are not cleanup items.
+
 ## SQLite and migrations
 
 The portable runtime release contract declares the current schema and its released compatibility floor. Declared migration steps define the supported intermediate schemas. Unreleased gaps, schemas below the floor, and databases from a newer schema are rejected.
@@ -56,6 +64,7 @@ Portable startup derives the data root beside the raw supervisor and passes the 
 - [File-safety authority](../../crates/renderpilot-orchestration/src/file_safety.rs)
 - [Anti-cheat detection](../../crates/renderpilot-detection/src/anticheat.rs)
 - [Mutation safety policy](../../crates/renderpilot-domain/src/mutation_features.rs)
+- [Removed game cleanup](../../crates/renderpilot-orchestration/src/catalog/leftovers.rs)
 - [Game mutation lock](../../crates/renderpilot-orchestration/src/game_mutation_lock.rs)
 - [Baseline handling](../../crates/renderpilot-orchestration/src/coordinated_files/baseline.rs)
 - [Portable runtime release contract](../../data/contracts/portable-runtime-release.json)

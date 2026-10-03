@@ -3,6 +3,53 @@ import { defineLocalizedCatalog } from './contract';
 import { plural } from './model';
 
 export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
+  'leftovers.title': 'Verbliebene RenderPilot-Daten',
+  'leftovers.description':
+    'Diese Spiele sind nicht mehr installiert, aber Dateien und Einstellungen von RenderPilot sind noch vorhanden. Prüfen Sie die Liste vor der Bereinigung.',
+  'leftovers.leaveHint':
+    '„Beibehalten“ lässt die Daten unverändert und blendet dieses Fenster aus, bis sie sich ändern.',
+  'leftovers.leave': 'Beibehalten',
+  'leftovers.clean': 'Entfernen',
+  'leftovers.cleaning': 'Wird entfernt…',
+  'leftovers.category.vulkanRegistration': 'Spielzuordnung zum Vulkan-Layer',
+  'leftovers.category.engineConfig': 'Engine.ini-Einstellungen',
+  'leftovers.category.optiscalerFile': 'OptiScaler-Datei',
+  'leftovers.category.addonFile': 'Erweiterungsdatei',
+  'leftovers.category.componentFile': 'Geänderte Komponente',
+  'leftovers.category.privateCustody': 'Sicherung der ursprünglichen Spieldatei',
+  'leftovers.category.directory': 'Ordner',
+  'leftovers.issue.unsupportedOwner': 'RenderPilot kann diese Daten noch nicht entfernen.',
+  'leftovers.issue.unprovenOwnership':
+    'Diese Daten konnten RenderPilot nicht eindeutig zugeordnet werden.',
+  'leftovers.issue.modifiedFile': 'Die Datei wurde geändert und wird beibehalten.',
+  'leftovers.issue.privateOriginalCustody':
+    'Diese Sicherung enthält eine ursprüngliche Spieldatei und wird beibehalten.',
+  'leftovers.issue.foreignPending':
+    'Ein anderer Vorgang ist nicht abgeschlossen. Diese Daten können noch nicht entfernt werden.',
+  'leftovers.issue.pendingConflict':
+    'Ein nicht abgeschlossener Vorgang verhindert die Bereinigung.',
+  'leftovers.issue.unavailableTarget':
+    'Der Pfad ist nicht verfügbar. Prüfen Sie die Laufwerksverbindung und den Dateizugriff.',
+  'leftovers.issue.nativeAuthorityUnavailable':
+    'Die für die Bereinigung benötigten Systemeinstellungen sind nicht zugänglich.',
+  'leftovers.issue.activeOwnershipConflict':
+    'Diese Daten gehören zu einer aktuellen Installation und werden beibehalten.',
+  'leftovers.issue.staleIntent':
+    'Der Spielzustand hat sich geändert. Prüfen Sie die aktualisierte Liste vor einem weiteren Versuch.',
+  'leftovers.issue.operationFailed':
+    'Die Bereinigung konnte nicht abgeschlossen werden. Sie können es erneut versuchen.',
+  'leftovers.outcome.removed': 'Entfernt',
+  'leftovers.outcome.released': 'RenderPilot-Änderungen entfernt',
+  'leftovers.outcome.alreadyAbsent': 'Bereits nicht mehr vorhanden',
+  'leftovers.outcome.recovered': 'Vorherige Bereinigung abgeschlossen',
+  'leftovers.outcome.preservedForeign': 'Anderer Vorgang unverändert',
+  'leftovers.outcome.blocked': 'Unverändert beibehalten',
+  'leftovers.outcome.failed': 'Konnte nicht entfernt werden',
+  'leftovers.status.complete': 'Bereinigung abgeschlossen',
+  'leftovers.status.partial': 'Einige Daten sind noch vorhanden',
+  'leftovers.status.blocked': 'Verbliebene Daten beibehalten',
+  'leftovers.status.stale': 'Der Spielzustand hat sich geändert',
+
   'nav.games': 'Spiele',
   'nav.libraries': 'Bibliotheken',
   'nav.settings': 'Einstellungen',

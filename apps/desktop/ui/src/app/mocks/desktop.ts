@@ -3,6 +3,12 @@ import { mockAddGame, mockInspectGameInstall, mockScanAutoLibraries } from './co
 import { mockQueryGameCards, mockGetGameDetails } from './commands/query';
 import { mockFetchGameCover, mockClearGameCover, mockSetGameCover } from './commands/cover';
 import { mockGetCatalogSetting, mockSetCatalogSetting } from './commands/settings';
+import {
+  mockCleanRetiredGameLeftovers,
+  mockLeaveRetiredGameLeftovers,
+  mockListRetiredGameLeftovers,
+  resetRetiredGameLeftoversPreview,
+} from './commands/leftovers';
 import { resolveGamesFiltersBootstrap } from '@features/filter-games';
 import {
   mockApplySwap,
@@ -74,6 +80,21 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
 
     case 'scan_auto_libraries':
       return mockScanAutoLibraries();
+
+    case 'list_retired_game_leftovers':
+      return mockListRetiredGameLeftovers();
+
+    case 'clean_retired_game_leftovers':
+      return mockCleanRetiredGameLeftovers({
+        gameId: readStringField(command, payload, 'gameId'),
+        intent: readStringField(command, payload, 'intent'),
+      });
+
+    case 'leave_retired_game_leftovers':
+      return mockLeaveRetiredGameLeftovers({
+        gameId: readStringField(command, payload, 'gameId'),
+        intent: readStringField(command, payload, 'intent'),
+      });
 
     case 'refresh_remote_manifests':
       return {
@@ -335,6 +356,7 @@ export function registerMockInvoker(): void {
 
 export function resetMockDesktopState(): void {
   Object.assign(mockState, createMockState());
+  resetRetiredGameLeftoversPreview();
 }
 
 export {

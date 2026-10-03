@@ -3,6 +3,52 @@ import { defineLocalizedCatalog } from './contract';
 import { plural } from './model';
 
 export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
+  'leftovers.title': 'Restos de RenderPilot',
+  'leftovers.description':
+    'Estos juegos ya no están instalados, pero quedan archivos y ajustes de RenderPilot. Revisa la lista antes de limpiarlos.',
+  'leftovers.leaveHint':
+    '«Conservar» mantiene estos restos y oculta esta ventana hasta que cambien.',
+  'leftovers.leave': 'Conservar',
+  'leftovers.clean': 'Eliminar',
+  'leftovers.cleaning': 'Eliminando…',
+  'leftovers.category.vulkanRegistration': 'Registro del juego en la capa Vulkan',
+  'leftovers.category.engineConfig': 'Ajustes de Engine.ini',
+  'leftovers.category.optiscalerFile': 'Archivo de OptiScaler',
+  'leftovers.category.addonFile': 'Archivo del complemento',
+  'leftovers.category.componentFile': 'Componente modificado',
+  'leftovers.category.privateCustody': 'Copia del archivo original del juego',
+  'leftovers.category.directory': 'Carpeta',
+  'leftovers.issue.unsupportedOwner': 'RenderPilot todavía no puede eliminar estos elementos.',
+  'leftovers.issue.unprovenOwnership':
+    'No se pudo confirmar que estos elementos pertenecen a RenderPilot.',
+  'leftovers.issue.modifiedFile': 'El archivo ha cambiado y se conservará.',
+  'leftovers.issue.privateOriginalCustody':
+    'Esta copia contiene un archivo original del juego y se conservará.',
+  'leftovers.issue.foreignPending':
+    'Hay otra operación sin finalizar. Estos restos aún no se pueden eliminar.',
+  'leftovers.issue.pendingConflict': 'Una operación sin terminar impide la limpieza.',
+  'leftovers.issue.unavailableTarget':
+    'La ruta no está disponible. Comprueba la conexión de la unidad y el acceso a los archivos.',
+  'leftovers.issue.nativeAuthorityUnavailable':
+    'No se pudo acceder a los ajustes del sistema necesarios para la limpieza.',
+  'leftovers.issue.activeOwnershipConflict':
+    'Estos elementos pertenecen a una instalación actual y se conservarán.',
+  'leftovers.issue.staleIntent':
+    'El estado del juego ha cambiado. Revisa la lista actualizada antes de volver a intentarlo.',
+  'leftovers.issue.operationFailed':
+    'No se pudo completar la limpieza. Puedes volver a intentarlo.',
+  'leftovers.outcome.removed': 'Eliminado',
+  'leftovers.outcome.released': 'Cambios de RenderPilot eliminados',
+  'leftovers.outcome.alreadyAbsent': 'Ya no existe',
+  'leftovers.outcome.recovered': 'Limpieza anterior completada',
+  'leftovers.outcome.preservedForeign': 'Otra operación sin cambios',
+  'leftovers.outcome.blocked': 'Conservado sin cambios',
+  'leftovers.outcome.failed': 'No se pudo eliminar',
+  'leftovers.status.complete': 'Limpieza completada',
+  'leftovers.status.partial': 'Quedan algunos restos',
+  'leftovers.status.blocked': 'Se conservaron los restos',
+  'leftovers.status.stale': 'El estado del juego cambió',
+
   'nav.games': 'Juegos',
   'nav.libraries': 'Bibliotecas',
   'nav.settings': 'Ajustes',

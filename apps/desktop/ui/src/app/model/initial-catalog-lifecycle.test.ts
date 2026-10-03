@@ -44,6 +44,55 @@ function createHarness(
 }
 
 describe('createInitialCatalogLifecycle', () => {
+  it('queries follow-up changes once after coalesced completion and skips disposal', async () => {
+    const { deps, handlers } = createHarness();
+    const completion = Promise.withResolvers<undefined>();
+    deps.completeInitialCatalogSync.mockReturnValue(completion.promise);
+    const followUp = vi.fn(() => Promise.resolve());
+    const lifecycle = createInitialCatalogLifecycle({
+      ...deps,
+      onInitialCatalogSyncComplete: followUp,
+    });
+    lifecycle.startServices();
+    await flushTasks();
+    handlers.get('catalog://sync-state')?.('ready');
+    expect(followUp).not.toHaveBeenCalled();
+    completion.resolve(undefined);
+    await flushTasks();
+    expect(followUp).toHaveBeenCalledOnce();
+
+    const next = createHarness();
+    const nextCompletion = Promise.withResolvers<undefined>();
+    next.deps.completeInitialCatalogSync.mockReturnValue(nextCompletion.promise);
+    const disposedFollowUp = vi.fn(() => Promise.resolve());
+    const disposedLifecycle = createInitialCatalogLifecycle({
+      ...next.deps,
+      onInitialCatalogSyncComplete: disposedFollowUp,
+    });
+    disposedLifecycle.startServices();
+    await flushTasks();
+    disposedLifecycle.dispose();
+    nextCompletion.resolve(undefined);
+    await flushTasks();
+    expect(disposedFollowUp).not.toHaveBeenCalled();
+  });
+
+  it('isolates follow-up query failure from catalog completion and cover hydration', async () => {
+    const { deps } = createHarness();
+    const lifecycle = createInitialCatalogLifecycle({
+      ...deps,
+      onInitialCatalogSyncComplete: () => Promise.reject(new Error('query failed')),
+    });
+    lifecycle.startServices();
+    await flushTasks();
+    expect(deps.reportError).toHaveBeenCalledWith(
+      'Failed to query changes after initial catalog sync.',
+      expect.any(Error),
+    );
+    expect(deps.completeInitialCatalogSync).toHaveBeenCalledOnce();
+    expect(deps.enableCoverHydration).toHaveBeenCalledOnce();
+  });
+
   it('registers listeners before starting background services', async () => {
     const { deps, handlers } = createHarness();
     const lifecycle = createInitialCatalogLifecycle(deps);

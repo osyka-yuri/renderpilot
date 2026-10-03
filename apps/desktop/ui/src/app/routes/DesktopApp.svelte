@@ -29,6 +29,14 @@
   import { ErrorBoundary } from '@shared/ui';
   import { NotificationsToaster } from '@widgets/notifications-toaster';
   import { createCoverSyncQueue } from '@features/sync-covers';
+  import {
+    CleanupGameLeftoversDialog,
+    cleanRetiredGameLeftovers,
+    createCleanupFlow,
+    issueLabel,
+    leaveRetiredGameLeftovers,
+    listRetiredGameLeftovers,
+  } from '@features/cleanup-game-leftovers';
   import { createGameDetailsPageModel } from '@pages/game-details';
   import { GamesPage as GamesScreen, createGamesPageModel } from '@pages/games';
   import { settingsTabMemory } from '@pages/settings';
@@ -67,7 +75,10 @@
   } from '@features/scan-libraries';
   import { presentError } from '@shared/error-presentation';
   import { ClientError, getErrorCode, reportClientError } from '@shared/errors';
-  import { publishCommandErrorNotification } from '@shared/notifications';
+  import {
+    publishCommandErrorNotification,
+    publishStatusNotification,
+  } from '@shared/notifications';
 
   import LazyPage from './LazyPage.svelte';
   import { createDesktopPageRegistry } from './desktop-page-registry.svelte';
@@ -83,6 +94,14 @@
   });
   const pages = createDesktopPageRegistry();
   const coverSyncQueue = createCoverSyncQueue();
+  const leftovers = createCleanupFlow({
+    list: listRetiredGameLeftovers,
+    clean: cleanRetiredGameLeftovers,
+    leave: leaveRetiredGameLeftovers,
+    presentError,
+    publishError: publishCommandErrorNotification,
+    publishIssue: (issue) => publishStatusNotification(issueLabel(issue.code), 'warning'),
+  });
   const appUpdater = createAppUpdaterModel({
     gateway: createTauriAppUpdaterGateway(),
   });
@@ -340,6 +359,7 @@
         onCatalogDelta: handleCatalogDelta,
         onPartialScanFailures: publishPartialLibraryScanWarning,
         completeInitialCatalogSync,
+        onInitialCatalogSyncComplete: leftovers.refresh,
         enableCoverHydration: () => {
           backgroundCoverHydrationEnabled = true;
         },
@@ -381,6 +401,7 @@
       disposed = true;
       stopThemeObserver?.();
       selectedDetailsRefresher.dispose();
+      leftovers.dispose();
       disposeCatalogLifecycle?.();
       gamesSession.flushSearchPersist();
       gamesSession.dispose();
@@ -460,7 +481,11 @@
 
     isRefreshing = true;
     void refreshCatalogAndSelectedDetails({
-      refreshCatalog: () => runUserCatalogRefresh(catalogRefreshDeps()),
+      refreshCatalog: () =>
+        runUserCatalogRefresh({
+          ...catalogRefreshDeps(),
+          onCatalogRefreshed: leftovers.refresh,
+        }),
       markCatalogRefreshed: () => {
         refreshCounter++;
       },
@@ -500,9 +525,13 @@
   />
 {/if}
 
+{#if leftovers.proposals.length > 0 && addGameFlow.dialog === null && appUpdater.dialog === null}
+  <CleanupGameLeftoversDialog flow={leftovers} />
+{/if}
+
 <DesktopShell
   screen={model.screen}
-  busy={model.busy}
+  busy={model.busy || leftovers.busy}
   refreshing={isRefreshing}
   selectedGameTitle={selectedShellGameTitle}
   onNavigate={navigate}
@@ -594,7 +623,7 @@
     {:else}
       <GamesScreen
         session={gamesSession}
-        busy={model.busy || addGameFlow.busy}
+        busy={model.busy || addGameFlow.busy || leftovers.busy}
         coversAutoFetchingIds={coverSyncQueue.autoFetchingIds}
         pickCoverDisabled={isDesktopPreviewMode()}
         onAddGame={handleAddGame}

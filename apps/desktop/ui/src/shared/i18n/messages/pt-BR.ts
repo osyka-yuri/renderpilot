@@ -3,6 +3,51 @@ import { defineLocalizedCatalog } from './contract';
 import { plural } from './model';
 
 export const ptBr = defineLocalizedCatalog<'pt-BR', EnglishCatalog>()({
+  'leftovers.title': 'Dados restantes do RenderPilot',
+  'leftovers.description':
+    'Esses jogos não estão mais instalados, mas restam arquivos e configurações do RenderPilot. Confira a lista antes da limpeza.',
+  'leftovers.leaveHint': '“Manter” preserva esses dados e oculta esta janela até que eles mudem.',
+  'leftovers.leave': 'Manter',
+  'leftovers.clean': 'Remover',
+  'leftovers.cleaning': 'Removendo…',
+  'leftovers.category.vulkanRegistration': 'Registro do jogo na camada Vulkan',
+  'leftovers.category.engineConfig': 'Configurações de Engine.ini',
+  'leftovers.category.optiscalerFile': 'Arquivo do OptiScaler',
+  'leftovers.category.addonFile': 'Arquivo de complemento',
+  'leftovers.category.componentFile': 'Componente modificado',
+  'leftovers.category.privateCustody': 'Backup do arquivo original do jogo',
+  'leftovers.category.directory': 'Pasta',
+  'leftovers.issue.unsupportedOwner': 'O RenderPilot ainda não pode remover esses dados.',
+  'leftovers.issue.unprovenOwnership':
+    'Não foi possível confirmar que esses dados pertencem ao RenderPilot.',
+  'leftovers.issue.modifiedFile': 'O arquivo foi alterado e será mantido.',
+  'leftovers.issue.privateOriginalCustody':
+    'Esse backup contém um arquivo original do jogo e será mantido.',
+  'leftovers.issue.foreignPending':
+    'Outra operação não foi concluída. Esses dados ainda não podem ser removidos.',
+  'leftovers.issue.pendingConflict': 'Uma operação não concluída impede a limpeza.',
+  'leftovers.issue.unavailableTarget':
+    'O caminho está indisponível. Verifique a conexão da unidade e o acesso aos arquivos.',
+  'leftovers.issue.nativeAuthorityUnavailable':
+    'Não foi possível acessar as configurações do sistema necessárias para a limpeza.',
+  'leftovers.issue.activeOwnershipConflict':
+    'Esses dados pertencem a uma instalação atual e serão mantidos.',
+  'leftovers.issue.staleIntent':
+    'O estado do jogo mudou. Confira a lista atualizada antes de tentar novamente.',
+  'leftovers.issue.operationFailed':
+    'Não foi possível concluir a limpeza. Você pode tentar novamente.',
+  'leftovers.outcome.removed': 'Removido',
+  'leftovers.outcome.released': 'Alterações do RenderPilot removidas',
+  'leftovers.outcome.alreadyAbsent': 'Já ausente',
+  'leftovers.outcome.recovered': 'Limpeza anterior concluída',
+  'leftovers.outcome.preservedForeign': 'Outra operação inalterada',
+  'leftovers.outcome.blocked': 'Mantido sem alterações',
+  'leftovers.outcome.failed': 'Não foi possível remover',
+  'leftovers.status.complete': 'Limpeza concluída',
+  'leftovers.status.partial': 'Alguns dados ainda permanecem',
+  'leftovers.status.blocked': 'Dados restantes mantidos',
+  'leftovers.status.stale': 'O estado do jogo mudou',
+
   'nav.games': 'Jogos',
   'nav.libraries': 'Bibliotecas',
   'nav.settings': 'Configurações',

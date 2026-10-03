@@ -15,6 +15,12 @@ import type {
 } from '@features/nvapi-settings';
 import type { CatalogSettingPayload } from '@entities/settings';
 import type {
+  CleanupOutcome,
+  LeaveOutcome,
+  ListRetiredGameLeftoversOutput,
+  RetiredGameLeftoversRequest,
+} from '@features/cleanup-game-leftovers';
+import type {
   ApplySwapResult,
   RollbackComponentResult,
   RollbackPlan,
@@ -46,6 +52,9 @@ export type DesktopCommandPayloadMap = {
     inspectionFingerprint: string;
   };
   scan_auto_libraries: undefined;
+  list_retired_game_leftovers: undefined;
+  clean_retired_game_leftovers: RetiredGameLeftoversRequest;
+  leave_retired_game_leftovers: RetiredGameLeftoversRequest;
   refresh_remote_manifests: undefined;
   refresh_catalog_capabilities: undefined;
   query_game_cards: { query: GameCardsQuery };
@@ -156,6 +165,9 @@ export type DesktopCommandResultMap = {
   inspect_game_install: AddGameInspection;
   add_game: AddGameResult;
   scan_auto_libraries: AutoScanResponse;
+  list_retired_game_leftovers: ListRetiredGameLeftoversOutput;
+  clean_retired_game_leftovers: CleanupOutcome;
+  leave_retired_game_leftovers: LeaveOutcome;
   refresh_remote_manifests: ManifestRefreshReport;
   refresh_catalog_capabilities: { refreshed: boolean };
   query_game_cards: GameCardsResult;
@@ -232,6 +244,9 @@ const ALL_DESKTOP_COMMANDS = [
   'inspect_game_install',
   'add_game',
   'scan_auto_libraries',
+  'list_retired_game_leftovers',
+  'clean_retired_game_leftovers',
+  'leave_retired_game_leftovers',
   'refresh_remote_manifests',
   'refresh_catalog_capabilities',
   'query_game_cards',

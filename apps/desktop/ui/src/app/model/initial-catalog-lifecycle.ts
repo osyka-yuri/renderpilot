@@ -25,6 +25,7 @@ export type InitialCatalogLifecycleDeps = {
   onCatalogDelta: (delta: CatalogDelta) => void;
   onPartialScanFailures: (count: number) => void;
   completeInitialCatalogSync: (completion: InitialCatalogSyncCompletion) => Promise<void>;
+  onInitialCatalogSyncComplete?: () => Promise<void>;
   enableCoverHydration: () => void;
   reportError?: (message: string, error: unknown) => void;
 };
@@ -63,9 +64,18 @@ export function createInitialCatalogLifecycle(deps: InitialCatalogLifecycleDeps)
 
   let catalogDeltaListenerAvailable = false;
   const completeInitialSync = (): Promise<void> => {
-    initialSyncCompletion ??= deps.completeInitialCatalogSync({
-      forceCatalogRefresh: !catalogDeltaListenerAvailable,
-    });
+    initialSyncCompletion ??= (async () => {
+      await deps.completeInitialCatalogSync({
+        forceCatalogRefresh: !catalogDeltaListenerAvailable,
+      });
+      if (!disposed) {
+        try {
+          await deps.onInitialCatalogSyncComplete?.();
+        } catch (error: unknown) {
+          reportError('Failed to query changes after initial catalog sync.', error);
+        }
+      }
+    })();
     return initialSyncCompletion;
   };
   const catalogDeltaListenerReady = deps.previewMode

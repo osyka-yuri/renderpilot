@@ -203,6 +203,7 @@ export type UserCatalogRefreshDeps = CatalogRefreshWithCoverSyncDeps & {
   refreshRemoteManifests?: () => Promise<unknown>;
   /** Optional override for rebuilding durable capability facts. */
   refreshCatalogCapabilities?: () => Promise<unknown>;
+  onCatalogRefreshed?: () => Promise<void>;
 };
 
 /**
@@ -211,7 +212,7 @@ export type UserCatalogRefreshDeps = CatalogRefreshWithCoverSyncDeps & {
  * the disk scan. Force runs inside the exclusive catalog lock.
  */
 export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promise<boolean> {
-  return runCatalogRefreshWithCoverSync(async () => {
+  const refreshed = await runCatalogRefreshWithCoverSync(async () => {
     await forceRemoteManifestsBestEffort(deps.refreshRemoteManifests);
     const shouldRefresh = await prepareAutoLibraryScan();
     if (shouldRefresh) {
@@ -219,6 +220,10 @@ export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promi
     }
     return shouldRefresh;
   }, deps);
+  if (refreshed) {
+    await deps.onCatalogRefreshed?.();
+  }
+  return refreshed;
 }
 
 export type RefreshCatalogAndSelectedDetailsDeps = {

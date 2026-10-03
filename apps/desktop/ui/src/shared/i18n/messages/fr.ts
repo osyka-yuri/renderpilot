@@ -3,6 +3,51 @@ import { defineLocalizedCatalog } from './contract';
 import { plural } from './model';
 
 export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
+  'leftovers.title': 'Traces de RenderPilot',
+  'leftovers.description':
+    'Ces jeux ne sont plus installés, mais des fichiers et paramètres RenderPilot subsistent. Vérifiez la liste avant le nettoyage.',
+  'leftovers.leaveHint':
+    '« Conserver » garde les traces et masque cette fenêtre jusqu’à leur modification.',
+  'leftovers.leave': 'Conserver',
+  'leftovers.clean': 'Supprimer',
+  'leftovers.cleaning': 'Suppression…',
+  'leftovers.category.vulkanRegistration': 'Association du jeu à la couche Vulkan',
+  'leftovers.category.engineConfig': 'Paramètres Engine.ini',
+  'leftovers.category.optiscalerFile': 'Fichier OptiScaler',
+  'leftovers.category.addonFile': 'Fichier du module',
+  'leftovers.category.componentFile': 'Composant modifié',
+  'leftovers.category.privateCustody': 'Sauvegarde du fichier original du jeu',
+  'leftovers.category.directory': 'Dossier',
+  'leftovers.issue.unsupportedOwner': 'RenderPilot ne peut pas encore supprimer ces éléments.',
+  'leftovers.issue.unprovenOwnership':
+    'Impossible de confirmer que ces éléments appartiennent à RenderPilot.',
+  'leftovers.issue.modifiedFile': 'Le fichier a été modifié et sera conservé.',
+  'leftovers.issue.privateOriginalCustody':
+    'Cette sauvegarde contient un fichier original du jeu et sera conservée.',
+  'leftovers.issue.foreignPending':
+    'Une autre opération est inachevée. Ces traces ne peuvent pas encore être supprimées.',
+  'leftovers.issue.pendingConflict': 'Une opération inachevée empêche le nettoyage.',
+  'leftovers.issue.unavailableTarget':
+    'Le chemin est inaccessible. Vérifiez la connexion du disque et l’accès aux fichiers.',
+  'leftovers.issue.nativeAuthorityUnavailable':
+    'Impossible d’accéder aux paramètres système nécessaires au nettoyage.',
+  'leftovers.issue.activeOwnershipConflict':
+    'Ces éléments appartiennent à une installation actuelle et seront conservés.',
+  'leftovers.issue.staleIntent':
+    'L’état du jeu a changé. Vérifiez la liste actualisée avant de réessayer.',
+  'leftovers.issue.operationFailed': 'Le nettoyage n’a pas pu être terminé. Vous pouvez réessayer.',
+  'leftovers.outcome.removed': 'Supprimé',
+  'leftovers.outcome.released': 'Modifications RenderPilot supprimées',
+  'leftovers.outcome.alreadyAbsent': 'Déjà absent',
+  'leftovers.outcome.recovered': 'Nettoyage précédent terminé',
+  'leftovers.outcome.preservedForeign': 'Autre opération inchangée',
+  'leftovers.outcome.blocked': 'Conservé sans modification',
+  'leftovers.outcome.failed': 'Suppression impossible',
+  'leftovers.status.complete': 'Nettoyage terminé',
+  'leftovers.status.partial': 'Certaines traces subsistent',
+  'leftovers.status.blocked': 'Traces conservées',
+  'leftovers.status.stale': 'L’état du jeu a changé',
+
   'nav.games': 'Jeux',
   'nav.libraries': 'Bibliothèques',
   'nav.settings': 'Paramètres',

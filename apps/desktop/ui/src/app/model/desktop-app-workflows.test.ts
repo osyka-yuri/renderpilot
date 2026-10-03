@@ -429,6 +429,30 @@ describe('desktop-app-workflows', () => {
   });
 
   describe('runUserCatalogRefresh', () => {
+    it('queries remaining changes after refreshed cards even when scan partially fails', async () => {
+      const deps = coverDeps();
+      const followUp = vi.fn(() => Promise.resolve());
+      scanMocks.scanAutoLibrariesWithErrorRecovery.mockResolvedValueOnce({
+        kind: 'ok',
+        partialFailureCount: 1,
+      });
+      await runUserCatalogRefresh({ ...deps, onCatalogRefreshed: followUp });
+      expect(followUp).toHaveBeenCalledOnce();
+      expect(deps.refreshGameCards.mock.invocationCallOrder[0]).toBeLessThan(
+        followUp.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('does not query remaining changes when exclusive refresh is skipped', async () => {
+      const followUp = vi.fn(() => Promise.resolve());
+      await runUserCatalogRefresh({
+        ...coverDeps(),
+        runExclusive: () => Promise.resolve(null),
+        onCatalogRefreshed: followUp,
+      });
+      expect(followUp).not.toHaveBeenCalled();
+    });
+
     beforeEach(() => {
       vi.clearAllMocks();
       scanMocks.scanAutoLibrariesWithErrorRecovery.mockResolvedValue({

@@ -3,6 +3,49 @@ import { defineLocalizedCatalog } from './contract';
 import { plural } from './model';
 
 export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
+  'leftovers.title': 'RenderPilot の残存データ',
+  'leftovers.description':
+    'これらのゲームは削除されていますが、RenderPilot のファイルや設定が残っています。削除前に一覧を確認してください。',
+  'leftovers.leaveHint':
+    '「残す」を選ぶとデータを保持してこの画面を閉じます。データが変わると再び表示されます。',
+  'leftovers.leave': '残す',
+  'leftovers.clean': '削除',
+  'leftovers.cleaning': '削除中…',
+  'leftovers.category.vulkanRegistration': 'Vulkan レイヤーへのゲーム登録',
+  'leftovers.category.engineConfig': 'Engine.ini の設定',
+  'leftovers.category.optiscalerFile': 'OptiScaler ファイル',
+  'leftovers.category.addonFile': 'アドオンファイル',
+  'leftovers.category.componentFile': '変更されたコンポーネント',
+  'leftovers.category.privateCustody': '元のゲームファイルのバックアップ',
+  'leftovers.category.directory': 'フォルダー',
+  'leftovers.issue.unsupportedOwner': 'これらのデータはまだ RenderPilot で削除できません。',
+  'leftovers.issue.unprovenOwnership': 'これらのデータが RenderPilot によるものか確認できません。',
+  'leftovers.issue.modifiedFile': 'このファイルは変更されているため、保持されます。',
+  'leftovers.issue.privateOriginalCustody':
+    'このバックアップにはゲームの元のファイルが含まれるため、保持されます。',
+  'leftovers.issue.foreignPending':
+    '別の操作が完了していないため、これらの残存データはまだ削除できません。',
+  'leftovers.issue.pendingConflict': '未完了の操作により、削除できません。',
+  'leftovers.issue.unavailableTarget':
+    'パスにアクセスできません。ドライブの接続とファイルへのアクセスを確認してください。',
+  'leftovers.issue.nativeAuthorityUnavailable': '削除に必要なシステム設定にアクセスできません。',
+  'leftovers.issue.activeOwnershipConflict':
+    'これらのデータは現在のインストールで使用されているため、保持されます。',
+  'leftovers.issue.staleIntent':
+    'ゲームの状態が変わりました。再試行する前に更新された一覧を確認してください。',
+  'leftovers.issue.operationFailed': '削除を完了できませんでした。再試行できます。',
+  'leftovers.outcome.removed': '削除済み',
+  'leftovers.outcome.released': 'RenderPilot の変更を削除済み',
+  'leftovers.outcome.alreadyAbsent': 'すでに存在しません',
+  'leftovers.outcome.recovered': '前回の削除を完了',
+  'leftovers.outcome.preservedForeign': '別の操作は変更なし',
+  'leftovers.outcome.blocked': '変更せずに保持',
+  'leftovers.outcome.failed': '削除できませんでした',
+  'leftovers.status.complete': '削除が完了しました',
+  'leftovers.status.partial': '一部のデータが残っています',
+  'leftovers.status.blocked': '残存データを保持しました',
+  'leftovers.status.stale': 'ゲームの状態が変わりました',
+
   'nav.games': 'ゲーム',
   'nav.libraries': 'ライブラリ',
   'nav.settings': '設定',

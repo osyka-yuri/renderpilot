@@ -8,6 +8,49 @@ import { plural } from './model';
  */
 export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   // ── App shell / navigation ──
+  'leftovers.title': 'Остатки RenderPilot',
+  'leftovers.description':
+    'После удаления игр остались файлы и настройки RenderPilot. Проверьте список перед очисткой.',
+  'leftovers.leaveHint': '«Оставить» сохранит остатки и скроет это окно до их изменения.',
+  'leftovers.leave': 'Оставить',
+  'leftovers.clean': 'Удалить',
+  'leftovers.cleaning': 'Удаление…',
+  'leftovers.category.vulkanRegistration': 'Привязка игры к слою Vulkan',
+  'leftovers.category.engineConfig': 'Настройки Engine.ini',
+  'leftovers.category.optiscalerFile': 'Файл OptiScaler',
+  'leftovers.category.addonFile': 'Файл аддона',
+  'leftovers.category.componentFile': 'Изменённый компонент',
+  'leftovers.category.privateCustody': 'Резервная копия исходного файла игры',
+  'leftovers.category.directory': 'Папка',
+  'leftovers.issue.unsupportedOwner': 'RenderPilot пока не может удалить эти данные.',
+  'leftovers.issue.unprovenOwnership':
+    'Не удалось подтвердить, что эти данные относятся к RenderPilot.',
+  'leftovers.issue.modifiedFile': 'Файл изменён и будет сохранён.',
+  'leftovers.issue.privateOriginalCustody': 'Копия содержит исходный файл игры и будет сохранена.',
+  'leftovers.issue.foreignPending':
+    'Другая операция не завершена. Эти остатки пока нельзя удалить.',
+  'leftovers.issue.pendingConflict': 'Очистке мешает незавершённая операция.',
+  'leftovers.issue.unavailableTarget':
+    'Путь недоступен. Проверьте подключение диска и доступ к файлам.',
+  'leftovers.issue.nativeAuthorityUnavailable':
+    'Не удалось получить доступ к системным настройкам для очистки.',
+  'leftovers.issue.activeOwnershipConflict':
+    'Эти данные относятся к текущей установке и будут сохранены.',
+  'leftovers.issue.staleIntent':
+    'Состояние игры изменилось. Проверьте обновлённый список перед повторной попыткой.',
+  'leftovers.issue.operationFailed': 'Не удалось завершить очистку. Можно повторить попытку.',
+  'leftovers.outcome.removed': 'Удалено',
+  'leftovers.outcome.released': 'Изменения RenderPilot удалены',
+  'leftovers.outcome.alreadyAbsent': 'Уже отсутствует',
+  'leftovers.outcome.recovered': 'Предыдущая очистка завершена',
+  'leftovers.outcome.preservedForeign': 'Другая операция оставлена без изменений',
+  'leftovers.outcome.blocked': 'Оставлено без изменений',
+  'leftovers.outcome.failed': 'Не удалось удалить',
+  'leftovers.status.complete': 'Очистка завершена',
+  'leftovers.status.partial': 'Часть остатков сохранилась',
+  'leftovers.status.blocked': 'Остатки сохранены',
+  'leftovers.status.stale': 'Состояние игры изменилось',
+
   'nav.games': 'Игры',
   'nav.libraries': 'Библиотеки',
   'nav.settings': 'Настройки',
@@ -187,7 +230,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'addGame.rootCorrection.blocker.pendingRecovery':
     'Не завершено восстановление после прерванной файловой операции.',
   'addGame.rootCorrection.blocker.installedAddon':
-    'Установленное дополнение относится к файлам вне выбранной папки игры.',
+    'Установленный аддон относится к файлам вне выбранной папки игры.',
   'addGame.rootCorrection.blocker.nvapi':
     'Активные настройки профиля NVIDIA относятся к исполняемым файлам вне выбранной папки.',
   'addGame.rootCorrection.blocker.orphanedComponentBaseline':
@@ -876,14 +919,12 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.renodx.confidenceVerified': 'Подтверждена',
   'gameDetails.renodx.confidenceExperimental': 'В работе',
   'gameDetails.renodx.confidenceUntested': 'Не проверена',
-  'gameDetails.renodx.external':
-    'Это дополнение RenoDX распространяется отдельно и должно быть загружено вручную.',
+  'gameDetails.renodx.external': 'Аддон RenoDX распространяется отдельно. Скачайте его вручную.',
   'gameDetails.renodx.actionOpenExternal': 'Открыть страницу загрузки',
   'gameDetails.renodx.external.installFromFile': 'Установить из файла',
   'gameDetails.renodx.external.dropHint':
-    'Скачайте дополнение, затем перетащите его сюда или выберите файл.',
-  'gameDetails.renodx.external.invalidFile':
-    'Этот файл не является дополнением RenoDX (.addon64 / .addon32).',
+    'Скачайте аддон, затем перетащите его сюда или выберите файл.',
+  'gameDetails.renodx.external.invalidFile': 'Это не файл аддона RenoDX (.addon64 / .addon32).',
   'gameDetails.renodx.fileInstall.title': 'Ручная установка',
   'gameDetails.renodx.fileInstall.chooseFile': 'Выбрать файл аддона…',
   'gameDetails.renodx.fileInstall.chooseAnother': 'Выбрать другой файл',
@@ -1112,7 +1153,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Используйте способ запуска, которым игра действительно запускается. Добавьте аргументы в лаунчер, цель ярлыка, bat-файл или другой загрузчик.',
   'gameDetails.addon.launchArguments.requiredTitle': 'Требуются параметры запуска',
   'gameDetails.addon.launchArguments.recommendedTitle': 'Рекомендуемые параметры запуска',
-  'gameDetails.addon.launchArguments.dx11Title': 'Для этого дополнения требуется DirectX 11',
+  'gameDetails.addon.launchArguments.dx11Title': 'Для этого аддона требуется DirectX 11',
   'gameDetails.addon.launchArguments.copyRequiredStep': 'Скопируйте требуемые параметры запуска:',
   'gameDetails.addon.launchArguments.copyRecommendedStep':
     'Скопируйте рекомендуемые параметры запуска:',
