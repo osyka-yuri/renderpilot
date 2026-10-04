@@ -242,8 +242,6 @@ export const optiscalerOverrides = defineLocalizedCatalog<'de', OptiScalerSource
     'Verwende DLSS-Eingaben, da FSR-3.1-Eingaben möglicherweise nicht korrekt hochskalieren.',
   'optiscaler-stalker-shadow-of-chornobyl-enhanced-edition-dlss-input':
     'Verwende DLSS-Eingaben, da FSR-3.1-Eingaben möglicherweise nicht korrekt hochskalieren.',
-  'optiscaler-stalker-2-fsr31-input-quality':
-    'Verwende DLSS- oder XeSS-Eingaben; die Bildqualität der FSR-3.1-Eingabe ist schlecht.',
   'optiscaler-stranded-alien-dawn-fsr2-input': 'FSR-2-Eingaben funktionieren möglicherweise nicht.',
   'optiscaler-styx-blades-of-greed-fsr4-non-linear-srgb-input':
     'Wähle für FSR 4 „Non-Linear sRGB Input“, um Flackern bei der DLSS-Eingabe zu vermeiden.',
@@ -292,4 +290,6 @@ export const optiscalerOverrides = defineLocalizedCatalog<'de', OptiScalerSource
     'Die Mod SekiroTSR ist als Basis für DLSS-Eingaben erforderlich.',
   'optiscaler-devil-may-cry-5-reframework-pdperfplugin':
     'Für dieses Spiel sind REFramework (pd-upscaler branch) und PDPerfPlugin erforderlich.',
+  'optiscaler-total-war-warhammer-3-warhammer3dlss-mod':
+    'Für dieses Spiel ist die Mod Warhammer3DLSS erforderlich, damit OptiScaler funktioniert.',
 });

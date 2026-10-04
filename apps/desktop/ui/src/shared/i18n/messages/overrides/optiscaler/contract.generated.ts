@@ -211,8 +211,6 @@ export const OPTISCALER_SOURCE_CATALOG = {
   'optiscaler-soulslinger-envoy-of-death-fsr4-non-linear-srgb-input':
     'For FSR 4, select Non-Linear sRGB Input to prevent screen flicker.',
   'optiscaler-spyro-reignited-antialiasing': 'Set anti-aliasing to High TAA in the game settings.',
-  'optiscaler-stalker-2-fsr31-input-quality':
-    'Use DLSS or XeSS inputs; FSR 3.1 input image quality is poor.',
   'optiscaler-stalker-call-of-prypiat-enhanced-edition-dlss-input':
     'Use DLSS inputs because FSR 3.1 inputs may not upscale correctly.',
   'optiscaler-stalker-clear-sky-enhanced-edition-dlss-input':
@@ -252,6 +250,8 @@ export const OPTISCALER_SOURCE_CATALOG = {
     'Run the game in DirectX 12 mode.',
   'optiscaler-tormented-souls-2-dx11':
     'Use the default DirectX 11 mode. Forcing DirectX 12 with -dx12 crashes at startup.',
+  'optiscaler-total-war-warhammer-3-warhammer3dlss-mod':
+    'The Warhammer3DLSS mod is required for this game to work with OptiScaler.',
   'optiscaler-trails-in-the-sky-1st-chapter-fsr2-resolution-scale':
     'Set the in-game resolution scale below 100% so OptiScaler can detect the FSR 2 input.',
   'optiscaler-trepang2-dx12-preset':
@@ -393,7 +393,6 @@ export const OPTISCALER_MESSAGE_CONTEXTS = {
   'optiscaler-sons-of-the-forest-inventory': 'compatibility',
   'optiscaler-soulslinger-envoy-of-death-fsr4-non-linear-srgb-input': 'compatibility',
   'optiscaler-spyro-reignited-antialiasing': 'game_setting',
-  'optiscaler-stalker-2-fsr31-input-quality': 'compatibility',
   'optiscaler-stalker-call-of-prypiat-enhanced-edition-dlss-input': 'compatibility',
   'optiscaler-stalker-clear-sky-enhanced-edition-dlss-input': 'compatibility',
   'optiscaler-stalker-shadow-of-chornobyl-enhanced-edition-dlss-input': 'compatibility',
@@ -416,6 +415,7 @@ export const OPTISCALER_MESSAGE_CONTEXTS = {
   'optiscaler-the-occultist-fsr4-non-linear-srgb-input-color-space': 'game_setting',
   'optiscaler-the-orville-interactive-fan-experience-dx12-launch-option': 'compatibility',
   'optiscaler-tormented-souls-2-dx11': 'compatibility',
+  'optiscaler-total-war-warhammer-3-warhammer3dlss-mod': 'compatibility',
   'optiscaler-trails-in-the-sky-1st-chapter-fsr2-resolution-scale': 'game_setting',
   'optiscaler-trepang2-dx12-preset': 'compatibility',
   'optiscaler-trine-5-dlss-mode': 'game_setting',

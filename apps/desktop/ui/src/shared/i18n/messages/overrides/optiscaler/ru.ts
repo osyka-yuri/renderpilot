@@ -232,8 +232,6 @@ export const optiscalerOverrides = defineLocalizedCatalog<'ru', OptiScalerSource
     'Используйте режим DLSS: масштабирование через FSR 3.1 может работать некорректно.',
   'optiscaler-stalker-shadow-of-chornobyl-enhanced-edition-dlss-input':
     'Используйте режим DLSS: масштабирование через FSR 3.1 может работать некорректно.',
-  'optiscaler-stalker-2-fsr31-input-quality':
-    'Используйте режим DLSS или XeSS: при выборе FSR 3.1 качество изображения низкое.',
   'optiscaler-stranded-alien-dawn-fsr2-input': 'Режим FSR 2 может не работать.',
   'optiscaler-styx-blades-of-greed-fsr4-non-linear-srgb-input':
     'Для FSR 4 выберите входное цветовое пространство Non-Linear sRGB, чтобы устранить мерцание при использовании режима DLSS.',
@@ -280,4 +278,6 @@ export const optiscalerOverrides = defineLocalizedCatalog<'ru', OptiScalerSource
     'Для работы требуется мод SekiroTSR в качестве основы для режима DLSS.',
   'optiscaler-devil-may-cry-5-reframework-pdperfplugin':
     'Для работы требуются REFramework (ветка pd-upscaler) и PDPerfPlugin.',
+  'optiscaler-total-war-warhammer-3-warhammer3dlss-mod':
+    'Для работы OptiScaler в этой игре требуется мод Warhammer3DLSS.',
 });

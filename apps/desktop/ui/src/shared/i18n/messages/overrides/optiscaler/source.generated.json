@@ -776,12 +776,6 @@
       "context": "compatibility"
     },
     {
-      "id": "optiscaler-stalker-2-fsr31-input-quality",
-      "sourceText": "Use DLSS or XeSS inputs; FSR 3.1 input image quality is poor.",
-      "kind": "compatibility",
-      "context": "compatibility"
-    },
-    {
       "id": "optiscaler-stranded-alien-dawn-fsr2-input",
       "sourceText": "FSR 2 inputs may not work.",
       "kind": "compatibility",
@@ -934,6 +928,12 @@
     {
       "id": "optiscaler-devil-may-cry-5-reframework-pdperfplugin",
       "sourceText": "REFramework (pd-upscaler branch) and PDPerfPlugin are required for this game to work.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-total-war-warhammer-3-warhammer3dlss-mod",
+      "sourceText": "The Warhammer3DLSS mod is required for this game to work with OptiScaler.",
       "kind": "compatibility",
       "context": "compatibility"
     }

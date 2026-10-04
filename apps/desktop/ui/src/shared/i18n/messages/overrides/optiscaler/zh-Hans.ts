@@ -203,7 +203,6 @@ export const optiscalerOverrides = defineLocalizedCatalog<'zh-Hans', OptiScalerS
     '请使用 DLSS 输入；FSR 3.1 输入可能无法正确进行超分辨率处理。',
   'optiscaler-stalker-shadow-of-chornobyl-enhanced-edition-dlss-input':
     '请使用 DLSS 输入；FSR 3.1 输入可能无法正确进行超分辨率处理。',
-  'optiscaler-stalker-2-fsr31-input-quality': '请使用 DLSS 或 XeSS 输入；FSR 3.1 输入的画质较差。',
   'optiscaler-stranded-alien-dawn-fsr2-input': 'FSR 2 输入可能无法工作。',
   'optiscaler-styx-blades-of-greed-fsr4-non-linear-srgb-input':
     '使用 FSR 4 时，请选择“Non-Linear sRGB Input”以避免 DLSS 输入闪烁。',
@@ -247,4 +246,6 @@ export const optiscalerOverrides = defineLocalizedCatalog<'zh-Hans', OptiScalerS
     '需要使用 SekiroTSR 模组作为 DLSS 输入的基础。',
   'optiscaler-devil-may-cry-5-reframework-pdperfplugin':
     '此游戏需要 REFramework（pd-upscaler 分支）和 PDPerfPlugin 才能运行。',
+  'optiscaler-total-war-warhammer-3-warhammer3dlss-mod':
+    '此游戏需要 Warhammer3DLSS 模组才能与 OptiScaler 配合使用。',
 });
