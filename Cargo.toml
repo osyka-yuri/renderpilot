@@ -60,9 +60,9 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["e
 ulid = "3"
 # Keep the Windows/WebView2 crate family aligned with the versions used by
 # Tauri/Wry to avoid duplicate bindings. Re-check `cargo tree -d` when upgrading Tauri.
-webview2-com-sys = "0.38.2"
-windows = { version = "0.61.3", default-features = false }
-windows-core = "=0.61.2"
+webview2-com-sys = "0.39.1"
+windows = { version = "0.62.2", default-features = false }
+windows-core = "=0.62.2"
 windows-sys = { version = "0.61.2", default-features = false }
 winreg = "0.56"
 
