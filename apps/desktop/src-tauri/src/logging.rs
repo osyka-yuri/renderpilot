@@ -427,7 +427,7 @@ mod tests {
                 .env("RUST_LOG", "info")
                 .output()
                 .expect("spawn isolated initialization conflict test");
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = String::from_utf8_lossy_owned(output.stderr);
         assert!(output.status.success(), "child test failed: {stderr}");
         assert!(stderr.contains("RenderPilot: tracing_subscriber_already_initialized"));
         assert!(stderr.contains("RenderPilot: log_bridge_already_initialized"));

@@ -234,7 +234,7 @@ fn cache_path(file_name: &str) -> Result<PathBuf, ServiceError> {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
-    use std::fs::OpenOptions;
+    use std::fs::FileTimes;
     #[cfg(not(target_os = "linux"))]
     use std::sync::{Arc, Barrier};
     use std::time::{Duration, SystemTime};
@@ -265,18 +265,13 @@ mod tests {
         path
     }
 
-    /// Backdates a file's mtime so freshness checks see it as `age` old. Windows
-    /// needs a write-capable handle to change the mtime.
+    /// Backdates a file's mtime so freshness checks see it as `age` old.
     fn age_file(path: &Path, age: Duration) {
         let modified = SystemTime::now()
             .checked_sub(age)
             .expect("representable timestamp");
-        OpenOptions::new()
-            .write(true)
-            .open(path)
-            .expect("open cache")
-            .set_modified(modified)
-            .expect("set mtime");
+        let times = FileTimes::new().set_modified(modified);
+        fs::set_times(path, times).expect("set mtime");
     }
 
     #[test]

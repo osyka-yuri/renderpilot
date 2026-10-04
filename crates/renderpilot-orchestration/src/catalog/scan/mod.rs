@@ -672,11 +672,7 @@ mod tests {
         );
 
         fs::write(&dll, &b).expect("write B");
-        fs::OpenOptions::new()
-            .write(true)
-            .open(&dll)
-            .expect("open B for timestamp restoration")
-            .set_times(FileTimes::new().set_modified(mtime))
+        fs::set_times(&dll, FileTimes::new().set_modified(mtime))
             .expect("restore A timestamp on B");
         scan_fixture(&context, root.path(), &game_id);
         assert_catalogued_sr_version(
@@ -687,12 +683,7 @@ mod tests {
         );
 
         fs::write(&dll, &a).expect("restore A bytes");
-        fs::OpenOptions::new()
-            .write(true)
-            .open(&dll)
-            .expect("open restored A for timestamp restoration")
-            .set_times(FileTimes::new().set_modified(mtime))
-            .expect("restore A timestamp");
+        fs::set_times(&dll, FileTimes::new().set_modified(mtime)).expect("restore A timestamp");
         scan_fixture(&context, root.path(), &game_id);
         assert_catalogued_sr_version(
             &context,

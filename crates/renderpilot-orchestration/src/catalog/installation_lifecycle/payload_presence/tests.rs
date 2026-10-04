@@ -511,7 +511,7 @@ fn create_directory_junction(junction: &Path, target: &Path) {
     assert!(
         output.status.success(),
         "junction creation failed: {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy_owned(output.stderr)
     );
 }
 

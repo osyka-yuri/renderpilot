@@ -266,6 +266,9 @@ fn revision_key(value: &str) -> Result<Vec<u64>, ServiceError> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_os = "linux"))]
+    use std::fs::{self, FileTimes};
+
     use super::*;
 
     #[test]
@@ -415,12 +418,8 @@ mod tests {
         let modified = SystemTime::now()
             .checked_sub(age)
             .expect("representable timestamp");
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(path)
-            .expect("open cache")
-            .set_modified(modified)
-            .expect("set mtime");
+        let times = FileTimes::new().set_modified(modified);
+        fs::set_times(path, times).expect("set mtime");
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -432,7 +431,7 @@ mod tests {
         let bundled = bundled_catalog().expect("bundled catalog");
         let r1_revision = bundled.revision.clone();
 
-        std::fs::write(&cache_file, BUNDLED_CATALOG).expect("write initial cache");
+        fs::write(&cache_file, BUNDLED_CATALOG).expect("write initial cache");
         age_file_for_test(&cache_file, CACHE_TTL + Duration::from_hours(1));
 
         let mut r2_value: serde_json::Value =

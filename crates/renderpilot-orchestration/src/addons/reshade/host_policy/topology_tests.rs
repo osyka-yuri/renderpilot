@@ -1,4 +1,5 @@
 use std::{
+    fs::{self, FileTimes},
     path::Path,
     time::{Duration, SystemTime},
 };
@@ -159,23 +160,17 @@ fn topology_unidentified_exact_file_is_weak_conflict_without_download() {
 fn topology_snapshot_changes_for_bytes_but_not_mtime() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("ReShade64.dll");
-    std::fs::write(&path, compatible_reshade_host()).expect("host");
+    fs::write(&path, compatible_reshade_host()).expect("host");
     let first = topology_assess(dir.path(), None);
 
-    std::fs::OpenOptions::new()
-        .write(true)
-        .open(&path)
-        .expect("open host")
-        .set_modified(
-            SystemTime::UNIX_EPOCH
-                .checked_add(Duration::from_secs(1))
-                .expect("representable mtime"),
-        )
-        .expect("mtime");
+    let mtime = SystemTime::UNIX_EPOCH
+        .checked_add(Duration::from_secs(1))
+        .expect("representable mtime");
+    fs::set_times(&path, FileTimes::new().set_modified(mtime)).expect("mtime");
     let same_bytes = topology_assess(dir.path(), None);
     assert_eq!(first, same_bytes);
 
-    std::fs::write(&path, b"changed bytes").expect("changed host");
+    fs::write(&path, b"changed bytes").expect("changed host");
     let changed = topology_assess(dir.path(), None);
     assert_ne!(first.snapshot(), changed.snapshot());
 }

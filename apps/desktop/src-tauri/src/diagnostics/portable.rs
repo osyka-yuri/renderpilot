@@ -1055,7 +1055,7 @@ mod tests {
             )
             .into_bytes()
         );
-        assert!(!String::from_utf8_lossy(&bytes).contains("fingerprint"));
+        assert!(!String::from_utf8_lossy_owned(bytes).contains("fingerprint"));
     }
 
     #[test]
@@ -1083,7 +1083,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_slice(&bytes).expect("JSON record");
         assert_eq!(value["reason_code"], "contains_proven_install");
         assert!(value.get("path").is_none());
-        assert!(!String::from_utf8_lossy(&bytes).contains("private"));
+        assert!(!String::from_utf8_lossy_owned(bytes).contains("private"));
     }
 
     #[test]

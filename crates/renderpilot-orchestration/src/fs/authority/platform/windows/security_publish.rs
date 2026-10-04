@@ -11,7 +11,7 @@ use crate::ServiceError;
 use std::fs::File;
 
 #[cfg(windows)]
-struct LocalAcl(*mut windows_sys::Win32::Security::ACL);
+struct LocalAcl(std::ptr::NonNull<windows_sys::Win32::Security::ACL>);
 
 #[cfg(windows)]
 #[expect(
@@ -20,10 +20,8 @@ struct LocalAcl(*mut windows_sys::Win32::Security::ACL);
 )]
 impl Drop for LocalAcl {
     fn drop(&mut self) {
-        if !self.0.is_null() {
-            // The normalized ACL is allocated by LocalAlloc below.
-            unsafe { windows_sys::Win32::Foundation::LocalFree(self.0.cast()) };
-        }
+        // The normalized ACL is allocated by LocalAlloc below.
+        unsafe { windows_sys::Win32::Foundation::LocalFree(self.0.as_ptr().cast()) };
     }
 }
 
@@ -78,17 +76,21 @@ fn normalized_publish_dacl(
         ));
     }
     let copied = unsafe { LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, acl_size) }.cast::<ACL>();
-    if copied.is_null() {
-        return Err(crate::failed(format!(
+    let copied = std::ptr::NonNull::new(copied).ok_or_else(|| {
+        crate::failed(format!(
             "failed to allocate staged publication DACL: {}",
             std::io::Error::last_os_error()
-        )));
-    }
+        ))
+    })?;
     let copied = LocalAcl(copied);
     // Copy only initialized ACL bytes. The LocalAlloc buffer keeps any
     // declared ACL slack zeroed while preserving its exact allocation size.
     unsafe {
-        std::ptr::copy_nonoverlapping(dacl.cast::<u8>(), copied.0.cast::<u8>(), bytes_in_use);
+        std::ptr::copy_nonoverlapping(
+            dacl.cast::<u8>(),
+            copied.0.as_ptr().cast::<u8>(),
+            bytes_in_use,
+        );
     }
     let dacl_start = dacl as usize;
     let dacl_end = dacl_start
@@ -136,11 +138,12 @@ fn normalized_publish_dacl(
                 "derived staged publication DACL ACE flags lie outside its used range",
             ));
         }
-        let copied_ace_flags = unsafe { copied.0.cast::<u8>().add(copied_ace_flags_offset) };
+        let copied_ace_flags =
+            unsafe { copied.0.as_ptr().cast::<u8>().add(copied_ace_flags_offset) };
         unsafe { *copied_ace_flags &= !(INHERITED_ACE as u8) };
         prior_end = ace_end;
     }
-    if unsafe { IsValidAcl(copied.0) } == 0 {
+    if unsafe { IsValidAcl(copied.0.as_ptr()) } == 0 {
         return Err(crate::failed(
             "normalized staged publication DACL is invalid",
         ));
@@ -290,7 +293,7 @@ pub(crate) fn windows_prepare_staged_publish_security(
             DACL_SECURITY_INFORMATION,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            normalized_dacl.0,
+            normalized_dacl.0.as_ptr(),
             std::ptr::null_mut(),
         )
     };
@@ -384,7 +387,7 @@ mod tests {
         assert_ne!(
             unsafe {
                 GetAclInformation(
-                    normalized.0,
+                    normalized.0.as_ptr(),
                     (&raw mut normalized_info).cast(),
                     u32::try_from(std::mem::size_of::<ACL_SIZE_INFORMATION>()).expect("size"),
                     AclSizeInformation,
@@ -397,7 +400,7 @@ mod tests {
             "fixture retains declared slack"
         );
         assert_eq!(unsafe { (*source).AclSize }, unsafe {
-            (*normalized.0).AclSize
+            (*normalized.0.as_ptr()).AclSize
         });
         assert_eq!(source_info.AceCount, normalized_info.AceCount);
         assert_eq!(source_info.AclBytesInUse, normalized_info.AclBytesInUse);
@@ -406,7 +409,7 @@ mod tests {
         let mut normalized_ace = std::ptr::null_mut();
         assert_ne!(unsafe { GetAce(source, 0, &raw mut source_ace) }, 0);
         assert_ne!(
-            unsafe { GetAce(normalized.0, 0, &raw mut normalized_ace) },
+            unsafe { GetAce(normalized.0.as_ptr(), 0, &raw mut normalized_ace) },
             0
         );
         let source_header = unsafe { &*source_ace.cast::<ACE_HEADER>() };

@@ -183,12 +183,7 @@ fn same_size_replacement_with_restored_mtime_never_reuses_the_old_key() {
     };
 
     fs::write(&path, b"BBBB").expect("same-size replacement");
-    fs::OpenOptions::new()
-        .write(true)
-        .open(&path)
-        .expect("open for timestamp restore")
-        .set_times(FileTimes::new().set_modified(original_mtime))
-        .expect("restore mtime");
+    fs::set_times(&path, FileTimes::new().set_modified(original_mtime)).expect("restore mtime");
     let FileObservationResult::Available(second) = source.observe(&path).expect("second observe")
     else {
         panic!("replacement must be readable");
