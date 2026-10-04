@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.0] - 2026-10-04
+
+### Added
+
+- **Game catalog views**: Choose cards or a compact list. RenderPilot remembers your preferred view.
+- **Unreal Engine audio libraries**: Compatible Ogg/Vorbis libraries can now be updated and restored to their original versions.
+- **Leftover cleanup**: After a game is uninstalled, review and remove files and supported settings left by RenderPilot, grouped by game. Cleanup also removes empty leftover folders while preserving modified or unrecognized files.
+
+### Changed
+
+- **Simpler file-change confirmation**: Safety warnings and executable-change details now appear in one confirmation. Update All asks once for the whole batch. You can disable the general warning; detected anti-cheat warnings still require confirmation.
+- **Smaller windows**: The app now supports windows as small as 860 × 600, with compact Game Details controls and scrollable tabs.
+- **Clearer interface**: Improved warning and success-message contrast in light and dark themes, with consistent, keyboard-friendly selection controls across the catalog, Libraries, and settings.
+
+### Fixed
+
+- **Removed games in the catalog**: Games uninstalled outside RenderPilot now disappear after a rescan, including manually added games and folders containing only RenderPilot files.
+- **Add-on and library status**: Fixed incorrect installation status and available actions after game files were removed or the game was reinstalled.
+- **RenoDX removal**: You can now remove an inactive RenoDX installation that would otherwise block reinstallation.
+
+### Compatibility
+
+- **Local catalog update**: The catalog is automatically backed up and upgraded on first launch. Returning to an earlier RenderPilot version requires restoring the catalog backup made before this upgrade.
+
 ## [1.14.1] - 2026-09-27
 
 ### Fixed
