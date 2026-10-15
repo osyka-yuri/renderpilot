@@ -61,9 +61,9 @@ const translations = {
     'Принудительно использует путь рендеринга «Ультрапроизводительность» для режима качества «Производительность».',
   'Forces a specific DLSS Frame Generation preset.':
     'Принудительно задаёт определённый пресет DLSS Frame Generation.',
-  'Preset A': 'Пресет A',
-  'Preset B': 'Пресет B',
-  'Preset C (unused)': 'Пресет C (не используется)',
+  'Preset A (Standard)': 'Пресет A (стандартный)',
+  'Preset B (UI Quality)': 'Пресет B (качество интерфейса)',
+  'Preset C (Performance)': 'Пресет C (производительность)',
   'Preset D (unused)': 'Пресет D (не используется)',
   'Preset E (unused)': 'Пресет E (не используется)',
   'Preset F (unused)': 'Пресет F (не используется)',

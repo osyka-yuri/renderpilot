@@ -60,9 +60,9 @@ const translations = {
     'Fuerza al modo de calidad «Rendimiento» a usar la ruta de renderizado «Rendimiento ultra».',
   'Forces a specific DLSS Frame Generation preset.':
     'Fuerza un preajuste específico de DLSS Generación de fotogramas.',
-  'Preset A': 'Preajuste A',
-  'Preset B': 'Preajuste B',
-  'Preset C (unused)': 'Preajuste C (no utilizado)',
+  'Preset A (Standard)': 'Preajuste A (estándar)',
+  'Preset B (UI Quality)': 'Preajuste B (calidad de interfaz)',
+  'Preset C (Performance)': 'Preajuste C (rendimiento)',
   'Preset D (unused)': 'Preajuste D (no utilizado)',
   'Preset E (unused)': 'Preajuste E (no utilizado)',
   'Preset F (unused)': 'Preajuste F (no utilizado)',

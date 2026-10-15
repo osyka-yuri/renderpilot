@@ -59,9 +59,9 @@ const translations = {
   'Forces the Performance quality mode to use the Ultra Performance rendering path.':
     '强制“性能”质量模式使用“超级性能”渲染路径。',
   'Forces a specific DLSS Frame Generation preset.': '强制使用指定的 DLSS 帧生成预设。',
-  'Preset A': '预设 A',
-  'Preset B': '预设 B',
-  'Preset C (unused)': '预设 C（未使用）',
+  'Preset A (Standard)': '预设 A（标准）',
+  'Preset B (UI Quality)': '预设 B（UI 质量）',
+  'Preset C (Performance)': '预设 C（性能）',
   'Preset D (unused)': '预设 D（未使用）',
   'Preset E (unused)': '预设 E（未使用）',
   'Preset F (unused)': '预设 F（未使用）',

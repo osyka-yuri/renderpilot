@@ -60,9 +60,9 @@ const translations = {
     'Força o modo de qualidade “Desempenho” a usar o caminho de renderização “Desempenho ultra”.',
   'Forces a specific DLSS Frame Generation preset.':
     'Força uma predefinição específica do DLSS Frame Generation.',
-  'Preset A': 'Predefinição A',
-  'Preset B': 'Predefinição B',
-  'Preset C (unused)': 'Predefinição C (não utilizada)',
+  'Preset A (Standard)': 'Predefinição A (padrão)',
+  'Preset B (UI Quality)': 'Predefinição B (qualidade da interface)',
+  'Preset C (Performance)': 'Predefinição C (desempenho)',
   'Preset D (unused)': 'Predefinição D (não utilizada)',
   'Preset E (unused)': 'Predefinição E (não utilizada)',
   'Preset F (unused)': 'Predefinição F (não utilizada)',

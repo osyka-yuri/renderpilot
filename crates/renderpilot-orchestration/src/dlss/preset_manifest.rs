@@ -353,6 +353,31 @@ mod tests {
     }
 
     #[test]
+    fn fg_preset_c_is_supported_from_310_9_1() {
+        let m = bundled_manifest(DlssDllKind::FrameGen);
+
+        // Older FG versions don't support Preset C.
+        let older = DlssVersion::new(3, 7, 10, 0);
+        assert_eq!(supported_presets_for(m, &older), &[0, 1, 2]);
+
+        // Immediately before the threshold (310.9.0 or earlier 310 builds).
+        let before = DlssVersion::new(310, 9, 0, 0);
+        assert_eq!(supported_presets_for(m, &before), &[0, 1, 2]);
+
+        // Exact threshold.
+        let threshold = DlssVersion::new(310, 9, 1, 0);
+        let entry = resolve_entry(m, &threshold).expect("should resolve");
+        assert_eq!(entry.version, "310.9.1.0");
+        assert_eq!(supported_presets_for(m, &threshold), &[0, 1, 2, 3]);
+
+        // Newer patch version should inherit the same entry.
+        let newer = DlssVersion::new(310, 9, 2, 0);
+        let entry = resolve_entry(m, &newer).expect("should resolve");
+        assert_eq!(entry.version, "310.9.1.0");
+        assert_eq!(supported_presets_for(m, &newer), &[0, 1, 2, 3]);
+    }
+
+    #[test]
     fn sr_dlss_4_resolves_to_310_entry() {
         let m = bundled_manifest(DlssDllKind::Sr);
         let v = DlssVersion::new(310, 1, 0, 0);

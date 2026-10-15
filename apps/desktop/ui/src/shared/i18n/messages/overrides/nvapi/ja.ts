@@ -60,9 +60,9 @@ const translations = {
     '品質モード「パフォーマンス」に「ウルトラパフォーマンス」のレンダリング経路を強制します。',
   'Forces a specific DLSS Frame Generation preset.':
     '特定の DLSS フレーム生成プリセットを強制します。',
-  'Preset A': 'プリセット A',
-  'Preset B': 'プリセット B',
-  'Preset C (unused)': 'プリセット C（未使用）',
+  'Preset A (Standard)': 'プリセット A（標準）',
+  'Preset B (UI Quality)': 'プリセット B（UI品質）',
+  'Preset C (Performance)': 'プリセット C（パフォーマンス）',
   'Preset D (unused)': 'プリセット D（未使用）',
   'Preset E (unused)': 'プリセット E（未使用）',
   'Preset F (unused)': 'プリセット F（未使用）',

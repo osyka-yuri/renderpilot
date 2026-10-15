@@ -166,9 +166,9 @@
           "wire": "default",
           "dword": "0x00000000"
         },
-        { "label": "Preset A", "wire": "a", "dword": "0x00000001" },
-        { "label": "Preset B", "wire": "b", "dword": "0x00000002" },
-        { "label": "Preset C (unused)", "wire": "c", "dword": "0x00000003" },
+        { "label": "Preset A (Standard)", "wire": "a", "dword": "0x00000001" },
+        { "label": "Preset B (UI Quality)", "wire": "b", "dword": "0x00000002" },
+        { "label": "Preset C (Performance)", "wire": "c", "dword": "0x00000003" },
         { "label": "Preset D (unused)", "wire": "d", "dword": "0x00000004" },
         { "label": "Preset E (unused)", "wire": "e", "dword": "0x00000005" },
         { "label": "Preset F (unused)", "wire": "f", "dword": "0x00000006" },
@@ -385,3 +385,4 @@
     }
   ]
 }
+

@@ -60,9 +60,9 @@ const translations = {
     'Erzwingt für den Qualitätsmodus „Leistung“ den Rendering-Pfad „Ultra-Leistung“.',
   'Forces a specific DLSS Frame Generation preset.':
     'Erzwingt ein bestimmtes Preset für die DLSS Frame-Erstellung.',
-  'Preset A': 'Voreinstellung A',
-  'Preset B': 'Voreinstellung B',
-  'Preset C (unused)': 'Voreinstellung C (nicht verwendet)',
+  'Preset A (Standard)': 'Voreinstellung A (Standard)',
+  'Preset B (UI Quality)': 'Voreinstellung B (UI-Qualität)',
+  'Preset C (Performance)': 'Voreinstellung C (Leistung)',
   'Preset D (unused)': 'Voreinstellung D (nicht verwendet)',
   'Preset E (unused)': 'Voreinstellung E (nicht verwendet)',
   'Preset F (unused)': 'Voreinstellung F (nicht verwendet)',
