@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.1] - 2026-10-15
+
+### Added
+
+- **DLSS Frame Generation Preset C**: Added support for Frame Generation Preset C (Performance) on DLSS 310.9.1.0 and newer.
+
+### Changed
+
+- **Frame Generation preset labels**: Clarified preset names across settings and localized interfaces to Preset A (Standard), Preset B (UI Quality), and Preset C (Performance).
+- **RenoDX compatibility catalog**: Synchronized upstream compatibility guidance and settings for newly added titles.
+
 ## [1.15.0] - 2026-10-04
 
 ### Added
