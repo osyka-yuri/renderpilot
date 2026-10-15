@@ -50,13 +50,13 @@
       "context": "guidance.compatibility"
     },
     {
-      "id": "renodx.main.atlas.fallen.dx12.1",
+      "id": "renodx.main.atlas.fallen.reign.of.sand.dx12.1",
       "sourceText": "Install ReShade in the game's Atlas Fallen\\bin directory.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
     },
     {
-      "id": "renodx.main.atlas.fallen.dx12.2",
+      "id": "renodx.main.atlas.fallen.reign.of.sand.dx12.2",
       "sourceText": "FSR 2 can cause crashes with this mod.",
       "kind": "warning",
       "context": "guidance.warning"
@@ -68,7 +68,7 @@
       "context": "guidance.warning"
     },
     {
-      "id": "renodx.main.crimson.desert.1",
+      "id": "renodx.main.crimson.desert.enhanced.1",
       "sourceText": "Frequent game updates can break the mod; re-check compatibility after each update.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
@@ -104,13 +104,13 @@
       "context": "guidance.external_tool"
     },
     {
-      "id": "renodx.main.ninja.gaiden.sigma.1",
+      "id": "renodx.main.ninja.gaiden.1",
       "sourceText": "This mod requires Lyall's NinjaGaidenMCFix.",
       "kind": "external_tool",
       "context": "guidance.external_tool"
     },
     {
-      "id": "renodx.main.ninja.gaiden.sigma.2.1",
+      "id": "renodx.main.ninja.gaiden.2.1",
       "sourceText": "This mod requires Lyall's NinjaGaidenMCFix.",
       "kind": "external_tool",
       "context": "guidance.external_tool"
@@ -404,6 +404,12 @@
       "context": "guidance.game_setting"
     },
     {
+      "id": "renodx.ue.extended.marsupilami.2.salsa.palombia.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
       "id": "renodx.ue.extended.meccha.chameleon.1",
       "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
       "kind": "engine_ini",
@@ -420,6 +426,12 @@
       "sourceText": "RenoDX slider changes do not apply in real time in this game.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.ue.extended.nikoderiko.the.magical.world.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
     },
     {
       "id": "renodx.ue.extended.nobody.wants.to.die.1",
@@ -489,6 +501,12 @@
     },
     {
       "id": "renodx.ue.extended.subnautica.2.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.system.shock.remake.1",
       "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
       "kind": "engine_ini",
       "context": "guidance.engine_ini"

@@ -16,11 +16,12 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
     'Мод играбелен, но некоторые графические проблемы остаются нерешёнными.',
   'renodx.main.atelier.yumia.the.alchemist.of.memories.the.envisioned.land.1':
     'Мод считается пригодным для игры, но требует более тщательного игрового тестирования.',
-  'renodx.main.atlas.fallen.dx12.1': 'Установите ReShade в каталог игры Atlas Fallen\\bin.',
-  'renodx.main.atlas.fallen.dx12.2':
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.1':
+    'Установите ReShade в каталог игры Atlas Fallen\\bin.',
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.2':
     'FSR 2 может приводить к вылетам при использовании этого мода.',
   'renodx.main.clive.barker.s.jericho.1': 'В этой сборке вывод ACES сейчас работает некорректно.',
-  'renodx.main.crimson.desert.1':
+  'renodx.main.crimson.desert.enhanced.1':
     'Частые обновления игры могут нарушать работу мода; проверяйте совместимость после каждого обновления.',
   'renodx.main.days.gone.1':
     'Эта специализированная сборка работает, но HDR-изображение всё ещё может требовать доработки.',
@@ -31,8 +32,8 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.main.forza.horizon.6.1':
     'Нативный HDR игры уже работает хорошо; этот мод предлагает альтернативный вариант отображения, а не исправляет HDR.',
   'renodx.main.ninja.gaiden.4.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
-  'renodx.main.ninja.gaiden.sigma.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
-  'renodx.main.ninja.gaiden.sigma.2.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
+  'renodx.main.ninja.gaiden.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
+  'renodx.main.ninja.gaiden.2.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1':
     'Отключите оверлей Steam. Если проблемы сохраняются, отключите и другие оверлеи.',
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1':
@@ -115,12 +116,16 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
     'Эта конфигурация прошла лишь ограниченное игровое тестирование.',
   'renodx.ue.extended.little.nightmares.ii.1': 'Проблемы с цветокоррекцией сохраняются.',
   'renodx.ue.extended.mafia.the.old.country.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.marsupilami.2.salsa.palombia.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.meccha.chameleon.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.mortal.shell.ii.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.motor.town.behind.the.wheel.1':
     'В этой игре изменения ползунков RenoDX применяются не в реальном времени.',
+  'renodx.ue.extended.nikoderiko.the.magical.world.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.nobody.wants.to.die.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.quarantine.zone.the.last.check.1':
@@ -141,6 +146,8 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.star.wars.zero.companytm.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.subnautica.2.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.system.shock.remake.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.the.blood.of.dawnwalker.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',

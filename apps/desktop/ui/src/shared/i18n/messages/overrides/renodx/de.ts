@@ -17,11 +17,12 @@ export const renodxOverrides = defineLocalizedCatalog<'de', RenoDxSourceCatalog>
     'Die Mod ist spielbar, einige Grafikprobleme bleiben jedoch ungelöst.',
   'renodx.main.atelier.yumia.the.alchemist.of.memories.the.envisioned.land.1':
     'Die Mod gilt als spielbar, erfordert jedoch noch umfassendere Spieltests.',
-  'renodx.main.atlas.fallen.dx12.1': 'Installiere ReShade im Spielverzeichnis Atlas Fallen\\bin.',
-  'renodx.main.atlas.fallen.dx12.2': 'FSR 2 kann mit dieser Mod zu Abstürzen führen.',
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.1':
+    'Installiere ReShade im Spielverzeichnis Atlas Fallen\\bin.',
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.2': 'FSR 2 kann mit dieser Mod zu Abstürzen führen.',
   'renodx.main.clive.barker.s.jericho.1':
     'Die ACES-Ausgabe ist in diesem Build derzeit fehlerhaft.',
-  'renodx.main.crimson.desert.1':
+  'renodx.main.crimson.desert.enhanced.1':
     'Häufige Spielupdates können dazu führen, dass die Mod nicht mehr funktioniert; prüfe die Kompatibilität nach jedem Update erneut.',
   'renodx.main.days.gone.1':
     'Dieser dedizierte Build ist funktionsfähig, das HDR-Ergebnis bedarf jedoch möglicherweise noch weiterer Optimierung.',
@@ -32,8 +33,8 @@ export const renodxOverrides = defineLocalizedCatalog<'de', RenoDxSourceCatalog>
   'renodx.main.forza.horizon.6.1':
     'Das native HDR des Spiels funktioniert bereits gut; diese Mod bietet eine alternative Darstellung statt eines HDR-Fixes.',
   'renodx.main.ninja.gaiden.4.1': 'Diese Mod erfordert NinjaGaidenMCFix von Lyall.',
-  'renodx.main.ninja.gaiden.sigma.1': 'Diese Mod erfordert NinjaGaidenMCFix von Lyall.',
-  'renodx.main.ninja.gaiden.sigma.2.1': 'Diese Mod erfordert NinjaGaidenMCFix von Lyall.',
+  'renodx.main.ninja.gaiden.1': 'Diese Mod erfordert NinjaGaidenMCFix von Lyall.',
+  'renodx.main.ninja.gaiden.2.1': 'Diese Mod erfordert NinjaGaidenMCFix von Lyall.',
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1':
     'Deaktiviere das Steam-Overlay. Falls Probleme fortbestehen, deaktiviere auch weitere Overlays.',
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1':
@@ -118,12 +119,16 @@ export const renodxOverrides = defineLocalizedCatalog<'de', RenoDxSourceCatalog>
     'Diese Konfiguration wurde nur eingeschränkt im Spiel getestet.',
   'renodx.ue.extended.little.nightmares.ii.1': 'Probleme bei der Farbkorrektur bleiben bestehen.',
   'renodx.ue.extended.mafia.the.old.country.1': 'Aktiviere das native HDR des Spiels.',
+  'renodx.ue.extended.marsupilami.2.salsa.palombia.1':
+    'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',
   'renodx.ue.extended.meccha.chameleon.1':
     'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',
   'renodx.ue.extended.mortal.shell.ii.1':
     'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',
   'renodx.ue.extended.motor.town.behind.the.wheel.1':
     'In diesem Spiel werden Änderungen an RenoDX-Schiebereglern nicht in Echtzeit angewendet.',
+  'renodx.ue.extended.nikoderiko.the.magical.world.1':
+    'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',
   'renodx.ue.extended.nobody.wants.to.die.1':
     'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',
   'renodx.ue.extended.quarantine.zone.the.last.check.1':
@@ -144,6 +149,8 @@ export const renodxOverrides = defineLocalizedCatalog<'de', RenoDxSourceCatalog>
     'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',
   'renodx.ue.extended.star.wars.zero.companytm.1': 'Aktiviere das native HDR des Spiels.',
   'renodx.ue.extended.subnautica.2.1':
+    'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',
+  'renodx.ue.extended.system.shock.remake.1':
     'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',
   'renodx.ue.extended.the.blood.of.dawnwalker.1':
     'Füge diese Einstellungen für den erweiterten UE-HDR-Pfad zu Engine.ini hinzu.',

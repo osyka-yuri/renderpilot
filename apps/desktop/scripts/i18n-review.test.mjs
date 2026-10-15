@@ -12,8 +12,8 @@ import {
 test('review report exposes all external messages for every translated locale', async () => {
   for (const locale of REVIEW_LOCALES) {
     const report = await createReviewReport(locale);
-    assert.equal(report.messages.length, 628);
-    assert.equal(new Set(report.messages.map(({ key }) => key)).size, 628);
+    assert.equal(report.messages.length, 631);
+    assert.equal(new Set(report.messages.map(({ key }) => key)).size, 631);
     assert.ok(report.messages.every(({ source, translation }) => source && translation));
     assert.equal(report.editorialPolicy.nvidiaFamilyTerms !== undefined, true);
   }
@@ -24,7 +24,7 @@ test('review output is deterministic and includes policy metadata', async () => 
   assert.equal(formatReviewReport(report, 'json'), formatReviewReport(report, 'json'));
   const tsv = formatReviewReport(report, 'tsv');
   assert.match(tsv, /^key\tcontext\tsource\ttranslation\teditorial_policy\n/);
-  assert.equal(tsv.trimEnd().split('\n').length, 629);
+  assert.equal(tsv.trimEnd().split('\n').length, 632);
 });
 
 test('review CLI accepts only complete, unambiguous arguments', () => {

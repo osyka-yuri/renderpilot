@@ -17,12 +17,12 @@ export const renodxOverrides = defineLocalizedCatalog<'ja', RenoDxSourceCatalog>
     'Mod はプレイ可能な状態ですが、一部のグラフィック上の問題が未解決のまま残っています。',
   'renodx.main.atelier.yumia.the.alchemist.of.memories.the.envisioned.land.1':
     'Mod はプレイ可能と見なされていますが、依然として幅広いプレイテストが必要です。',
-  'renodx.main.atlas.fallen.dx12.1':
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.1':
     'ReShade をゲームの Atlas Fallen\\bin ディレクトリにインストールしてください。',
-  'renodx.main.atlas.fallen.dx12.2':
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.2':
     'この Mod では FSR 2 が原因でクラッシュが発生する場合があります。',
   'renodx.main.clive.barker.s.jericho.1': '現在のビルドでは ACES 出力が正常に機能していません。',
-  'renodx.main.crimson.desert.1':
+  'renodx.main.crimson.desert.enhanced.1':
     'ゲームの頻繁なアップデートにより Mod が機能しなくなる可能性があります。アップデートごとに互換性を再確認してください。',
   'renodx.main.days.gone.1':
     'この専用ビルドは機能しますが、HDR の仕上がりにはまだ改善の余地があります。',
@@ -33,8 +33,8 @@ export const renodxOverrides = defineLocalizedCatalog<'ja', RenoDxSourceCatalog>
   'renodx.main.forza.horizon.6.1':
     'ゲームのネイティブ HDR はすでに良好に動作しています。この Mod は HDR の修正というよりも、別の映像表現を提供するものです。',
   'renodx.main.ninja.gaiden.4.1': 'この Mod には Lyall 氏の NinjaGaidenMCFix が必要です。',
-  'renodx.main.ninja.gaiden.sigma.1': 'この Mod には Lyall 氏の NinjaGaidenMCFix が必要です。',
-  'renodx.main.ninja.gaiden.sigma.2.1': 'この Mod には Lyall 氏の NinjaGaidenMCFix が必要です。',
+  'renodx.main.ninja.gaiden.1': 'この Mod には Lyall 氏の NinjaGaidenMCFix が必要です。',
+  'renodx.main.ninja.gaiden.2.1': 'この Mod には Lyall 氏の NinjaGaidenMCFix が必要です。',
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1':
     'Steam オーバーレイを無効にしてください。問題が解決しない場合は、他のオーバーレイも無効にしてください。',
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1':
@@ -117,12 +117,16 @@ export const renodxOverrides = defineLocalizedCatalog<'ja', RenoDxSourceCatalog>
   'renodx.ue.extended.lies.of.p.3': 'この構成は十分なプレイテストが行われていません。',
   'renodx.ue.extended.little.nightmares.ii.1': 'カラーグレーディングに関する問題が残っています。',
   'renodx.ue.extended.mafia.the.old.country.1': 'ゲームのネイティブ HDR を有効にしてください。',
+  'renodx.ue.extended.marsupilami.2.salsa.palombia.1':
+    'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',
   'renodx.ue.extended.meccha.chameleon.1':
     'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',
   'renodx.ue.extended.mortal.shell.ii.1':
     'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',
   'renodx.ue.extended.motor.town.behind.the.wheel.1':
     'このゲームでは、RenoDX のスライダー変更がリアルタイムに適用されません。',
+  'renodx.ue.extended.nikoderiko.the.magical.world.1':
+    'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',
   'renodx.ue.extended.nobody.wants.to.die.1':
     'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',
   'renodx.ue.extended.quarantine.zone.the.last.check.1':
@@ -143,6 +147,8 @@ export const renodxOverrides = defineLocalizedCatalog<'ja', RenoDxSourceCatalog>
     'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',
   'renodx.ue.extended.star.wars.zero.companytm.1': 'ゲームのネイティブ HDR を有効にしてください。',
   'renodx.ue.extended.subnautica.2.1':
+    'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',
+  'renodx.ue.extended.system.shock.remake.1':
     'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',
   'renodx.ue.extended.the.blood.of.dawnwalker.1':
     'UE Extended の HDR パスを利用するには、これらの設定を Engine.ini に追加してください。',

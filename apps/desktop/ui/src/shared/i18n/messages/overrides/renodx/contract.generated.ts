@@ -11,10 +11,11 @@ export const RENODX_SOURCE_CATALOG = {
     'The mod is playable, but some graphics issues remain unresolved.',
   'renodx.main.atelier.yumia.the.alchemist.of.memories.the.envisioned.land.1':
     'The mod is considered playable but still needs broader playtesting.',
-  'renodx.main.atlas.fallen.dx12.1': "Install ReShade in the game's Atlas Fallen\\bin directory.",
-  'renodx.main.atlas.fallen.dx12.2': 'FSR 2 can cause crashes with this mod.',
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.1':
+    "Install ReShade in the game's Atlas Fallen\\bin directory.",
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.2': 'FSR 2 can cause crashes with this mod.',
   'renodx.main.clive.barker.s.jericho.1': 'ACES output is currently broken in this build.',
-  'renodx.main.crimson.desert.1':
+  'renodx.main.crimson.desert.enhanced.1':
     'Frequent game updates can break the mod; re-check compatibility after each update.',
   'renodx.main.days.gone.1':
     'This dedicated build is functional, but its HDR result may still need refinement.',
@@ -24,9 +25,9 @@ export const RENODX_SOURCE_CATALOG = {
     'After installing the mod, delete shader.cache2 from the game directory to avoid shader stutter.',
   'renodx.main.forza.horizon.6.1':
     "The game's native HDR already works well; this mod offers an alternative presentation rather than an HDR fix.",
+  'renodx.main.ninja.gaiden.1': "This mod requires Lyall's NinjaGaidenMCFix.",
+  'renodx.main.ninja.gaiden.2.1': "This mod requires Lyall's NinjaGaidenMCFix.",
   'renodx.main.ninja.gaiden.4.1': "This mod requires Lyall's NinjaGaidenMCFix.",
-  'renodx.main.ninja.gaiden.sigma.1': "This mod requires Lyall's NinjaGaidenMCFix.",
-  'renodx.main.ninja.gaiden.sigma.2.1': "This mod requires Lyall's NinjaGaidenMCFix.",
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1':
     'Disable the Steam overlay. If problems remain, disable other overlays as well.',
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1':
@@ -95,12 +96,16 @@ export const RENODX_SOURCE_CATALOG = {
   'renodx.ue.extended.lies.of.p.3': 'This configuration has limited playtesting.',
   'renodx.ue.extended.little.nightmares.ii.1': 'Color-grading issues remain.',
   'renodx.ue.extended.mafia.the.old.country.1': "Enable the game's native HDR.",
+  'renodx.ue.extended.marsupilami.2.salsa.palombia.1':
+    'Add these settings to Engine.ini for the UE Extended HDR path.',
   'renodx.ue.extended.meccha.chameleon.1':
     'Add these settings to Engine.ini for the UE Extended HDR path.',
   'renodx.ue.extended.mortal.shell.ii.1':
     'Add these settings to Engine.ini for the UE Extended HDR path.',
   'renodx.ue.extended.motor.town.behind.the.wheel.1':
     'RenoDX slider changes do not apply in real time in this game.',
+  'renodx.ue.extended.nikoderiko.the.magical.world.1':
+    'Add these settings to Engine.ini for the UE Extended HDR path.',
   'renodx.ue.extended.nobody.wants.to.die.1':
     'Add these settings to Engine.ini for the UE Extended HDR path.',
   'renodx.ue.extended.quarantine.zone.the.last.check.1':
@@ -120,6 +125,8 @@ export const RENODX_SOURCE_CATALOG = {
     'Add these settings to Engine.ini for the UE Extended HDR path.',
   'renodx.ue.extended.star.wars.zero.companytm.1': "Enable the game's native HDR.",
   'renodx.ue.extended.subnautica.2.1':
+    'Add these settings to Engine.ini for the UE Extended HDR path.',
+  'renodx.ue.extended.system.shock.remake.1':
     'Add these settings to Engine.ini for the UE Extended HDR path.',
   'renodx.ue.extended.the.blood.of.dawnwalker.1':
     'Add these settings to Engine.ini for the UE Extended HDR path.',
@@ -305,17 +312,17 @@ export const RENODX_MESSAGE_CONTEXTS = {
   'renodx.main.assassin.s.creed.iv.black.flagtm.1': 'guidance.compatibility',
   'renodx.main.atelier.yumia.the.alchemist.of.memories.the.envisioned.land.1':
     'guidance.compatibility',
-  'renodx.main.atlas.fallen.dx12.1': 'guidance.compatibility',
-  'renodx.main.atlas.fallen.dx12.2': 'guidance.warning',
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.1': 'guidance.compatibility',
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.2': 'guidance.warning',
   'renodx.main.clive.barker.s.jericho.1': 'guidance.warning',
-  'renodx.main.crimson.desert.1': 'guidance.compatibility',
+  'renodx.main.crimson.desert.enhanced.1': 'guidance.compatibility',
   'renodx.main.days.gone.1': 'guidance.compatibility',
   'renodx.main.dead.island.riptide.definitive.edition.1': 'guidance.warning',
   'renodx.main.dragon.s.dogma.2.1': 'guidance.warning',
   'renodx.main.forza.horizon.6.1': 'guidance.compatibility',
+  'renodx.main.ninja.gaiden.1': 'guidance.external_tool',
+  'renodx.main.ninja.gaiden.2.1': 'guidance.external_tool',
   'renodx.main.ninja.gaiden.4.1': 'guidance.external_tool',
-  'renodx.main.ninja.gaiden.sigma.1': 'guidance.external_tool',
-  'renodx.main.ninja.gaiden.sigma.2.1': 'guidance.external_tool',
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1': 'guidance.game_setting',
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1': 'guidance.compatibility',
   'renodx.main.s.t.a.l.k.e.r.2.heart.of.chornobyl.1': 'guidance.game_setting',
@@ -362,9 +369,11 @@ export const RENODX_MESSAGE_CONTEXTS = {
   'renodx.ue.extended.lies.of.p.3': 'guidance.compatibility',
   'renodx.ue.extended.little.nightmares.ii.1': 'guidance.compatibility',
   'renodx.ue.extended.mafia.the.old.country.1': 'guidance.game_setting',
+  'renodx.ue.extended.marsupilami.2.salsa.palombia.1': 'guidance.engine_ini',
   'renodx.ue.extended.meccha.chameleon.1': 'guidance.engine_ini',
   'renodx.ue.extended.mortal.shell.ii.1': 'guidance.engine_ini',
   'renodx.ue.extended.motor.town.behind.the.wheel.1': 'guidance.compatibility',
+  'renodx.ue.extended.nikoderiko.the.magical.world.1': 'guidance.engine_ini',
   'renodx.ue.extended.nobody.wants.to.die.1': 'guidance.engine_ini',
   'renodx.ue.extended.quarantine.zone.the.last.check.1': 'guidance.engine_ini',
   'renodx.ue.extended.ready.or.not.1': 'guidance.engine_ini',
@@ -377,6 +386,7 @@ export const RENODX_MESSAGE_CONTEXTS = {
   'renodx.ue.extended.solarpunk.1': 'guidance.engine_ini',
   'renodx.ue.extended.star.wars.zero.companytm.1': 'guidance.game_setting',
   'renodx.ue.extended.subnautica.2.1': 'guidance.engine_ini',
+  'renodx.ue.extended.system.shock.remake.1': 'guidance.engine_ini',
   'renodx.ue.extended.the.blood.of.dawnwalker.1': 'guidance.engine_ini',
   'renodx.ue.extended.the.enjenir.the.engineering.physics.building.simulator.1':
     'guidance.engine_ini',

@@ -13,10 +13,12 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.main.assassin.s.creed.iv.black.flagtm.1': 'Mod 可以游玩，但部分画面问题尚未解决。',
   'renodx.main.atelier.yumia.the.alchemist.of.memories.the.envisioned.land.1':
     'Mod 被视为可游玩，但仍需更广泛的实际测试。',
-  'renodx.main.atlas.fallen.dx12.1': '请将 ReShade 安装到游戏的 Atlas Fallen\\bin 目录中。',
-  'renodx.main.atlas.fallen.dx12.2': '搭配此 Mod 时 FSR 2 可能会导致崩溃。',
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.1':
+    '请将 ReShade 安装到游戏的 Atlas Fallen\\bin 目录中。',
+  'renodx.main.atlas.fallen.reign.of.sand.dx12.2': '搭配此 Mod 时 FSR 2 可能会导致崩溃。',
   'renodx.main.clive.barker.s.jericho.1': '当前版本中的 ACES 输出存在故障。',
-  'renodx.main.crimson.desert.1': '游戏频繁更新可能导致 Mod 失效；每次更新后请重新检查兼容性。',
+  'renodx.main.crimson.desert.enhanced.1':
+    '游戏频繁更新可能导致 Mod 失效；每次更新后请重新检查兼容性。',
   'renodx.main.days.gone.1': '此专用版本可用，但其 HDR 效果可能仍需优化。',
   'renodx.main.dead.island.riptide.definitive.edition.1': '当前专用的 Mod 版本存在故障。',
   'renodx.main.dragon.s.dogma.2.1':
@@ -24,8 +26,8 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.main.forza.horizon.6.1':
     '游戏的原生 HDR 运行良好；此 Mod 提供的是另一种画面风格而非 HDR 修复。',
   'renodx.main.ninja.gaiden.4.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
-  'renodx.main.ninja.gaiden.sigma.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
-  'renodx.main.ninja.gaiden.sigma.2.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
+  'renodx.main.ninja.gaiden.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
+  'renodx.main.ninja.gaiden.2.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1':
     '请禁用 Steam 叠加层。如果问题依然存在，请同时禁用其他叠加层。',
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1':
@@ -87,11 +89,15 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.ue.extended.lies.of.p.3': '此配置的实际游玩测试较为有限。',
   'renodx.ue.extended.little.nightmares.ii.1': '色彩分级问题依然存在。',
   'renodx.ue.extended.mafia.the.old.country.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.marsupilami.2.salsa.palombia.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.meccha.chameleon.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.mortal.shell.ii.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.motor.town.behind.the.wheel.1': '在此游戏中，RenoDX 滑块更改不会实时生效。',
+  'renodx.ue.extended.nikoderiko.the.magical.world.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.nobody.wants.to.die.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.quarantine.zone.the.last.check.1':
@@ -109,6 +115,8 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.ue.extended.solarpunk.1': '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.star.wars.zero.companytm.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.subnautica.2.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.system.shock.remake.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.the.blood.of.dawnwalker.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
