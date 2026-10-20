@@ -1,20 +1,18 @@
-//! Catalog schema application: keep, initialize, upgrade, or rebuild.
+//! Catalog schema application: keep, initialize, or upgrade.
 //!
 //! Upgrade path is a linear step registry (sqlx-style discipline on rusqlite):
 //! known `user_version` values run `from→to` steps until CURRENT, then validate.
-//! Unknown or corrupt shapes rebuild from the composed baseline after a
-//! file-backed backup before rebuilds and non-additive migrations.
+//! Unknown, corrupt, or future shapes fail safely to prevent accidental user
+//! data loss.
 //!
-//! Healthy CURRENT catalogs take a validation-only keep path. A malformed
-//! CURRENT catalog is backed up, then reset transactionally from the composed
-//! baseline.
+//! Healthy CURRENT catalogs take a validation-only keep path.
 
 use std::collections::HashSet;
 
 use renderpilot_application::AppResult;
 use rusqlite::{Connection, TransactionBehavior};
 
-use crate::error::storage_context;
+use crate::error::{storage_context, storage_error};
 
 include!(concat!(
     env!("OUT_DIR"),
@@ -42,10 +40,8 @@ mod portable_catalog_tests;
 mod tests;
 
 use self::pragmas::ForeignKeysState;
-use self::rebuild::{apply_baseline, reset_catalog_schema};
-use self::validation::{
-    catalog_schema_is_valid, catalog_schema_is_valid_observational, validate_catalog_schema,
-};
+use self::rebuild::apply_baseline;
+use self::validation::{validate_catalog_schema, validate_catalog_schema_observational};
 use self::version::database_has_user_schema;
 
 // Schema version history:
@@ -120,19 +116,9 @@ fn apply_plan(connection: &mut Connection, plan: Plan) -> AppResult<()> {
             backup::backup_before_migration(connection, CURRENT_SCHEMA_VERSION)?;
             apply_with_transaction(connection, |tx| {
                 steps::run_from(tx, from)?;
-                if !catalog_schema_is_valid(tx)? {
-                    // The pre-migration backup is already complete. Reset in
-                    // this transaction only when the completed linear chain
-                    // does not satisfy the exact current contract.
-                    reset_catalog_schema(tx)?;
-                }
                 validate_catalog_schema(tx)?;
                 validation::validate_database_integrity(tx)
             })
-        }
-        Plan::Rebuild => {
-            backup::backup_before_rebuild(connection)?;
-            apply_with_transaction(connection, reset_catalog_schema)
         }
     }
 }
@@ -159,30 +145,38 @@ enum Plan {
     Keep,
     ApplyBaseline,
     Upgrade { from: i32 },
-    Rebuild,
 }
 
 fn classify(connection: &Connection) -> AppResult<Plan> {
     let schema_version = version::read(connection)?;
 
+    if schema_version > CURRENT_SCHEMA_VERSION {
+        return Err(storage_error(format!(
+            "sqlite catalog schema version {schema_version} is newer than supported version {CURRENT_SCHEMA_VERSION}"
+        )));
+    }
+
     if schema_version == CURRENT_SCHEMA_VERSION {
-        return if catalog_schema_is_valid_observational(connection)? {
-            Ok(Plan::Keep)
-        } else {
-            Ok(Plan::Rebuild)
-        };
+        validate_catalog_schema_observational(connection)?;
+        return Ok(Plan::Keep);
     }
+
     if schema_version == 0 {
-        return if database_has_user_schema(connection)? {
-            Ok(Plan::Rebuild)
-        } else {
-            Ok(Plan::ApplyBaseline)
-        };
+        if database_has_user_schema(connection)? {
+            return Err(storage_error(
+                "sqlite database contains unversioned user schema objects; refusing to overwrite existing database",
+            ));
+        }
+        return Ok(Plan::ApplyBaseline);
     }
+
     if steps::can_upgrade_from(schema_version) {
         return Ok(Plan::Upgrade {
             from: schema_version,
         });
     }
-    Ok(Plan::Rebuild)
+
+    Err(storage_error(format!(
+        "unsupported legacy sqlite catalog schema version {schema_version}; no migration path available"
+    )))
 }

@@ -10,11 +10,6 @@ use rusqlite::Connection;
 
 use crate::error::{storage_context, storage_error};
 
-/// Creates a sibling pre-rebuild backup when `main` is file-backed.
-pub(super) fn backup_before_rebuild(connection: &Connection) -> AppResult<Option<PathBuf>> {
-    backup_before_schema_change(connection, "pre-rebuild", "catalog schema rebuild")
-}
-
 /// Creates a sibling backup before a non-additive schema migration.
 pub(super) fn backup_before_migration(
     connection: &Connection,

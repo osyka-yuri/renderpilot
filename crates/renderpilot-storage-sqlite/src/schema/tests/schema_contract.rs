@@ -1,50 +1,37 @@
 use super::*;
 
 #[test]
-fn apply_resets_unknown_schema_version() {
+fn apply_rejects_unknown_future_schema_version_without_rebuild() {
     let mut connection = open_test_connection();
 
     connection
         .execute_batch("PRAGMA user_version = 999;")
         .expect("schema version should be set");
 
-    apply(&mut connection).expect("unknown version should be rebuilt");
+    let result = apply(&mut connection);
+    assert!(
+        result.is_err(),
+        "future schema version must return an error instead of rebuilding"
+    );
 
-    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-    assert_catalog_schema_exists(&connection);
+    assert_eq!(user_version(&connection), 999);
+    assert!(!schema_object_exists(&connection, "table", "games"));
 }
 
 #[test]
-fn apply_rebuilds_table_absent_v19_catalog_to_the_current_contract() {
+fn apply_rejects_table_absent_v19_catalog_without_rebuild() {
     let mut connection = open_test_connection();
     connection
         .execute_batch("PRAGMA user_version = 19;")
         .expect("schema version should be set");
 
-    apply(&mut connection).expect("v19 catalog should be rebuilt to current");
+    let result = apply(&mut connection);
+    assert!(
+        result.is_err(),
+        "table-absent v19 catalog must fail post-upgrade validation and roll back"
+    );
 
-    assert_eq!(CURRENT_SCHEMA_VERSION, 22);
-    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-    super::super::validation::validate_catalog_schema(&connection)
-        .expect("rebuilt catalog should satisfy the canonical contract");
-    assert!(table_has_column(
-        &connection,
-        "installed_addons",
-        "renodx_config_receipt_json"
-    ));
-    assert!(!table_has_column(
-        &connection,
-        "installed_addons",
-        "engine_config_journal_json"
-    ));
-    let journal_table_exists: bool = connection
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='game_engine_config_journals')",
-            [],
-            |row| row.get(0),
-        )
-        .expect("journal table");
-    assert!(journal_table_exists);
+    assert_eq!(user_version(&connection), 19);
 }
 
 #[test]
@@ -127,7 +114,7 @@ fn every_game_or_component_scoped_table_has_a_consolidation_policy() {
 }
 
 #[test]
-fn apply_rebuilds_current_schema_with_an_unexpected_physical_column() {
+fn apply_rejects_current_schema_with_an_unexpected_physical_column_without_rebuild() {
     let mut connection = open_test_connection();
     super::apply(&mut connection).expect("migration should succeed");
     connection
@@ -147,12 +134,19 @@ fn apply_rebuilds_current_schema_with_an_unexpected_physical_column() {
             .contains("unexpected column games.unexpected_column")
     );
 
-    super::apply(&mut connection).expect("unexpected physical column should rebuild schema");
+    let apply_err = super::apply(&mut connection)
+        .expect_err("unexpected physical column must fail schema open rather than rebuild");
+    assert!(
+        apply_err
+            .to_string()
+            .contains("unexpected column games.unexpected_column")
+    );
 
     assert!(
-        super::super::validation::physical_column_mismatches(&connection)
-            .expect("rebuilt schema should validate")
-            .is_empty()
+        !super::super::validation::physical_column_mismatches(&connection)
+            .expect("column mismatch remains intact")
+            .is_empty(),
+        "database must not be rebuilt or modified"
     );
 }
 
@@ -226,7 +220,7 @@ fn compose_baseline_is_non_empty_and_includes_shared_fragments() {
 }
 
 #[test]
-fn apply_backs_up_malformed_stamped_v10_before_post_upgrade_rebuild() {
+fn apply_backs_up_and_rolls_back_malformed_stamped_v10_without_rebuild() {
     let dir =
         std::env::temp_dir().join(format!("renderpilot-schema-backup-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
@@ -250,8 +244,9 @@ fn apply_backs_up_malformed_stamped_v10_before_post_upgrade_rebuild() {
                 ",
             )
             .expect("break schema");
-        apply(&mut connection).expect("rebuild with backup");
-        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+        apply(&mut connection)
+            .expect_err("post-upgrade validation failure must abort without rebuild");
+        assert_eq!(user_version(&connection), 10);
         let marker: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM settings WHERE key = 'marker'",
@@ -259,7 +254,10 @@ fn apply_backs_up_malformed_stamped_v10_before_post_upgrade_rebuild() {
                 |row| row.get(0),
             )
             .expect("count");
-        assert_eq!(marker, 0);
+        assert_eq!(
+            marker, 1,
+            "persisted data must remain intact after rollback"
+        );
     }
 
     let backups: Vec<PathBuf> = fs::read_dir(&dir)
@@ -278,7 +276,7 @@ fn apply_backs_up_malformed_stamped_v10_before_post_upgrade_rebuild() {
     assert_eq!(
         backups.len(),
         1,
-        "expected one pre-migration backup before the transactional rebuild"
+        "expected one pre-migration backup before the transactional upgrade attempt"
     );
 
     let backup = Connection::open(&backups[0]).expect("open backup");
@@ -454,4 +452,188 @@ fn v20_upgrade_backup_preserves_discarded_baselines_and_other_data() {
         )
         .expect("other data is retained in backup");
     assert_eq!(marker, "preserved");
+}
+
+#[test]
+fn open_rejects_current_schema_with_unexpected_column_without_destructive_rebuild() {
+    use rusqlite::OptionalExtension;
+
+    let directory = tempfile::tempdir().expect("temporary catalog directory");
+    let db_path = directory.path().join("catalog.db");
+
+    // 1. Initialize fresh catalog via normal production path
+    let storage = crate::SqliteStorage::open(&db_path).expect("initialize production database");
+    storage
+        .set_setting("safety_marker", "persisted_record_value")
+        .expect("seed setting record");
+    storage
+        .with_connection(|conn| {
+            conn.execute(
+                "INSERT INTO games (
+                    id, title, launcher, platform, runtime, install_path, install_key,
+                    root_authority, executable_candidates_json
+                 ) VALUES (
+                    'game:persisted', 'Safety Game', 'manual', 'windows',
+                    'native_windows', 'C:/Games/Safety', 'manual:/games/safety',
+                    'user_confirmed', '[]'
+                 )",
+                [],
+            )
+            .map_err(crate::error::storage_error)?;
+            Ok(())
+        })
+        .expect("seed game record");
+    drop(storage);
+
+    // 2. Deliberately introduce unexpected column in a contracted table
+    {
+        let connection = Connection::open(&db_path).expect("open raw sqlite connection");
+        connection
+            .execute_batch("ALTER TABLE games ADD COLUMN unexpected_safety_column TEXT;")
+            .expect("inject unexpected physical column");
+    }
+
+    // 3. Reopen via normal SqliteStorage::open path
+    let reopen_result = crate::SqliteStorage::open(&db_path);
+
+    // 4. Desired safety contract: must return error, must NOT silently rebuild
+    assert!(
+        reopen_result.is_err(),
+        "opening a database with an unexpected schema difference must fail with an explicit error instead of rebuilding"
+    );
+
+    // 5. Verify the temporary database was NOT wiped: existing records and schema state remain intact
+    let inspect = Connection::open(&db_path).expect("open raw inspect connection");
+    let marker: Option<String> = inspect
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'safety_marker'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .expect("query setting marker");
+    assert_eq!(
+        marker.as_deref(),
+        Some("persisted_record_value"),
+        "persisted setting must remain intact after failed open"
+    );
+
+    let game_count: i64 = inspect
+        .query_row(
+            "SELECT COUNT(*) FROM games WHERE id = 'game:persisted'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("query game count");
+    assert_eq!(
+        game_count, 1,
+        "persisted game record must remain intact after failed open"
+    );
+
+    let user_version: i32 = inspect
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("query user_version");
+    assert_eq!(
+        user_version, CURRENT_SCHEMA_VERSION,
+        "user_version must remain unchanged at current version"
+    );
+
+    let has_extra_column: bool = inspect
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('games') WHERE name = 'unexpected_safety_column'",
+            [],
+            |row| row.get(0),
+        )
+        .map(|count: i64| count > 0)
+        .expect("query table info");
+    assert!(
+        has_extra_column,
+        "unexpected column must still be present (proving database was not replaced by clean baseline)"
+    );
+}
+
+#[test]
+fn open_rejects_unsupported_future_schema_version_without_destructive_rebuild() {
+    use rusqlite::OptionalExtension;
+
+    let directory = tempfile::tempdir().expect("temporary catalog directory");
+    let db_path = directory.path().join("catalog.db");
+
+    // 1. Initialize fresh catalog via normal production path
+    let storage = crate::SqliteStorage::open(&db_path).expect("initialize production database");
+    storage
+        .set_setting("future_safety_marker", "future_persisted_value")
+        .expect("seed setting record");
+    storage
+        .with_connection(|conn| {
+            conn.execute(
+                "INSERT INTO games (
+                    id, title, launcher, platform, runtime, install_path, install_key,
+                    root_authority, executable_candidates_json
+                 ) VALUES (
+                    'game:future_persisted', 'Future Game', 'manual', 'windows',
+                    'native_windows', 'C:/Games/Future', 'manual:/games/future',
+                    'user_confirmed', '[]'
+                 )",
+                [],
+            )
+            .map_err(crate::error::storage_error)?;
+            Ok(())
+        })
+        .expect("seed game record");
+    drop(storage);
+
+    // 2. Set user_version to an unsupported future version
+    let future_version = CURRENT_SCHEMA_VERSION + 1;
+    {
+        let connection = Connection::open(&db_path).expect("open raw sqlite connection");
+        connection
+            .execute_batch(&format!("PRAGMA user_version = {future_version};"))
+            .expect("stamp future schema version");
+    }
+
+    // 3. Reopen via normal SqliteStorage::open path
+    let reopen_result = crate::SqliteStorage::open(&db_path);
+
+    // 4. Desired safety contract: must return error, must NOT silently downgrade/rebuild
+    assert!(
+        reopen_result.is_err(),
+        "opening a database with a future schema version must fail with an explicit error instead of rebuilding"
+    );
+
+    // 5. Verify the temporary database was NOT wiped: records and future version remain intact
+    let inspect = Connection::open(&db_path).expect("open raw inspect connection");
+    let user_version: i32 = inspect
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("query user_version");
+    assert_eq!(
+        user_version, future_version,
+        "future user_version must be preserved without downgrade"
+    );
+
+    let marker: Option<String> = inspect
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'future_safety_marker'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .expect("query setting marker");
+    assert_eq!(
+        marker.as_deref(),
+        Some("future_persisted_value"),
+        "persisted setting must remain intact after failed open of future version"
+    );
+
+    let game_count: i64 = inspect
+        .query_row(
+            "SELECT COUNT(*) FROM games WHERE id = 'game:future_persisted'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("query game count");
+    assert_eq!(
+        game_count, 1,
+        "persisted game record must remain intact after failed open of future version"
+    );
 }

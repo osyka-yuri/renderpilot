@@ -345,13 +345,12 @@ mod tests {
     use rusqlite::Connection;
 
     use super::SqliteStorage;
-    use crate::schema::CURRENT_SCHEMA_VERSION;
 
     #[test]
-    fn clean_current_opens_and_unrelated_malformed_legacy_keeps_rebuild_policy() {
+    fn clean_current_opens_and_unrelated_malformed_legacy_fails_safely_without_rebuild() {
         let temporary = tempfile::tempdir().expect("temporary catalog directory");
         let fresh = temporary.path().join("fresh.db");
-        SqliteStorage::open(&fresh).expect("fresh v19 catalog");
+        SqliteStorage::open(&fresh).expect("fresh catalog");
 
         let malformed = temporary.path().join("malformed.db");
         {
@@ -362,15 +361,26 @@ mod tests {
                 )
                 .expect("unrelated malformed v19 fixture");
         }
-        let storage = SqliteStorage::open(&malformed)
-            .expect("unrelated malformed v19 must follow normal rebuild policy");
-        let version: i64 = storage
-            .with_connection(|connection| {
-                connection
-                    .pragma_query_value(None, "user_version", |row| row.get(0))
-                    .map_err(crate::error::storage_error)
-            })
-            .expect("rebuilt schema version");
-        assert_eq!(version, i64::from(CURRENT_SCHEMA_VERSION));
+        let open_result = SqliteStorage::open(&malformed);
+        assert!(
+            open_result.is_err(),
+            "unrelated malformed legacy database must fail safely rather than rebuilding"
+        );
+        let inspect = Connection::open(&malformed).expect("open raw inspect connection");
+        let version: i64 = inspect
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("preserved version");
+        assert_eq!(
+            version, 19,
+            "unrelated malformed version must not be overwritten"
+        );
+        let table_exists: bool = inspect
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'unrelated')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check table");
+        assert!(table_exists, "existing unversioned table must be preserved");
     }
 }

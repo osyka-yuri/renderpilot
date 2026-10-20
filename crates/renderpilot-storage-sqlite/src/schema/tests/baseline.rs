@@ -73,7 +73,7 @@ fn g_obs_01_healthy_current_apply_is_authorizer_observational() {
 }
 
 #[test]
-fn apply_resets_unversioned_existing_schema() {
+fn apply_rejects_unversioned_existing_schema_without_rebuild() {
     let mut connection = open_test_connection();
 
     connection
@@ -91,27 +91,31 @@ fn apply_resets_unversioned_existing_schema() {
         )
         .expect("legacy schema should be created");
 
-    apply(&mut connection).expect("legacy schema should be rebuilt");
+    let result = apply(&mut connection);
+    assert!(
+        result.is_err(),
+        "unversioned existing database must fail safely rather than rebuilding"
+    );
 
-    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-    assert_catalog_schema_exists(&connection);
+    assert_eq!(user_version(&connection), 0);
+    assert!(!schema_object_exists(&connection, "table", "games"));
 
-    assert!(!schema_object_exists(
+    assert!(schema_object_exists(
         &connection,
         "table",
         "legacy_catalog_marker"
     ));
-    assert!(!schema_object_exists(
+    assert!(schema_object_exists(
         &connection,
         "index",
         "idx_legacy_catalog_marker_id"
     ));
-    assert!(!schema_object_exists(
+    assert!(schema_object_exists(
         &connection,
         "view",
         "legacy_catalog_view"
     ));
-    assert!(!schema_object_exists(
+    assert!(schema_object_exists(
         &connection,
         "trigger",
         "trg_legacy_catalog_marker_insert"
@@ -119,7 +123,7 @@ fn apply_resets_unversioned_existing_schema() {
 }
 
 #[test]
-fn apply_rebuilds_stale_v2_schema_with_old_artifact_shape() {
+fn apply_rejects_unsupported_legacy_v2_schema_without_rebuild() {
     let mut connection = open_test_connection();
 
     // Simulate a pre-bundle v2 catalog: `library_artifacts` with the OLD scalar
@@ -137,20 +141,24 @@ fn apply_rebuilds_stale_v2_schema_with_old_artifact_shape() {
         )
         .expect("legacy v2 schema should be created");
 
-    apply(&mut connection).expect("stale v2 schema should be rebuilt");
+    let result = apply(&mut connection);
+    assert!(
+        result.is_err(),
+        "unsupported legacy v2 schema must return an error rather than rebuilding"
+    );
 
-    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-    assert!(table_has_column(
+    assert_eq!(user_version(&connection), 2);
+    assert!(!table_has_column(
         &connection,
         "library_artifacts",
         "files_json"
     ));
-    assert!(!table_has_column(
+    assert!(table_has_column(
         &connection,
         "library_artifacts",
         "file_path"
     ));
-    assert!(schema_object_exists(
+    assert!(!schema_object_exists(
         &connection,
         "table",
         "component_backups"

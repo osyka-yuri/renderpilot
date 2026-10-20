@@ -132,7 +132,7 @@ fn v10_migration_removes_only_legacy_manifest_registrations() {
 }
 
 #[test]
-fn apply_backs_up_and_rebuilds_malformed_current_pending_mutations() {
+fn apply_rejects_malformed_current_pending_mutations_without_rebuild() {
     let dir = std::env::temp_dir().join(format!(
         "renderpilot-schema-malformed-current-{}",
         std::process::id()
@@ -167,19 +167,29 @@ fn apply_backs_up_and_rebuilds_malformed_current_pending_mutations() {
             .expect("seed malformed current row");
 
         assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-        apply(&mut connection).expect("malformed current schema should rebuild");
+        apply(&mut connection).expect_err("malformed current schema must fail without rebuild");
 
         assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-        assert_catalog_schema_exists(&connection);
-        assert_preparing_state_is_accepted(&connection);
         let marker: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM settings WHERE key = 'keep_me'",
                 [],
                 |row| row.get(0),
             )
-            .expect("settings should be readable after rebuild");
-        assert_eq!(marker, 0);
+            .expect("settings should be readable");
+        assert_eq!(marker, 1, "persisted settings must not be deleted");
+
+        let preserved_mutation: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pending_file_mutations WHERE id = 'tx-malformed-current'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("pending mutation should be readable");
+        assert_eq!(
+            preserved_mutation, 1,
+            "pending mutation must not be deleted"
+        );
     }
 
     let backups: Vec<PathBuf> = fs::read_dir(&dir)
@@ -194,34 +204,15 @@ fn apply_backs_up_and_rebuilds_malformed_current_pending_mutations() {
         .collect();
     assert_eq!(
         backups.len(),
-        1,
-        "malformed current schema needs one backup"
+        0,
+        "no destructive rebuild backup should be created"
     );
-
-    let backup = Connection::open(&backups[0]).expect("open original backup");
-    assert_eq!(user_version(&backup), CURRENT_SCHEMA_VERSION);
-    let marker: i64 = backup
-        .query_row(
-            "SELECT COUNT(*) FROM settings WHERE key = 'keep_me'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("marker in original backup");
-    assert_eq!(marker, 1);
-    let preserved_mutation: i64 = backup
-        .query_row(
-            "SELECT COUNT(*) FROM pending_file_mutations WHERE id = 'tx-malformed-current'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("malformed row in original backup");
-    assert_eq!(preserved_mutation, 1);
 
     let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]
-fn apply_rebuilds_current_schema_when_shared_artifact_trigger_is_missing() {
+fn apply_rejects_incomplete_schema_upgrade_without_rebuild() {
     let mut connection = open_test_connection();
 
     apply(&mut connection).expect("initial migration should succeed");
@@ -229,7 +220,7 @@ fn apply_rebuilds_current_schema_when_shared_artifact_trigger_is_missing() {
         .execute(
             "
             INSERT INTO settings (key, value)
-            VALUES ('transient_marker', 'will be rebuilt')
+            VALUES ('transient_marker', 'preserved')
             ",
             [],
         )
@@ -243,21 +234,15 @@ fn apply_rebuilds_current_schema_when_shared_artifact_trigger_is_missing() {
         )
         .expect("schema should be made incomplete");
 
-    apply(&mut connection).expect("incomplete current schema should rebuild");
+    apply(&mut connection).expect_err("incomplete schema upgrade must fail rather than rebuild");
 
-    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-    assert_catalog_schema_exists(&connection);
-    assert!(schema_object_exists(
-        &connection,
-        "trigger",
-        "trg_shared_artifacts_touch_updated_at"
-    ));
+    assert_eq!(user_version(&connection), 10);
     let marker_count: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM settings WHERE key = 'transient_marker'",
             [],
             |row| row.get(0),
         )
-        .expect("settings should be readable after rebuild");
-    assert_eq!(marker_count, 0);
+        .expect("settings should be readable");
+    assert_eq!(marker_count, 1, "settings must not be wiped");
 }
