@@ -6,30 +6,28 @@ use std::sync::{
 };
 
 use renderpilot_application::{
-    ArtifactRepository, ComponentRepository, D3d12ExecutableAction, D3d12ExecutableProfile,
-    ExternalAliasRequirements, GameRepository, InstalledAddonRepository, ResolvedTransition,
-    resolve_transition,
+    AppErrorKind, ArtifactRepository, ComponentRepository, D3d12ExecutableAction,
+    D3d12ExecutableProfile, ExternalAliasRequirements, GameRepository, InstalledAddonRepository,
+    ResolvedPathDisposition, resolve_transition,
 };
 use renderpilot_domain::{
     AddonKind, Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile,
-    ComponentId, ComponentKind, ComponentRollbackBaseline, D3d12ExecutableBaseline,
-    D3d12ExecutableIdentity, GameId, GameIdentity, GameInstallation, GameRuntime, InstalledAddon,
-    Launcher, LibraryArtifact, LibraryComponent, LibraryTechnology, ManagedAddonFile,
-    ManagedFileBaseline, PathRef, PeCompatibilityProfile, PeExportSet, Platform,
-    RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage,
-    UpstreamPackageProvider, Version,
+    ComponentId, ComponentKind, ComponentRollbackBaseline, GameId, GameIdentity, GameInstallation,
+    GameRuntime, InstalledAddon, Launcher, LibraryArtifact, LibraryComponent, LibraryTechnology,
+    ManagedAddonFile, ManagedFileBaseline, PathRef, PeCompatibilityProfile, PeExportSet, Platform,
+    RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider, Version,
 };
-use renderpilot_platform_windows::DeveloperModeStatus;
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::Context;
 use crate::catalog::execute::rollback_component;
 
-use super::fs_ops::{perform_transition_apply_fs, revert_to_baseline_fs};
 use super::planning::{fsr_members_to_remove, planned_target_files};
 use super::types::{PlannedFile, PreparedApplySwap, PreparedD3d12Execution};
 use xiph_pe::{synthetic_xiph_pe, synthetic_xiph_pe_with_delay};
 
+mod d3d12_execution;
+mod fs_transitions;
 mod unreal_xiph_lifecycle;
 mod xiph_lifecycle;
 mod xiph_pe;
@@ -57,45 +55,6 @@ fn planned_copy(source: &Path, target: &Path) -> PlannedFile {
         source: source.to_path_buf(),
         file: comp_file(target),
     }
-}
-
-fn component_with_files(
-    technology: LibraryTechnology,
-    files: impl IntoIterator<Item = ComponentFile>,
-) -> LibraryComponent {
-    files.into_iter().fold(
-        LibraryComponent::new(
-            ComponentId::new("component:filesystem-transition-test").expect("component id"),
-            GameId::new("manual:filesystem-transition-test").expect("game id"),
-            ComponentKind::NativeLibrary,
-            technology,
-            Swappability::BundleOnly,
-        ),
-        LibraryComponent::with_file,
-    )
-}
-
-fn artifact_member(source: &Path, install_as: &str) -> ComponentFile {
-    let member = comp_file(source).with_install_as(install_as);
-    if source.is_file() {
-        member.with_sha256(sha_of(source))
-    } else {
-        member.with_sha256(Sha256Hash::new(HEX64).expect("synthetic artifact hash"))
-    }
-}
-
-fn filesystem_transition(
-    component: &LibraryComponent,
-    artifact: &LibraryArtifact,
-    baseline: &[ComponentFile],
-) -> ResolvedTransition {
-    resolve_transition(
-        component,
-        artifact,
-        baseline,
-        &ExternalAliasRequirements::NotRequired,
-    )
-    .expect("resolve filesystem transition")
 }
 
 fn apply_swap_with_current_safety(
@@ -145,369 +104,6 @@ fn apply_swap_confirmed(
 }
 
 #[test]
-fn overlay_backs_up_existing_target_and_installs_durably() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let target = dir.path().join("nvngx_dlss.dll");
-    let source = dir.path().join("source.dll");
-    write(&target, b"original");
-    write(&source, b"new-version");
-
-    let baseline = vec![comp_file(&target).with_sha256(sha_of(&target))];
-    let component = component_with_files(
-        LibraryTechnology::DlssSuperResolution,
-        baseline.iter().cloned(),
-    );
-    let artifact = LibraryArtifact::new(
-        ArtifactId::new("artifact:filesystem-overlay").expect("artifact id"),
-        LibraryTechnology::DlssSuperResolution,
-        "nvngx_dlss.dll",
-        vec![artifact_member(&source, "nvngx_dlss.dll")],
-        ArtifactTrustLevel::LocalObserved,
-    )
-    .expect("artifact");
-    let transition = filesystem_transition(&component, &artifact, &baseline);
-    let changes = perform_transition_apply_fs(&transition, None).expect("apply should succeed");
-
-    assert_eq!(fs::read(&target).expect("target readable"), b"new-version");
-    assert_eq!(
-        fs::read(bak_of(&target)).expect("bak readable"),
-        b"original"
-    );
-    assert_eq!(changes.copied, vec![target.clone()]);
-    assert_eq!(
-        changes.created_sidecars,
-        vec![(target.clone(), bak_of(&target))]
-    );
-}
-
-#[test]
-fn overlay_adds_new_file_without_creating_backup() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let target = dir.path().join("nvngx_dlss.dll");
-    let existing = dir.path().join("nvngx_dlssg.dll");
-    let source = dir.path().join("source.dll");
-    write(&existing, b"installed-baseline");
-    write(&source, b"fresh");
-
-    let baseline = [comp_file(&existing).with_sha256(sha_of(&existing))];
-    let component = component_with_files(
-        LibraryTechnology::DlssSuperResolution,
-        baseline.iter().cloned(),
-    );
-    let artifact = LibraryArtifact::new(
-        ArtifactId::new("artifact:filesystem-new-file").expect("artifact id"),
-        LibraryTechnology::DlssSuperResolution,
-        "nvngx_dlss.dll",
-        vec![artifact_member(&source, "nvngx_dlss.dll")],
-        ArtifactTrustLevel::LocalObserved,
-    )
-    .expect("artifact");
-    let transition = filesystem_transition(&component, &artifact, &baseline);
-    let changes = perform_transition_apply_fs(&transition, None).expect("apply should succeed");
-
-    assert_eq!(fs::read(&target).expect("target readable"), b"fresh");
-    assert_eq!(
-        fs::read(&existing).expect("existing component file remains"),
-        b"installed-baseline"
-    );
-    assert!(
-        !bak_of(&target).exists(),
-        "no backup for a newly added file"
-    );
-    assert!(changes.created_sidecars.is_empty());
-}
-
-#[test]
-fn removed_member_is_backed_up_then_deleted() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let entry = dir.path().join("amd_fidelityfx_dx12.dll");
-    let member = dir.path().join("amd_fidelityfx_framegeneration_dx12.dll");
-    let source = dir.path().join("new-amd_fidelityfx_dx12.dll");
-    write(&entry, b"original-entry");
-    write(&member, b"fsr4-member");
-    write(&source, b"replacement-entry");
-
-    let baseline = vec![
-        comp_file(&entry).with_sha256(sha_of(&entry)),
-        comp_file(&member).with_sha256(sha_of(&member)),
-    ];
-    let component = component_with_files(LibraryTechnology::AmdFsr, baseline.iter().cloned());
-    let artifact = LibraryArtifact::new(
-        ArtifactId::new("artifact:filesystem-fsr-removal").expect("artifact id"),
-        LibraryTechnology::AmdFsr,
-        "amd_fidelityfx_dx12.dll",
-        vec![artifact_member(&source, "amd_fidelityfx_dx12.dll")],
-        ArtifactTrustLevel::LocalObserved,
-    )
-    .expect("artifact");
-    let transition = filesystem_transition(&component, &artifact, &baseline);
-    let changes = perform_transition_apply_fs(&transition, None).expect("apply should succeed");
-
-    assert!(!member.exists(), "removed member should be gone");
-    assert_eq!(
-        fs::read(bak_of(&member)).expect("bak readable"),
-        b"fsr4-member",
-        "removed member must be preserved as a .bak for rollback"
-    );
-    assert_eq!(changes.created_sidecars.len(), 2);
-    assert!(
-        changes
-            .created_sidecars
-            .iter()
-            .any(|(path, _)| path.ends_with("amd_fidelityfx_dx12.dll"))
-    );
-    assert!(
-        changes
-            .created_sidecars
-            .iter()
-            .any(|(path, _)| path.ends_with("amd_fidelityfx_framegeneration_dx12.dll"))
-    );
-    assert_eq!(
-        fs::read(bak_of(&entry)).expect("entry baseline sidecar"),
-        b"original-entry"
-    );
-}
-
-#[test]
-fn dxc_pair_failure_midway_rolls_back_both_members() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let compiler = dir.path().join("dxcompiler.dll");
-    let validator = dir.path().join("dxil.dll");
-    let good_source = dir.path().join("new-dxcompiler.dll");
-    let missing_source = dir.path().join("missing-dxil.dll");
-    write(&compiler, b"original-compiler");
-    write(&validator, b"original-validator");
-    write(&good_source, b"new-compiler");
-
-    let baseline = vec![
-        comp_file(&compiler).with_sha256(sha_of(&compiler)),
-        comp_file(&validator).with_sha256(sha_of(&validator)),
-    ];
-    let component = LibraryComponent::new(
-        ComponentId::new("component:dxc-atomicity").expect("component id"),
-        GameId::new("manual:dxc-atomicity").expect("game id"),
-        ComponentKind::NativeLibrary,
-        LibraryTechnology::MicrosoftDxc,
-        Swappability::BundleOnly,
-    )
-    .with_file(baseline[0].clone())
-    .with_file(baseline[1].clone());
-    let artifact = LibraryArtifact::new(
-        ArtifactId::new("artifact:dxc-atomicity").expect("artifact id"),
-        LibraryTechnology::MicrosoftDxc,
-        "dxcompiler.dll",
-        vec![
-            artifact_member(&good_source, "dxcompiler.dll"),
-            artifact_member(&missing_source, "dxil.dll"),
-        ],
-        ArtifactTrustLevel::LocalObserved,
-    )
-    .expect("artifact");
-    let transition = filesystem_transition(&component, &artifact, &baseline);
-    let context = crate::Context::from_storage(SqliteStorage::in_memory().expect("storage"));
-    let game_id =
-        GameId::new(format!("manual:apply-failure-{}", ulid::Ulid::generate())).expect("game id");
-    let guard = crate::game_mutation_lock::blocking_lock(&game_id);
-    let mutation = crate::file_mutation::DurableFileTransaction::prepare(
-        &context,
-        &guard,
-        &crate::file_mutation::MutationScope::single(dir.path()).expect("scope"),
-        "test_apply_failure",
-        None,
-        [
-            compiler.clone(),
-            bak_of(&compiler),
-            validator.clone(),
-            bak_of(&validator),
-        ],
-    )
-    .expect("durable transaction");
-    let result = perform_transition_apply_fs(&transition, None);
-
-    assert!(result.is_err(), "missing source must fail the apply");
-    mutation
-        .rollback(context.storage())
-        .expect("durable rollback");
-    assert_eq!(
-        fs::read(&compiler).expect("compiler readable"),
-        b"original-compiler",
-        "the compiler must be restored to its original bytes"
-    );
-    assert_eq!(
-        fs::read(&validator).expect("validator readable"),
-        b"original-validator",
-        "the validator must be restored to its original bytes"
-    );
-    assert!(
-        !bak_of(&compiler).exists() && !bak_of(&validator).exists(),
-        "both recovery sidecars must be consumed by the restore"
-    );
-}
-
-#[test]
-fn xiph_transition_failure_during_late_copy_or_before_commit_rolls_back_all_members() {
-    for failure_point in ["during_late_member_copy", "before_database_commit"] {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let game_dir = dir.path().join("game");
-        let source_dir = dir.path().join("source");
-        fs::create_dir_all(&game_dir).expect("game dir");
-        fs::create_dir_all(&source_dir).expect("source dir");
-
-        let vorbis_dir = game_dir.join("Engine/Binaries/ThirdParty/Vorbis/Win64");
-        let ogg_dir = game_dir.join("Engine/Binaries/ThirdParty/Ogg/Win64");
-        fs::create_dir_all(&vorbis_dir).expect("Vorbis dir");
-        fs::create_dir_all(&ogg_dir).expect("Ogg dir");
-        let wrapper = vorbis_dir.join("vorbisfile.dll");
-        let vorbis = vorbis_dir.join("vorbis.dll");
-        let ogg = ogg_dir.join("ogg.dll");
-        let source_wrapper = source_dir.join("vorbisfile.dll");
-        let source_vorbis = source_dir.join("vorbis.dll");
-        let source_ogg = source_dir.join("ogg.dll");
-        write(
-            &wrapper,
-            &synthetic_xiph_pe("ov_open", &["vorbis.dll", "ogg.dll"]),
-        );
-        write(
-            &vorbis,
-            &synthetic_xiph_pe("vorbis_info_init", &["ogg.dll"]),
-        );
-        write(&ogg, &synthetic_xiph_pe("ogg_sync_init", &[]));
-        write(
-            &source_wrapper,
-            &synthetic_xiph_pe("ov_open", &["vorbis.dll", "ogg.dll"]),
-        );
-        write(
-            &source_vorbis,
-            &synthetic_xiph_pe("vorbis_info_init", &["ogg.dll"]),
-        );
-        write(&source_ogg, &synthetic_xiph_pe("ogg_sync_init", &[]));
-
-        let game = sample_game_at(&game_dir);
-        let baseline = vec![
-            observed_xiph_file(&wrapper),
-            observed_xiph_file(&vorbis),
-            observed_xiph_file(&ogg),
-        ];
-        let component_id =
-            ComponentId::new(format!("component:xiph:{failure_point}")).expect("component id");
-        let component = LibraryComponent::new(
-            component_id.clone(),
-            game.id().clone(),
-            ComponentKind::NativeLibrary,
-            LibraryTechnology::XiphVorbis,
-            Swappability::BundleOnly,
-        )
-        .with_file(baseline[0].clone())
-        .with_file(baseline[1].clone())
-        .with_file(baseline[2].clone());
-        let artifact = LibraryArtifact::new(
-            ArtifactId::new(format!("artifact:xiph:{failure_point}")).expect("artifact id"),
-            LibraryTechnology::XiphVorbis,
-            "vorbisfile.dll",
-            vec![
-                observed_xiph_file(&source_wrapper),
-                observed_xiph_file(&source_vorbis),
-                observed_xiph_file(&source_ogg),
-            ],
-            ArtifactTrustLevel::LocalObserved,
-        )
-        .expect("artifact")
-        .with_metadata(
-            ArtifactMetadata::default().with_runtime_target(RuntimeTarget::new(Architecture::X64)),
-        );
-        let transition = filesystem_transition(&component, &artifact, &baseline);
-
-        let storage = SqliteStorage::in_memory().expect("storage");
-        storage.upsert_game(&game).expect("game");
-        storage
-            .replace_components_for_game(game.id(), std::slice::from_ref(&component))
-            .expect("component");
-        let context = crate::Context::from_storage(storage);
-        let guard = crate::game_mutation_lock::blocking_lock(game.id());
-        let mutation = crate::file_mutation::DurableFileTransaction::prepare(
-            &context,
-            &guard,
-            &crate::file_mutation::MutationScope::single(&game_dir).expect("scope"),
-            "test_xiph_apply_failure",
-            Some(component_id.as_str()),
-            [
-                wrapper.clone(),
-                bak_of(&wrapper),
-                vorbis.clone(),
-                bak_of(&vorbis),
-                ogg.clone(),
-                bak_of(&ogg),
-            ],
-        )
-        .expect("durable transaction");
-
-        if failure_point == "during_late_member_copy" {
-            fs::remove_file(&source_wrapper).expect("remove final source to inject copy failure");
-        }
-        let result: renderpilot_application::AppResult<()> =
-            perform_transition_apply_fs(&transition, None).and_then(|_| {
-                if failure_point == "before_database_commit" {
-                    Err(renderpilot_application::AppError::provider_failed(
-                        "injected failure before database commit",
-                    ))
-                } else {
-                    Ok(())
-                }
-            });
-        assert!(result.is_err(), "{failure_point} must abort the apply");
-        mutation
-            .rollback(context.storage())
-            .expect("durable rollback");
-
-        assert_eq!(
-            fs::read(&wrapper).expect("wrapper readable"),
-            synthetic_xiph_pe("ov_open", &["vorbis.dll", "ogg.dll"]),
-            "{failure_point}: wrapper must be restored"
-        );
-        assert_eq!(
-            fs::read(&vorbis).expect("vorbis readable"),
-            synthetic_xiph_pe("vorbis_info_init", &["ogg.dll"]),
-            "{failure_point}: Vorbis must be restored"
-        );
-        assert_eq!(
-            fs::read(&ogg).expect("ogg readable"),
-            synthetic_xiph_pe("ogg_sync_init", &[]),
-            "{failure_point}: Ogg must be restored"
-        );
-        assert!(
-            !bak_of(&wrapper).exists() && !bak_of(&vorbis).exists() && !bak_of(&ogg).exists(),
-            "{failure_point}: recovery sidecars must be consumed"
-        );
-        assert_eq!(
-            context
-                .storage()
-                .list_components_for_game(game.id())
-                .expect("stored components"),
-            vec![component],
-            "{failure_point}: database state must remain unchanged"
-        );
-    }
-}
-
-#[test]
-fn revert_to_baseline_restores_backup_and_deletes_added_files() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let replaced = dir.path().join("nvngx_dlss.dll");
-    let added = dir.path().join("nvngx_dlssg.dll");
-    write(&replaced, b"overlay");
-    write(&bak_of(&replaced), b"original");
-    write(&added, b"added-by-swap");
-
-    let current = vec![comp_file(&replaced), comp_file(&added)];
-    let baseline = vec![comp_file(&replaced).with_sha256(sha_of(&bak_of(&replaced)))];
-    revert_to_baseline_fs(&current, &baseline).expect("revert should succeed");
-
-    assert_eq!(fs::read(&replaced).expect("readable"), b"original");
-    assert!(!bak_of(&replaced).exists(), "backup consumed by restore");
-    assert!(!added.exists(), "overlay-added file removed on revert");
-}
-
-#[test]
 fn fsr_downgrade_removes_unmatched_upscaling_members() {
     let baseline = vec![
         comp_file_str("C:/game/amd_fidelityfx_dx12.dll"),
@@ -533,6 +129,11 @@ fn fsr_downgrade_removes_unmatched_upscaling_members() {
     )];
 
     let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
+    assert_eq!(
+        removed,
+        vec![baseline[1].clone(), baseline[2].clone()],
+        "a unified FSR 3.1 downgrade drops exactly the unmatched upscaling members"
+    );
     let names: Vec<&str> = removed
         .iter()
         .filter_map(|file| file.path().file_name())
@@ -545,17 +146,24 @@ fn fsr_downgrade_removes_unmatched_upscaling_members() {
         ],
         "a unified FSR 3.1 downgrade drops the upscaling members it does not install"
     );
+    assert!(
+        removed
+            .iter()
+            .all(|file| file.path().file_name() != Some("amd_fidelityfx_dx12.dll")),
+        "planned entry point must not be removed"
+    );
 }
 
 #[test]
 fn fsr_downgrade_spares_the_games_own_loader_and_optional_effects() {
-    // Mixed lineage — the loader+denoiser Ray Regeneration stack is
+    // Mixed lineage — the loader+denoiser+radiancecache Ray Regeneration stack is
     // independent of the upscaling backend and must survive a unified
     // FSR 3.1 update untouched.
     let baseline = vec![
         comp_file_str("C:/game/amd_fidelityfx_dx12.dll"),
         comp_file_str("C:/game/amd_fidelityfx_loader_dx12.dll"),
         comp_file_str("C:/game/amd_fidelityfx_denoiser_dx12.dll"),
+        comp_file_str("C:/game/amd_fidelityfx_radiancecache_dx12.dll"),
     ];
 
     let artifact = LibraryArtifact::new(
@@ -575,9 +183,46 @@ fn fsr_downgrade_spares_the_games_own_loader_and_optional_effects() {
         Path::new("C:/game/amd_fidelityfx_dx12.dll"),
     )];
 
+    let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
     assert!(
-        fsr_members_to_remove(&baseline, &artifact, &planned).is_empty(),
-        "the loader+denoiser stack is not part of the upscaling lineage"
+        removed.is_empty(),
+        "the loader and optional effects (denoiser, radiance cache) are not part of the upscaling lineage"
+    );
+}
+
+#[test]
+fn fsr_downgrade_mixed_baseline_removes_upscaling_and_preserves_loader_and_effects() {
+    let baseline = vec![
+        comp_file_str("C:/game/amd_fidelityfx_dx12.dll"),
+        comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"),
+        comp_file_str("C:/game/amd_fidelityfx_framegeneration_dx12.dll"),
+        comp_file_str("C:/game/amd_fidelityfx_loader_dx12.dll"),
+        comp_file_str("C:/game/amd_fidelityfx_denoiser_dx12.dll"),
+        comp_file_str("C:/game/amd_fidelityfx_radiancecache_dx12.dll"),
+    ];
+
+    let artifact = LibraryArtifact::new(
+        ArtifactId::new("artifact:fsr31").expect("artifact id"),
+        LibraryTechnology::AmdFsr,
+        "amd_fidelityfx_dx12.dll",
+        vec![
+            comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha")),
+        ],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("artifact");
+
+    let planned = vec![planned_copy(
+        Path::new("C:/lib/amd_fidelityfx_dx12.dll"),
+        Path::new("C:/game/amd_fidelityfx_dx12.dll"),
+    )];
+
+    let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
+    assert_eq!(
+        removed,
+        vec![baseline[1].clone(), baseline[2].clone()],
+        "mixed baseline must remove only upscaling members, sparing entry point, loader and optional effects"
     );
 }
 
@@ -647,6 +292,17 @@ fn applied_path_uses_the_selected_renamed_member_after_projection() {
         &ExternalAliasRequirements::NotRequired,
     )
     .expect("transition");
+    assert_eq!(transition.paths().len(), 1);
+    match &transition.paths()[0] {
+        ResolvedPathDisposition::Write(write) => {
+            assert_eq!(write.target().as_str(), "C:/game/primary.dll");
+            assert_eq!(write.source().path().as_str(), "C:/lib/selected.dll");
+            let expected_sha = Sha256Hash::new("b".repeat(64)).expect("sha");
+            assert_eq!(write.source().sha256(), Some(&expected_sha));
+        }
+        other => panic!("expected resolved write, got {other:?}"),
+    }
+
     let prepared = PreparedApplySwap {
         game_id: component.game_id().clone(),
         component_id: component.id().clone(),
@@ -661,6 +317,12 @@ fn applied_path_uses_the_selected_renamed_member_after_projection() {
         d3d12: None,
     };
 
+    assert_eq!(prepared.writes.len(), 1);
+    assert_eq!(prepared.writes[0].source, selected_path);
+    assert_eq!(
+        prepared.writes[0].file.path().as_str(),
+        "C:/game/primary.dll"
+    );
     assert_eq!(prepared.applied_path(), target_path.to_string_lossy());
 }
 
@@ -788,6 +450,29 @@ fn planned_streamline_targets_intersect_package_with_installed_set() {
 
     let planned = planned_target_files(&artifact, Path::new("C:/game"), &component)
         .expect("plan should succeed");
+    assert_eq!(
+        planned.len(),
+        2,
+        "planned targets must contain exactly the 2 intersecting files"
+    );
+    assert_eq!(planned[0].source, PathBuf::from("C:/lib/sl.common.dll"));
+    assert_eq!(planned[0].file.path().as_str(), "C:/game/sl.common.dll");
+    let sha_a = Sha256Hash::new("a".repeat(64)).expect("sha");
+    let sha_c = Sha256Hash::new("c".repeat(64)).expect("sha");
+    assert_eq!(planned[0].file.sha256(), Some(&sha_a));
+    assert_eq!(
+        planned[0].file.version().map(Version::as_str),
+        Some("2.9.0.0")
+    );
+
+    assert_eq!(planned[1].source, PathBuf::from("C:/lib/sl.interposer.dll"));
+    assert_eq!(planned[1].file.path().as_str(), "C:/game/sl.interposer.dll");
+    assert_eq!(planned[1].file.sha256(), Some(&sha_c));
+    assert_eq!(
+        planned[1].file.version().map(Version::as_str),
+        Some("2.9.0.0")
+    );
+
     let names: Vec<&str> = planned
         .iter()
         .filter_map(|p| p.file.path().file_name())
@@ -797,6 +482,12 @@ fn planned_streamline_targets_intersect_package_with_installed_set() {
         vec!["sl.common.dll", "sl.interposer.dll"],
         "optional SDK members must not expand the game's plugin set"
     );
+    assert!(
+        planned
+            .iter()
+            .all(|p| p.file.path().file_name() != Some("sl.dlss.dll")),
+        "sl.dlss.dll must not be included when not installed"
+    );
 }
 
 #[test]
@@ -804,14 +495,14 @@ fn planned_streamline_empty_overlap_is_an_error() {
     let component = streamline_component(&["sl.common.dll"]);
     let artifact = streamline_package(&["sl.dlss.dll", "sl.reflex.dll"]);
 
-    match planned_target_files(&artifact, Path::new("C:/game"), &component) {
-        Err(err) => assert!(
-            err.message().contains("no installable files"),
-            "unexpected error: {}",
-            err.message()
-        ),
-        Ok(_) => panic!("expected empty intersection to fail"),
-    }
+    let err = planned_target_files(&artifact, Path::new("C:/game"), &component)
+        .expect_err("expected empty intersection to fail");
+    assert_eq!(err.kind(), &AppErrorKind::InvalidInput);
+    assert!(
+        err.message().contains("no installable files"),
+        "unexpected error: {}",
+        err.message()
+    );
 }
 
 #[test]
@@ -842,6 +533,26 @@ fn planned_non_streamline_multi_file_package_keeps_all_members() {
     let planned = planned_target_files(&artifact, Path::new("C:/game"), &component)
         .expect("non-streamline multi-file plans all members");
     assert_eq!(planned.len(), 2);
+    assert_eq!(
+        planned[0].source,
+        PathBuf::from("C:/lib/amd_fidelityfx_upscaler_dx12.dll")
+    );
+    assert_eq!(
+        planned[0].file.path().as_str(),
+        "C:/game/amd_fidelityfx_upscaler_dx12.dll"
+    );
+    let sha_a = Sha256Hash::new("a".repeat(64)).expect("sha");
+    let sha_b = Sha256Hash::new("b".repeat(64)).expect("sha");
+    assert_eq!(planned[0].file.sha256(), Some(&sha_a));
+    assert_eq!(
+        planned[1].source,
+        PathBuf::from("C:/lib/amd_fidelityfx_loader_dx12.dll")
+    );
+    assert_eq!(
+        planned[1].file.path().as_str(),
+        "C:/game/amd_fidelityfx_loader_dx12.dll"
+    );
+    assert_eq!(planned[1].file.sha256(), Some(&sha_b));
 }
 
 // ---------------------------------------------------------------------------
@@ -1177,40 +888,6 @@ fn apply_swap_rolls_back_when_late_xiph_external_import_changes_before_commit() 
     }
 }
 
-fn d3d12_artifact_at(source: &Path, sdk_line: u32) -> LibraryArtifact {
-    let source_hash = sha_of(source);
-    let package_version = format!("1.{sdk_line}.1");
-    LibraryArtifact::new(
-        ArtifactId::for_bundle([&source_hash]),
-        LibraryTechnology::D3D12Agility,
-        "D3D12Core.dll",
-        vec![
-            ComponentFile::new(path_as_ref(source))
-                .with_sha256(source_hash)
-                .with_version(Version::parse(&package_version).expect("version")),
-        ],
-        ArtifactTrustLevel::CatalogDownloaded,
-    )
-    .expect("D3D12 artifact")
-    .with_source("test-library")
-    .expect("source")
-    .with_metadata(
-        ArtifactMetadata::default()
-            .with_upstream_package(
-                UpstreamPackage::new(
-                    UpstreamPackageProvider::NuGet,
-                    "Microsoft.Direct3D.D3D12",
-                    &package_version,
-                )
-                .expect("package"),
-            )
-            .with_runtime_target(
-                RuntimeTarget::new(Architecture::X64)
-                    .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: sdk_line }),
-            ),
-    )
-}
-
 #[cfg(windows)]
 fn synthetic_x64_pe() -> Vec<u8> {
     synthetic_xiph_pe("RenderPilotTestFixture", &[])
@@ -1349,749 +1026,6 @@ fn standalone_dxc_apply_and_rollback_preserve_the_games_file_set() {
         original_bytes
     );
     assert!(!game_dir.join("dxil.dll").exists());
-}
-
-#[test]
-fn d3d12_missing_executable_facts_are_blocked_at_plan_and_apply_boundaries() {
-    let root = tempfile::tempdir().expect("root");
-    let game_dir = root.path().join("game");
-    let library_dir = root.path().join("library");
-    fs::create_dir_all(&game_dir).expect("game dir");
-    fs::create_dir_all(&library_dir).expect("library dir");
-
-    let live = game_dir.join("D3D12Core.dll");
-    let source = library_dir.join("D3D12Core.dll");
-    write(&live, b"original-d3d12-core");
-    write(&source, b"replacement-d3d12-core");
-
-    let game = sample_game_at(&game_dir);
-    let component_id = ComponentId::new("component:d3d12-policy").expect("component id");
-    let component = LibraryComponent::new(
-        component_id.clone(),
-        game.id().clone(),
-        ComponentKind::NativeLibrary,
-        LibraryTechnology::D3D12Agility,
-        Swappability::Swappable,
-    )
-    .with_file(
-        ComponentFile::new(path_as_ref(&live))
-            .with_sha256(sha_of(&live))
-            .with_version(Version::parse("1.618.3").expect("version")),
-    );
-
-    let source_hash = sha_of(&source);
-    let artifact = LibraryArtifact::new(
-        ArtifactId::for_bundle([&source_hash]),
-        LibraryTechnology::D3D12Agility,
-        "D3D12Core.dll",
-        vec![
-            ComponentFile::new(path_as_ref(&source))
-                .with_sha256(source_hash)
-                .with_version(Version::parse("1.618.5").expect("version")),
-        ],
-        ArtifactTrustLevel::CatalogDownloaded,
-    )
-    .expect("artifact")
-    .with_source("test-library")
-    .expect("source")
-    .with_metadata(
-        ArtifactMetadata::default()
-            .with_upstream_package(
-                UpstreamPackage::new(
-                    UpstreamPackageProvider::NuGet,
-                    "Microsoft.Direct3D.D3D12",
-                    "1.618.5",
-                )
-                .expect("package"),
-            )
-            .with_runtime_target(
-                RuntimeTarget::new(Architecture::X64)
-                    .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 618 }),
-            ),
-    );
-
-    let storage = SqliteStorage::in_memory().expect("storage");
-    storage.upsert_game(&game).expect("game");
-    storage
-        .replace_components_for_game(game.id(), &[component])
-        .expect("component");
-    storage.upsert_artifact(&artifact).expect("artifact");
-    let context = Context::from_storage(storage);
-
-    let plan_error =
-        crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
-            .err()
-            .expect("plan must fail without an unambiguous executable");
-    assert!(matches!(plan_error, crate::ServiceError::InvalidInput(_)));
-
-    let apply_error =
-        apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
-            .expect_err("direct apply must enforce the same policy");
-    assert!(matches!(apply_error, crate::ServiceError::InvalidInput(_)));
-    assert_eq!(
-        fs::read(&live).expect("live core"),
-        b"original-d3d12-core",
-        "policy rejection must happen before the first file mutation"
-    );
-    assert!(
-        !bak_of(&live).exists(),
-        "no recovery sidecar may be created"
-    );
-}
-
-#[test]
-fn patched_executable_backup_without_dll_backup_is_never_captured_as_a_mixed_baseline() {
-    let root = tempfile::tempdir().expect("root");
-    let game_dir = root.path().join("game");
-    let library_dir = root.path().join("library");
-    fs::create_dir_all(&game_dir).expect("game dir");
-    fs::create_dir_all(&library_dir).expect("library dir");
-
-    let executable = game_dir.join("game.exe");
-    let executable_backup = bak_of(&executable);
-    let live_dll = game_dir.join("D3D12Core.dll");
-    let source_dll = library_dir.join("D3D12Core.dll");
-    let original_executable =
-        crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
-    let patched_executable = crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619);
-    write(&executable, &patched_executable);
-    write(&executable_backup, &original_executable);
-    write(&live_dll, b"manually-installed-sdk-619-runtime");
-    write(
-        &source_dll,
-        &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(620),
-    );
-
-    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
-    let component_id = ComponentId::new("component:d3d12-orphan-exe").expect("component id");
-    let component = LibraryComponent::new(
-        component_id.clone(),
-        game.id().clone(),
-        ComponentKind::NativeLibrary,
-        LibraryTechnology::D3D12Agility,
-        Swappability::Swappable,
-    )
-    .with_file(
-        ComponentFile::new(path_as_ref(&live_dll))
-            .with_sha256(sha_of(&live_dll))
-            .with_version(Version::parse("1.619.1").expect("version")),
-    );
-    let artifact = d3d12_artifact_at(&source_dll, 620);
-    let storage = SqliteStorage::in_memory().expect("storage");
-    storage.upsert_game(&game).expect("game");
-    storage
-        .replace_components_for_game(game.id(), &[component])
-        .expect("component");
-    storage.upsert_artifact(&artifact).expect("artifact");
-    let context = Context::from_storage(storage);
-
-    let plan = crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
-        .expect("repair plan");
-    assert!(
-        plan.plan
-            .blockers()
-            .iter()
-            .any(|blocker| blocker.as_str() == "d3d12_executable_repair_required")
-    );
-
-    let error = apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
-        .expect_err("mixed baseline must be blocked");
-    assert!(matches!(error, crate::ServiceError::InvalidInput(_)));
-    assert_eq!(fs::read(&executable).expect("live EXE"), patched_executable);
-    assert_eq!(
-        fs::read(&executable_backup).expect("EXE backup"),
-        original_executable
-    );
-    assert_eq!(
-        fs::read(&live_dll).expect("live DLL"),
-        b"manually-installed-sdk-619-runtime"
-    );
-    assert!(
-        !bak_of(&live_dll).exists(),
-        "a rejected operation must not manufacture a DLL backup"
-    );
-    assert!(
-        context
-            .storage()
-            .get_component_backup(&component_id)
-            .expect("baseline lookup")
-            .is_none(),
-        "a rejected operation must not persist a mixed rollback aggregate"
-    );
-}
-
-#[test]
-fn confirmed_d3d12_apply_reports_token_mismatch_when_the_live_dll_changes() {
-    let root = tempfile::tempdir().expect("root");
-    let game_dir = root.path().join("game");
-    let library_dir = root.path().join("library");
-    fs::create_dir_all(&game_dir).expect("game dir");
-    fs::create_dir_all(&library_dir).expect("library dir");
-
-    let executable = game_dir.join("game.exe");
-    let live_dll = game_dir.join("D3D12Core.dll");
-    let source_dll = library_dir.join("D3D12Core.dll");
-    let original_executable =
-        crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
-    write(&executable, &original_executable);
-    write(&live_dll, b"scanned-sdk-606-runtime");
-    write(
-        &source_dll,
-        &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619),
-    );
-
-    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
-    let component_id = ComponentId::new("component:d3d12-stale-apply").expect("component");
-    let component = LibraryComponent::new(
-        component_id.clone(),
-        game.id().clone(),
-        ComponentKind::NativeLibrary,
-        LibraryTechnology::D3D12Agility,
-        Swappability::Swappable,
-    )
-    .with_file(
-        ComponentFile::new(path_as_ref(&live_dll))
-            .with_sha256(sha_of(&live_dll))
-            .with_version(Version::parse("1.606.1").expect("version")),
-    );
-    let artifact = d3d12_artifact_at(&source_dll, 619);
-    let storage = SqliteStorage::in_memory().expect("storage");
-    storage.upsert_game(&game).expect("game");
-    storage
-        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
-        .expect("component");
-    storage.upsert_artifact(&artifact).expect("artifact");
-    let context = Context::from_storage(storage);
-    let target =
-        crate::catalog::runtime_compatibility::target_profile(&context, &game, Some(&component))
-            .expect("target profile");
-    let action = renderpilot_application::replacement_executable_action(&artifact, &target.profile)
-        .expect("policy")
-        .expect("action");
-    let token = renderpilot_application::d3d12_confirmation_token(
-        &component,
-        &artifact,
-        &target.profile,
-        &action,
-    )
-    .expect("token");
-
-    write(&live_dll, b"externally-changed-runtime");
-    let error = apply_swap_confirmed(
-        &context,
-        game.id(),
-        &component_id,
-        artifact.id(),
-        Some(&token),
-        None,
-    )
-    .expect_err("stale confirmation must fail");
-
-    assert!(matches!(
-        error,
-        crate::ServiceError::ConfirmationTokenMismatch
-    ));
-    assert_eq!(
-        fs::read(&executable).expect("unchanged EXE"),
-        original_executable
-    );
-    assert!(!bak_of(&executable).exists());
-    assert!(!bak_of(&live_dll).exists());
-}
-
-#[test]
-fn d3d12_preview_apply_rechecks_developer_mode_after_a_successful_plan() {
-    let root = tempfile::tempdir().expect("root");
-    let game_dir = root.path().join("game");
-    let library_dir = root.path().join("library");
-    fs::create_dir_all(&game_dir).expect("game dir");
-    fs::create_dir_all(&library_dir).expect("library dir");
-
-    let executable = game_dir.join("game.exe");
-    let live_dll = game_dir.join("D3D12Core.dll");
-    let source_dll = library_dir.join("D3D12Core.dll");
-    let original_executable =
-        crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
-    write(&executable, &original_executable);
-    write(&live_dll, b"scanned-sdk-606-runtime");
-    write(
-        &source_dll,
-        &crate::catalog::test_support::synthetic_versioned_d3d12_runtime(619),
-    );
-    let original_runtime = fs::read(&live_dll).expect("runtime fixture");
-
-    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
-    let component_id = ComponentId::new("component:d3d12-developer-mode").expect("component");
-    let component = LibraryComponent::new(
-        component_id.clone(),
-        game.id().clone(),
-        ComponentKind::NativeLibrary,
-        LibraryTechnology::D3D12Agility,
-        Swappability::Swappable,
-    )
-    .with_file(
-        ComponentFile::new(path_as_ref(&live_dll))
-            .with_sha256(sha_of(&live_dll))
-            .with_version(Version::parse("1.606.1").expect("version")),
-    );
-    let artifact = crate::catalog::test_support::d3d12_preview_artifact_at(&source_dll, 619);
-    let storage = SqliteStorage::in_memory().expect("storage");
-    storage.upsert_game(&game).expect("game");
-    storage
-        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
-        .expect("component");
-    storage.upsert_artifact(&artifact).expect("artifact");
-
-    let developer_mode_enabled = Arc::new(AtomicBool::new(true));
-    let status = Arc::clone(&developer_mode_enabled);
-    let context = Context::from_storage(storage).with_developer_mode_status_provider(move || {
-        if status.load(Ordering::SeqCst) {
-            DeveloperModeStatus::Enabled
-        } else {
-            DeveloperModeStatus::Disabled
-        }
-    });
-
-    let plan = crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
-        .expect("enabled Developer Mode should allow planning");
-    assert!(plan.plan.blockers().is_empty());
-    let token = plan.plan.confirmation_token().to_owned();
-    assert!(!token.is_empty());
-
-    developer_mode_enabled.store(false, Ordering::SeqCst);
-    let error = apply_swap_confirmed(
-        &context,
-        game.id(),
-        &component_id,
-        artifact.id(),
-        Some(&token),
-        None,
-    )
-    .expect_err("apply must recheck Developer Mode");
-
-    match error {
-        crate::ServiceError::InvalidInput(message) => {
-            assert!(message.contains("developer_mode_required"));
-        }
-        other => panic!("unexpected error: {other}"),
-    }
-    assert_eq!(
-        fs::read(&executable).expect("unchanged executable"),
-        original_executable
-    );
-    assert_eq!(
-        fs::read(&live_dll).expect("unchanged runtime"),
-        original_runtime
-    );
-}
-
-#[test]
-fn confirmed_first_d3d12_apply_reports_token_mismatch_when_the_executable_changes_or_disappears() {
-    let root = tempfile::tempdir().expect("root");
-    let game_dir = root.path().join("game");
-    let library_dir = root.path().join("library");
-    fs::create_dir_all(&game_dir).expect("game dir");
-    fs::create_dir_all(&library_dir).expect("library dir");
-
-    let executable = game_dir.join("game.exe");
-    let live_dll = game_dir.join("D3D12Core.dll");
-    let source_dll = library_dir.join("D3D12Core.dll");
-    write(
-        &executable,
-        &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606),
-    );
-    write(&live_dll, b"scanned-sdk-606-runtime");
-    write(
-        &source_dll,
-        &crate::addons::test_support::build_nvidia_dlss_pe([1, 619, 1, 0]),
-    );
-
-    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
-    let component_id = ComponentId::new("component:d3d12-missing-after-plan").expect("component");
-    let component = LibraryComponent::new(
-        component_id.clone(),
-        game.id().clone(),
-        ComponentKind::NativeLibrary,
-        LibraryTechnology::D3D12Agility,
-        Swappability::Swappable,
-    )
-    .with_file(
-        ComponentFile::new(path_as_ref(&live_dll))
-            .with_sha256(sha_of(&live_dll))
-            .with_version(Version::parse("1.606.1").expect("version")),
-    );
-    let artifact = d3d12_artifact_at(&source_dll, 619);
-    let storage = SqliteStorage::in_memory().expect("storage");
-    storage.upsert_game(&game).expect("game");
-    storage
-        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
-        .expect("component");
-    storage.upsert_artifact(&artifact).expect("artifact");
-    let context = Context::from_storage(storage);
-    let plan = crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
-        .expect("plan");
-    let token = plan.plan.confirmation_token().to_owned();
-
-    write(
-        &executable,
-        &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(620),
-    );
-    let error = apply_swap_confirmed(
-        &context,
-        game.id(),
-        &component_id,
-        artifact.id(),
-        Some(&token),
-        None,
-    )
-    .expect_err("an incompatible executable change must reject the confirmation");
-    assert!(matches!(
-        error,
-        crate::ServiceError::ConfirmationTokenMismatch
-    ));
-    assert_eq!(
-        fs::read(&live_dll).expect("unchanged DLL"),
-        b"scanned-sdk-606-runtime"
-    );
-    assert!(!bak_of(&live_dll).exists());
-    assert!(!bak_of(&executable).exists());
-
-    fs::remove_file(&executable).expect("remove executable after planning");
-    let error = apply_swap_confirmed(
-        &context,
-        game.id(),
-        &component_id,
-        artifact.id(),
-        Some(&token),
-        None,
-    )
-    .expect_err("stale executable state must reject the confirmation");
-
-    assert!(matches!(
-        error,
-        crate::ServiceError::ConfirmationTokenMismatch
-    ));
-    assert_eq!(
-        fs::read(&live_dll).expect("unchanged DLL"),
-        b"scanned-sdk-606-runtime"
-    );
-    assert!(!bak_of(&live_dll).exists());
-}
-
-#[test]
-fn every_d3d12_apply_stage_rolls_back_dll_exe_sidecars_and_database_together() {
-    use super::{D3d12ApplyFailurePoint, set_d3d12_apply_failure_point};
-
-    let failure_points = [
-        D3d12ApplyFailurePoint::AfterExecutableBackup,
-        D3d12ApplyFailurePoint::AfterDllMutation,
-        D3d12ApplyFailurePoint::AfterExecutableMutation,
-        D3d12ApplyFailurePoint::BeforeDatabaseCommit,
-    ];
-
-    for (index, failure_point) in failure_points.into_iter().enumerate() {
-        let root = tempfile::tempdir().expect("root");
-        let game_dir = root.path().join("game");
-        let library_dir = root.path().join("library");
-        fs::create_dir_all(&game_dir).expect("game dir");
-        fs::create_dir_all(&library_dir).expect("library dir");
-
-        let executable = game_dir.join("game.exe");
-        let live_dll = game_dir.join("D3D12Core.dll");
-        let source_dll = library_dir.join("D3D12Core.dll");
-        let original_executable =
-            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
-        let original_dll = b"original-sdk-606-runtime";
-        write(&executable, &original_executable);
-        write(&live_dll, original_dll);
-        write(
-            &source_dll,
-            &crate::addons::test_support::build_nvidia_dlss_pe([1, 619, 1, 0]),
-        );
-
-        let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
-        let component_id =
-            ComponentId::new(format!("component:d3d12-failure-{index}")).expect("component");
-        let original_component = LibraryComponent::new(
-            component_id.clone(),
-            game.id().clone(),
-            ComponentKind::NativeLibrary,
-            LibraryTechnology::D3D12Agility,
-            Swappability::Swappable,
-        )
-        .with_file(
-            ComponentFile::new(path_as_ref(&live_dll))
-                .with_sha256(sha_of(&live_dll))
-                .with_version(Version::parse("1.606.1").expect("version")),
-        );
-        let artifact = d3d12_artifact_at(&source_dll, 619);
-        let storage = SqliteStorage::in_memory().expect("storage");
-        storage.upsert_game(&game).expect("game");
-        storage
-            .replace_components_for_game(game.id(), std::slice::from_ref(&original_component))
-            .expect("component");
-        storage.upsert_artifact(&artifact).expect("artifact");
-        let context = Context::from_storage(storage);
-        let plan =
-            crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
-                .expect("plan");
-        let token = plan.plan.confirmation_token().to_owned();
-
-        let _failure = set_d3d12_apply_failure_point(failure_point);
-        apply_swap_confirmed(
-            &context,
-            game.id(),
-            &component_id,
-            artifact.id(),
-            Some(&token),
-            None,
-        )
-        .expect_err("injected failure must abort the entire durable mutation");
-
-        assert_eq!(
-            fs::read(&live_dll).expect("live DLL"),
-            original_dll,
-            "DLL bytes were not restored after {failure_point:?}"
-        );
-        assert_eq!(
-            fs::read(&executable).expect("live EXE"),
-            original_executable,
-            "EXE bytes were not restored after {failure_point:?}"
-        );
-        assert!(
-            !bak_of(&live_dll).exists(),
-            "DLL backup created by a failed first swap survived {failure_point:?}"
-        );
-        assert!(
-            !bak_of(&executable).exists(),
-            "EXE backup created by a failed first swap survived {failure_point:?}"
-        );
-        assert!(
-            context
-                .storage()
-                .get_component_backup(&component_id)
-                .expect("baseline lookup")
-                .is_none(),
-            "rollback aggregate was persisted after {failure_point:?}"
-        );
-        assert_eq!(
-            context
-                .storage()
-                .list_components_for_game(game.id())
-                .expect("stored components"),
-            vec![original_component],
-            "component catalog changed after {failure_point:?}"
-        );
-    }
-}
-
-#[test]
-fn every_d3d12_rollback_stage_restores_the_active_state_and_keeps_retry_sidecars() {
-    use super::{D3d12RollbackFailurePoint, set_d3d12_rollback_failure_point};
-
-    let failure_points = [
-        D3d12RollbackFailurePoint::AfterDllRestore,
-        D3d12RollbackFailurePoint::AfterExecutableRestore,
-        D3d12RollbackFailurePoint::AfterDllSidecarRelease,
-        D3d12RollbackFailurePoint::AfterExecutableSidecarRelease,
-        D3d12RollbackFailurePoint::BeforeDatabaseCommit,
-    ];
-
-    for (index, failure_point) in failure_points.into_iter().enumerate() {
-        let root = tempfile::tempdir().expect("root");
-        let game_dir = root.path().join("game");
-        fs::create_dir_all(&game_dir).expect("game dir");
-        let executable = game_dir.join("game.exe");
-        let live_dll = game_dir.join("D3D12Core.dll");
-        let executable_backup = bak_of(&executable);
-        let dll_backup = bak_of(&live_dll);
-        let original_executable =
-            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
-        let active_executable =
-            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619);
-        let original_dll = b"original-sdk-606-runtime";
-        let active_dll = b"active-sdk-619-runtime";
-        write(&executable, &active_executable);
-        write(&executable_backup, &original_executable);
-        write(&live_dll, active_dll);
-        write(&dll_backup, original_dll);
-
-        let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
-        let component_id = ComponentId::new(format!("component:d3d12-rollback-failure-{index}"))
-            .expect("component");
-        let active_component = LibraryComponent::new(
-            component_id.clone(),
-            game.id().clone(),
-            ComponentKind::NativeLibrary,
-            LibraryTechnology::D3D12Agility,
-            Swappability::Swappable,
-        )
-        .with_file(
-            ComponentFile::new(path_as_ref(&live_dll))
-                .with_sha256(sha_of(&live_dll))
-                .with_version(Version::parse("1.619.1").expect("version")),
-        );
-        let rollback_baseline = ComponentRollbackBaseline::new(vec![
-            ComponentFile::new(path_as_ref(&live_dll))
-                .with_sha256(sha_of(&dll_backup))
-                .with_version(Version::parse("1.606.1").expect("version")),
-        ])
-        .with_d3d12_executable(D3d12ExecutableBaseline::new(
-            path_as_ref(&executable),
-            D3d12ExecutableIdentity::new(
-                606,
-                renderpilot_detection::sha256_bytes(&original_executable)
-                    .expect("original EXE hash"),
-            ),
-            D3d12ExecutableIdentity::new(
-                619,
-                renderpilot_detection::sha256_bytes(&active_executable).expect("active EXE hash"),
-            ),
-        ));
-        let storage = SqliteStorage::in_memory().expect("storage");
-        storage.upsert_game(&game).expect("game");
-        storage
-            .replace_components_for_game(game.id(), std::slice::from_ref(&active_component))
-            .expect("component");
-        storage
-            .recover_component_rollback_baseline(game.id(), &component_id, &rollback_baseline)
-            .expect("rollback aggregate");
-        let context = Context::from_storage(storage);
-        let plan = crate::catalog::build_rollback_plan(&context, game.id(), &component_id)
-            .expect("rollback plan");
-        let action = plan.d3d12_executable_action().expect("EXE restore");
-        assert!(!action.requires_confirmation());
-
-        let _failure = set_d3d12_rollback_failure_point(failure_point);
-        crate::catalog::rollback_component(&context, game.id(), &component_id)
-            .expect_err("injected failure must abort the entire durable rollback");
-
-        assert_eq!(
-            fs::read(&live_dll).expect("live DLL"),
-            active_dll,
-            "active DLL bytes were not restored after {failure_point:?}"
-        );
-        assert_eq!(
-            fs::read(&executable).expect("live EXE"),
-            active_executable,
-            "active EXE bytes were not restored after {failure_point:?}"
-        );
-        assert_eq!(
-            fs::read(&dll_backup).expect("DLL backup"),
-            original_dll,
-            "retryable DLL sidecar was lost after {failure_point:?}"
-        );
-        assert_eq!(
-            fs::read(&executable_backup).expect("EXE backup"),
-            original_executable,
-            "retryable EXE sidecar was lost after {failure_point:?}"
-        );
-        assert_eq!(
-            context
-                .storage()
-                .get_component_backup(&component_id)
-                .expect("baseline lookup"),
-            Some(rollback_baseline),
-            "rollback aggregate changed after {failure_point:?}"
-        );
-        assert_eq!(
-            context
-                .storage()
-                .list_components_for_game(game.id())
-                .expect("stored components"),
-            vec![active_component],
-            "component catalog changed after {failure_point:?}"
-        );
-    }
-}
-
-#[test]
-fn d3d12_rollback_revalidates_live_dll_without_user_confirmation() {
-    let root = tempfile::tempdir().expect("root");
-    let game_dir = root.path().join("game");
-    fs::create_dir_all(&game_dir).expect("game dir");
-    let executable = game_dir.join("game.exe");
-    let live_dll = game_dir.join("D3D12Core.dll");
-    let original_executable =
-        crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
-    let active_executable = crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619);
-    write(&executable, &active_executable);
-    write(&bak_of(&executable), &original_executable);
-    write(&live_dll, b"active-sdk-619-runtime");
-    write(&bak_of(&live_dll), b"original-sdk-606-runtime");
-
-    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
-    let component_id = ComponentId::new("component:d3d12-stale-rollback").expect("component");
-    let component = LibraryComponent::new(
-        component_id.clone(),
-        game.id().clone(),
-        ComponentKind::NativeLibrary,
-        LibraryTechnology::D3D12Agility,
-        Swappability::Swappable,
-    )
-    .with_file(
-        ComponentFile::new(path_as_ref(&live_dll))
-            .with_sha256(sha_of(&live_dll))
-            .with_version(Version::parse("1.619.1").expect("version")),
-    );
-    let rollback_baseline = ComponentRollbackBaseline::new(vec![
-        ComponentFile::new(path_as_ref(&live_dll))
-            .with_sha256(sha_of(&bak_of(&live_dll)))
-            .with_version(Version::parse("1.606.1").expect("version")),
-    ])
-    .with_d3d12_executable(D3d12ExecutableBaseline::new(
-        path_as_ref(&executable),
-        D3d12ExecutableIdentity::new(
-            606,
-            renderpilot_detection::sha256_bytes(&original_executable).expect("original EXE hash"),
-        ),
-        D3d12ExecutableIdentity::new(
-            619,
-            renderpilot_detection::sha256_bytes(&active_executable).expect("active EXE hash"),
-        ),
-    ));
-    let storage = SqliteStorage::in_memory().expect("storage");
-    storage.upsert_game(&game).expect("game");
-    storage
-        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
-        .expect("component");
-    storage
-        .recover_component_rollback_baseline(game.id(), &component_id, &rollback_baseline)
-        .expect("rollback aggregate");
-    let context = Context::from_storage(storage);
-    let plan = crate::catalog::build_rollback_plan(&context, game.id(), &component_id)
-        .expect("rollback plan");
-    let affected = plan
-        .affected_files()
-        .iter()
-        .map(PathRef::as_str)
-        .collect::<Vec<_>>();
-    assert!(
-        affected
-            .iter()
-            .any(|path| crate::paths::same_path(Path::new(path), &bak_of(&live_dll))),
-        "DLL sidecar is missing from {affected:?}"
-    );
-    assert!(
-        affected
-            .iter()
-            .any(|path| crate::paths::same_path(Path::new(path), &bak_of(&executable))),
-        "EXE sidecar is missing from {affected:?}"
-    );
-    let action = plan.d3d12_executable_action().expect("EXE restore");
-    assert!(!action.requires_confirmation());
-
-    write(&live_dll, b"externally-changed-after-plan");
-    crate::catalog::rollback_component(&context, game.id(), &component_id)
-        .expect_err("changed live DLL must fail fresh rollback validation");
-    assert_eq!(
-        fs::read(&executable).expect("unchanged active EXE"),
-        active_executable
-    );
-    assert_eq!(
-        fs::read(bak_of(&executable)).expect("unchanged EXE backup"),
-        original_executable
-    );
 }
 
 #[test]
@@ -2271,17 +1205,38 @@ fn reswap_keeps_one_immutable_classic_baseline() {
     apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, c.id())
         .expect("B to C");
 
+    assert_eq!(fs::read(&fx.live).expect("live C"), b"replacement-c");
+    assert_eq!(sha_of(&fx.live), sha_of(&source_c));
     assert_eq!(fs::read(&sidecar).unwrap(), b"original-a");
     assert_eq!(sha_of(&sidecar), original_hash);
+
+    let baseline = fx
+        .context
+        .storage()
+        .get_component_backup(&fx.component_id)
+        .unwrap()
+        .expect("baseline");
+    assert_eq!(baseline.files()[0].sha256(), Some(&original_hash));
+
+    let stored_components = fx
+        .context
+        .storage()
+        .list_components_for_game(fx.game.id())
+        .expect("stored components");
+    assert_eq!(stored_components.len(), 1);
     assert_eq!(
+        stored_components[0].files()[0].sha256(),
+        Some(&sha_of(&source_c)),
+        "active stored component file must reflect replacement-c"
+    );
+
+    assert!(
         fx.context
             .storage()
-            .get_component_backup(&fx.component_id)
-            .unwrap()
-            .expect("baseline")
-            .files()[0]
-            .sha256(),
-        Some(&original_hash)
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "pending mutation journal must be clean after second swap"
     );
 }
 
@@ -2302,24 +1257,45 @@ fn reswap_does_not_rebase_a_record_whose_classic_sidecar_was_removed() {
     fs::remove_file(&sidecar).expect("manual backup removal");
 
     assert!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "pending journal must be clean after A to B swap"
+    );
+
+    assert!(
         crate::catalog::backup_component_ids(&fx.context, fx.game.id())
             .expect("backup availability")
             .is_empty(),
         "a stale database row must not advertise rollback"
     );
+    let rollback_err = rollback_component(&fx.context, fx.game.id(), &fx.component_id)
+        .expect_err("rollback without physical baseline bytes must be rejected");
     assert!(
-        rollback_component(&fx.context, fx.game.id(), &fx.component_id).is_err(),
-        "rollback without physical baseline bytes must be rejected"
+        matches!(
+            rollback_err,
+            crate::ServiceError::InvalidInput(ref message)
+                if message.contains("rollback baseline for component") && message.contains("is incomplete")
+        ),
+        "expected incomplete baseline error on rollback, got {rollback_err:?}"
     );
     assert_eq!(
         fs::read(&fx.live).expect("B remains live"),
         b"replacement-b"
     );
 
-    assert!(
+    let reswap_err =
         apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, c.id())
-            .is_err(),
-        "a missing immutable baseline must block the reswap"
+            .expect_err("a missing immutable baseline must block the reswap");
+    assert!(
+        matches!(
+            reswap_err,
+            crate::ServiceError::InvalidInput(ref message)
+                if message.contains("rollback baseline for component") && message.contains("is incomplete")
+        ),
+        "expected incomplete baseline error on reswap, got {reswap_err:?}"
     );
     assert!(
         !sidecar.exists(),
@@ -2345,11 +1321,24 @@ fn reswap_does_not_rebase_a_record_whose_classic_sidecar_was_removed() {
             .is_empty(),
         "rollback must remain unavailable without physical baseline bytes"
     );
+    assert!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "pending journal must remain clean after rejected rollback and reswap"
+    );
 }
 
 #[test]
 fn catalog_apply_rejects_external_or_missing_live_state_before_mutation() {
     let fx = fresh_dlss_fixture("fresh-live", b"scanned-original");
+    let initial_components = fx
+        .context
+        .storage()
+        .list_components_for_game(fx.game.id())
+        .expect("components");
     let source = write_library_dlss(&fx.library_dir, "lib", b"replacement");
     let artifact = dlss_artifact(&source, "3.8.0.0");
     fx.context
@@ -2358,52 +1347,33 @@ fn catalog_apply_rejects_external_or_missing_live_state_before_mutation() {
         .expect("artifact");
 
     write(&fx.live, b"external-replacement");
-    assert!(
+    let error_modified =
         apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, artifact.id())
-            .is_err()
+            .expect_err("modified live bytes must fail preflight");
+    assert!(
+        matches!(
+            error_modified,
+            crate::ServiceError::InvalidInput(ref message) if message.contains("changed on disk")
+        ),
+        "expected changed-on-disk error, got {error_modified:?}"
     );
     assert_eq!(fs::read(&fx.live).expect("live"), b"external-replacement");
     assert!(!bak_of(&fx.live).exists());
-
-    fs::remove_file(&fx.live).expect("remove");
-    assert!(
-        apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, artifact.id())
-            .is_err()
-    );
-    assert!(!fx.live.exists());
-    assert!(!bak_of(&fx.live).exists());
-}
-
-#[test]
-fn catalog_apply_rejects_missing_safety_context_before_target_or_durable_write() {
-    let fx = fresh_dlss_fixture("missing-safety-context", b"original");
-    let source = write_library_dlss(&fx.library_dir, "lib", b"overlay");
-    let artifact = dlss_artifact(&source, "3.8.0.0");
-    fx.context
-        .storage()
-        .upsert_artifact(&artifact)
-        .expect("artifact");
-
-    let error = crate::FileSafetyAuthority::new()
-        .game_permit(fx.game.id().clone(), None)
-        .expect_err("missing game safety context must reject the apply");
-    assert!(matches!(
-        error,
-        crate::ServiceError::SafetyContextMissing { .. }
-    ));
     assert_eq!(
-        fs::read(&fx.live).expect("target remains readable"),
-        b"original",
-        "safety rejection must precede the first target write"
+        fx.context
+            .storage()
+            .list_components_for_game(fx.game.id())
+            .expect("components"),
+        initial_components,
+        "component projection must remain unchanged on preflight rejection"
     );
-    assert!(!bak_of(&fx.live).exists(), "no backup may be created");
     assert!(
         fx.context
             .storage()
             .get_component_backup(&fx.component_id)
-            .expect("baseline query")
+            .expect("backup query")
             .is_none(),
-        "safety rejection must not create a durable baseline row"
+        "preflight rejection must not create a rollback baseline row"
     );
     assert!(
         fx.context
@@ -2411,8 +1381,65 @@ fn catalog_apply_rejects_missing_safety_context_before_target_or_durable_write()
             .pending_file_mutations_for_game(fx.game.id())
             .expect("pending mutation query")
             .is_empty(),
-        "safety rejection must not prepare a durable mutation"
+        "preflight rejection must not prepare a durable mutation"
     );
+
+    fs::remove_file(&fx.live).expect("remove");
+    let error_missing =
+        apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, artifact.id())
+            .expect_err("missing live file must fail preflight");
+    assert!(
+        matches!(
+            error_missing,
+            crate::ServiceError::InvalidInput(ref message) if message.contains("changed on disk")
+        ),
+        "expected changed-on-disk error for missing live file, got {error_missing:?}"
+    );
+    assert!(!fx.live.exists());
+    assert!(!bak_of(&fx.live).exists());
+    assert_eq!(
+        fx.context
+            .storage()
+            .list_components_for_game(fx.game.id())
+            .expect("components"),
+        initial_components,
+        "component projection must remain unchanged on missing live file rejection"
+    );
+    assert!(
+        fx.context
+            .storage()
+            .get_component_backup(&fx.component_id)
+            .expect("backup query")
+            .is_none(),
+        "missing live file rejection must not create a rollback baseline row"
+    );
+    assert!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "missing live file rejection must not prepare a durable mutation"
+    );
+}
+
+#[test]
+fn catalog_swap_missing_or_blank_safety_context_rejects_permit_acquisition() {
+    let game_id = GameId::new("manual:missing-safety-context").expect("game id");
+    let authority = crate::FileSafetyAuthority::new();
+
+    for context_token in [None, Some(""), Some(" \t ")] {
+        let error = authority
+            .game_permit(game_id.clone(), context_token)
+            .expect_err("missing or blank context must not issue a game permit");
+
+        assert_eq!(
+            error,
+            crate::ServiceError::SafetyContextMissing {
+                scope: crate::file_safety::SafetyScope::Game(game_id.clone()),
+            }
+        );
+    }
 }
 
 #[test]
@@ -2445,10 +1472,12 @@ fn catalog_apply_rejects_stale_safety_context_before_target_or_durable_write() {
         Some(&assessment.context_token),
     )
     .expect_err("stale game safety context must reject the apply");
-    assert!(matches!(
+    assert_eq!(
         error,
-        crate::ServiceError::SafetyContextStale { .. }
-    ));
+        crate::ServiceError::SafetyContextStale {
+            scope: crate::file_safety::SafetyScope::Game(fx.game.id().clone()),
+        }
+    );
     assert_eq!(
         fs::read(&fx.live).expect("target remains readable"),
         b"original",
@@ -2502,10 +1531,13 @@ fn catalog_apply_rejects_a_different_game_safety_context_before_target_or_durabl
         Some(&assessment.context_token),
     )
     .expect_err("a permit for another game must reject the apply");
-    assert!(matches!(
+    assert_eq!(
         error,
-        crate::ServiceError::SafetyContextScopeMismatch { .. }
-    ));
+        crate::ServiceError::SafetyContextScopeMismatch {
+            expected: crate::file_safety::SafetyScope::Game(fx.game.id().clone()),
+            actual: crate::file_safety::SafetyScope::Unknown,
+        }
+    );
     assert_eq!(
         fs::read(&fx.live).expect("target remains readable"),
         b"original",
@@ -2542,10 +1574,62 @@ fn catalog_rollback_rejects_a_tampered_sidecar_without_changes() {
     apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, artifact.id())
         .expect("swap");
 
+    let baseline_before = fx
+        .context
+        .storage()
+        .get_component_backup(&fx.component_id)
+        .expect("baseline query");
+    assert!(
+        baseline_before.is_some(),
+        "swap must record a component rollback baseline"
+    );
+    let components_before = fx
+        .context
+        .storage()
+        .list_components_for_game(fx.game.id())
+        .expect("stored components query");
+    let pending_before = fx
+        .context
+        .storage()
+        .pending_file_mutations_for_game(fx.game.id())
+        .expect("pending mutation query");
+
     write(&bak_of(&fx.live), b"tampered");
-    assert!(rollback_component(&fx.context, fx.game.id(), &fx.component_id).is_err());
+    let error = rollback_component(&fx.context, fx.game.id(), &fx.component_id)
+        .expect_err("tampered sidecar must fail rollback");
+    assert!(
+        matches!(
+            error,
+            crate::ServiceError::InvalidInput(ref message) if message.contains("cannot validate rollback baseline")
+        ),
+        "expected cannot-validate-baseline error, got {error:?}"
+    );
     assert_eq!(fs::read(&fx.live).expect("live"), b"overlay");
     assert_eq!(fs::read(bak_of(&fx.live)).expect("sidecar"), b"tampered");
+    assert_eq!(
+        fx.context
+            .storage()
+            .get_component_backup(&fx.component_id)
+            .expect("baseline query"),
+        baseline_before,
+        "rollback rejection must preserve the previously recorded baseline"
+    );
+    assert_eq!(
+        fx.context
+            .storage()
+            .list_components_for_game(fx.game.id())
+            .expect("stored components query"),
+        components_before,
+        "rollback rejection must preserve the current stored component projection"
+    );
+    assert_eq!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutation query"),
+        pending_before,
+        "rollback rejection must preserve the pending file mutation journal state"
+    );
 }
 
 #[test]
@@ -2598,17 +1682,49 @@ fn swap_over_luma_owned_dlss_adopts_its_original_sidecar_without_rewriting_it() 
     apply_swap_with_current_safety(&context, game.id(), &component_id, artifact.id())
         .expect("swap");
 
+    assert_eq!(fs::read(&live).unwrap(), b"library-overlay");
+    assert_eq!(sha_of(&live), sha_of(&source));
     assert_eq!(fs::read(&sidecar).unwrap(), b"exact-original");
+    assert_eq!(sha_of(&sidecar), original_hash);
+
     let baseline = context
         .storage()
         .get_component_backup(&component_id)
         .unwrap()
         .expect("baseline");
+    assert_eq!(baseline.files().len(), 1);
     assert_eq!(baseline.files()[0].sha256(), Some(&original_hash));
+
+    let stored_components = context
+        .storage()
+        .list_components_for_game(game.id())
+        .expect("stored components");
+    assert_eq!(stored_components.len(), 1);
+    assert_eq!(
+        stored_components[0].files()[0].sha256(),
+        Some(&sha_of(&source))
+    );
+
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "pending mutation journal must be clean after swap over luma-owned DLSS"
+    );
 
     rollback_component(&context, game.id(), &component_id).expect("catalog rollback");
     assert_eq!(fs::read(&live).unwrap(), b"exact-original");
     assert!(!sidecar.exists());
+    assert!(
+        context
+            .storage()
+            .get_component_backup(&component_id)
+            .expect("baseline query")
+            .is_none(),
+        "baseline record must be deleted upon catalog rollback"
+    );
     assert!(
         context
             .storage()
@@ -2618,6 +1734,15 @@ fn swap_over_luma_owned_dlss_adopts_its_original_sidecar_without_rewriting_it() 
             .managed_files()
             .is_empty()
     );
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "pending mutation journal must be clean after rollback"
+    );
+
     crate::addons::luma::use_cases::commands::uninstall::uninstall(&context, game.id())
         .expect("Luma uninstall after catalog rollback");
     assert_eq!(fs::read(&live).unwrap(), b"exact-original");
@@ -2666,6 +1791,7 @@ fn swap_over_luma_owned_absent_dlss_does_not_promote_luma_bytes_to_baseline() {
         .expect("swap");
 
     assert_eq!(fs::read(&live).unwrap(), b"library-overlay");
+    assert_eq!(sha_of(&live), sha_of(&source));
     assert!(!bak_of(&live).exists());
     let baseline = context
         .storage()
@@ -2679,8 +1805,36 @@ fn swap_over_luma_owned_absent_dlss_does_not_promote_luma_bytes_to_baseline() {
         Some(&sha_of(&live))
     );
 
+    let stored_components = context
+        .storage()
+        .list_components_for_game(game.id())
+        .expect("stored components");
+    assert_eq!(stored_components.len(), 1);
+    assert_eq!(
+        stored_components[0].files()[0].sha256(),
+        Some(&sha_of(&source))
+    );
+
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "pending mutation journal must be clean after swap over absent luma file"
+    );
+
     rollback_component(&context, game.id(), &component_id).expect("catalog rollback");
     assert!(!live.exists());
+    assert!(!bak_of(&live).exists());
+    assert!(
+        context
+            .storage()
+            .get_component_backup(&component_id)
+            .expect("baseline query")
+            .is_none(),
+        "baseline record must be deleted upon catalog rollback"
+    );
     assert!(
         context
             .storage()
@@ -2698,6 +1852,15 @@ fn swap_over_luma_owned_absent_dlss_does_not_promote_luma_bytes_to_baseline() {
             .managed_files()
             .is_empty()
     );
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "pending mutation journal must be clean after absent rollback"
+    );
+
     crate::addons::luma::use_cases::commands::uninstall::uninstall(&context, game.id())
         .expect("Luma uninstall after absent rollback");
     assert!(!live.exists());
@@ -2826,6 +1989,57 @@ fn streamline_package_apply_updates_all_installed_plugins_not_extras() {
             "each stored file must remain version-unknown when PE metadata is absent"
         );
     }
+
+    // Physical backup sidecars must exist for the 3 installed plugins and retain original contents.
+    for name in ["sl.common.dll", "sl.interposer.dll", "sl.dlss.dll"] {
+        let sidecar = bak_of(&game_dir.join(name));
+        assert!(
+            sidecar.exists(),
+            "sidecar backup for {name} must exist on disk"
+        );
+        assert_eq!(
+            fs::read(&sidecar).expect("read backup sidecar"),
+            format!("old-{name}").as_bytes(),
+            "sidecar for {name} must preserve original game bytes"
+        );
+    }
+    // Extra package member must not have a sidecar backup.
+    assert!(
+        !bak_of(&game_dir.join("sl.pcl.dll")).exists(),
+        "extra uninstalled package member must not produce a backup sidecar"
+    );
+
+    // Stored baseline in SQLite must contain exactly the 3 original plugins.
+    let baseline = context
+        .storage()
+        .get_component_backup(&ComponentId::new("component:streamline").expect("id"))
+        .expect("baseline query")
+        .expect("baseline must be recorded for package swap");
+    assert_eq!(
+        baseline.files().len(),
+        3,
+        "baseline must record exactly the 3 pre-existing plugins"
+    );
+    for file in baseline.files() {
+        let name = file.path().file_name().expect("baseline basename");
+        let expected_hash = renderpilot_detection::sha256_bytes(format!("old-{name}").as_bytes())
+            .expect("hash bytes");
+        assert_eq!(
+            file.sha256(),
+            Some(&expected_hash),
+            "baseline hash for {name} must match original game file"
+        );
+    }
+
+    // Pending mutation journal must be clean after committed apply.
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "pending file mutation journal must be empty after successful package apply"
+    );
 }
 
 #[test]
@@ -2877,7 +2091,7 @@ fn preview_keeps_stale_artifact_but_apply_invalidates_it_at_mutation_boundary() 
     let storage = SqliteStorage::in_memory().expect("sqlite");
     storage.upsert_game(&game).expect("store game");
     storage
-        .replace_components_for_game(game.id(), &[component])
+        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
         .expect("store components");
     storage.upsert_artifact(&artifact).expect("store artifact");
     let artifact_id = artifact.id().clone();
@@ -2888,10 +2102,7 @@ fn preview_keeps_stale_artifact_but_apply_invalidates_it_at_mutation_boundary() 
         crate::catalog::build_swap_plan(&context, game.id(), &component_id, &artifact_id)
             .err()
             .expect("preview must reject stale source");
-    assert!(matches!(
-        preview_error,
-        crate::ServiceError::StaleReplacementSource
-    ));
+    assert_eq!(preview_error, crate::ServiceError::StaleReplacementSource);
 
     let remaining = context.storage().list_artifacts().expect("list artifacts");
     assert!(
@@ -2900,14 +2111,32 @@ fn preview_keeps_stale_artifact_but_apply_invalidates_it_at_mutation_boundary() 
             .any(|artifact| artifact.id() == &artifact_id),
         "read-only preview must preserve the stale catalog row"
     );
+    assert_eq!(
+        fs::read(&target).expect("game file"),
+        b"dlss-game-original",
+        "read-only preview must not modify the installed DLL"
+    );
+    assert_eq!(
+        context
+            .storage()
+            .list_components_for_game(game.id())
+            .expect("components"),
+        vec![component.clone()],
+        "read-only preview must not modify the stored component projection"
+    );
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(game.id())
+            .expect("pending")
+            .is_empty(),
+        "read-only preview must not create any pending file mutations"
+    );
 
     let apply_error =
         apply_swap_with_current_safety(&context, game.id(), &component_id, &artifact_id)
             .expect_err("apply must reject stale source");
-    assert!(matches!(
-        apply_error,
-        crate::ServiceError::StaleReplacementSource
-    ));
+    assert_eq!(apply_error, crate::ServiceError::StaleReplacementSource);
 
     let remaining = context.storage().list_artifacts().expect("list artifacts");
     assert!(
@@ -2920,6 +2149,34 @@ fn preview_keeps_stale_artifact_but_apply_invalidates_it_at_mutation_boundary() 
         fs::read(&target).expect("game file"),
         b"dlss-game-original",
         "game DLL must not be modified when prepare fails"
+    );
+    assert!(
+        !bak_of(&target).exists(),
+        "rejected apply must not create a target backup sidecar"
+    );
+    assert!(
+        context
+            .storage()
+            .get_component_backup(&component_id)
+            .expect("backup query")
+            .is_none(),
+        "rejected apply must not record an incorrect rollback baseline"
+    );
+    assert_eq!(
+        context
+            .storage()
+            .list_components_for_game(game.id())
+            .expect("components query"),
+        vec![component],
+        "rejected apply must preserve the stored component projection"
+    );
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(game.id())
+            .expect("pending mutation query")
+            .is_empty(),
+        "rejected apply must leave no pending file mutations behind"
     );
 }
 
@@ -2953,8 +2210,28 @@ fn preview_does_not_recover_an_unrelated_pending_file_mutation() {
     drop(guard);
     write(&sentinel, b"pending-mutated-bytes");
 
+    let pending_before = fx
+        .context
+        .storage()
+        .pending_file_mutations_for_game(fx.game.id())
+        .expect("pending mutations before preview");
+    assert!(
+        !pending_before.is_empty(),
+        "a pending file mutation journal row must exist before preview"
+    );
+
     crate::catalog::build_swap_plan(&fx.context, fx.game.id(), &fx.component_id, artifact.id())
         .expect("preview");
+
+    let pending_after = fx
+        .context
+        .storage()
+        .pending_file_mutations_for_game(fx.game.id())
+        .expect("pending mutations after preview");
+    assert_eq!(
+        pending_before, pending_after,
+        "preview must not advance, cancel, finalize, or modify existing pending journal rows"
+    );
 
     assert_eq!(
         fs::read(&sentinel).expect("sentinel"),
@@ -2969,11 +2246,24 @@ fn preview_does_not_recover_an_unrelated_pending_file_mutation() {
         fs::read(&sentinel).expect("restored sentinel"),
         b"before-pending-mutation"
     );
+    assert!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutations after cleanup")
+            .is_empty(),
+        "test cleanup rollback must clear the pending file mutation journal"
+    );
 }
 
 #[test]
 fn source_change_between_preflight_and_copy_rolls_back_and_invalidates_atomically() {
     let fx = fresh_dlss_fixture("post-copy-source-race", b"installed-original");
+    let components_before = fx
+        .context
+        .storage()
+        .list_components_for_game(fx.game.id())
+        .expect("components before apply");
     let source = write_library_dlss(&fx.library_dir, "candidate", b"replacement-as-declared");
     let artifact = dlss_artifact(&source, "3.7.0.0");
     let artifact_id = artifact.id().clone();
@@ -2989,9 +2279,10 @@ fn source_change_between_preflight_and_copy_rolls_back_and_invalidates_atomicall
     let service_error =
         apply_swap_with_current_safety(&fx.context, fx.game.id(), &fx.component_id, &artifact_id)
             .expect_err("post-preflight source change must fail");
-    assert!(
-        matches!(service_error, crate::ServiceError::StaleReplacementSource),
-        "stable stale-source error expected, got {service_error:?}"
+    assert_eq!(
+        service_error,
+        crate::ServiceError::StaleReplacementSource,
+        "stable stale-source error expected"
     );
 
     assert_eq!(
@@ -3025,6 +2316,26 @@ fn source_change_between_preflight_and_copy_rolls_back_and_invalidates_atomicall
         Some(&restored_hash),
         "component storage must remain bound to the restored bytes"
     );
+    assert_eq!(
+        stored, components_before,
+        "component storage must remain bound to the restored pre-apply component state"
+    );
+    assert!(
+        fx.context
+            .storage()
+            .get_component_backup(&fx.component_id)
+            .expect("baseline lookup")
+            .is_none(),
+        "aborted apply must leave no rollback baseline in storage"
+    );
+    assert!(
+        fx.context
+            .storage()
+            .pending_file_mutations_for_game(fx.game.id())
+            .expect("pending mutations lookup")
+            .is_empty(),
+        "durable rollback must clean up the pending file mutation journal"
+    );
 }
 
 #[test]
@@ -3056,11 +2367,13 @@ fn fsr_members_to_remove_reads_the_baseline_not_the_live_component() {
 
     let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
     assert_eq!(
-        removed
-            .iter()
-            .filter_map(|file| file.path().file_name())
-            .collect::<Vec<_>>(),
-        vec!["amd_fidelityfx_upscaler_dx12.dll"],
+        removed,
+        vec![baseline[1].clone()],
+        "reswap must determine upscaling removals from the immutable baseline ComponentFile"
+    );
+    assert_eq!(
+        removed[0].path().file_name(),
+        Some("amd_fidelityfx_upscaler_dx12.dll")
     );
 }
 
@@ -3130,5 +2443,17 @@ fn fsr_members_to_remove_is_empty_for_a_split_artifact() {
     )
     .expect("artifact");
 
-    assert!(fsr_members_to_remove(&baseline, &artifact, &[]).is_empty());
+    let planned = vec![planned_copy(
+        Path::new("C:/lib/amd_fidelityfx_upscaler_dx12.dll"),
+        Path::new("C:/game/amd_fidelityfx_upscaler_dx12.dll"),
+    )];
+
+    assert!(
+        fsr_members_to_remove(&baseline, &artifact, &planned).is_empty(),
+        "split artifact must not remove upscaling members even with planned copies"
+    );
+    assert!(
+        fsr_members_to_remove(&baseline, &artifact, &[]).is_empty(),
+        "split artifact must not remove upscaling members without planned copies"
+    );
 }
