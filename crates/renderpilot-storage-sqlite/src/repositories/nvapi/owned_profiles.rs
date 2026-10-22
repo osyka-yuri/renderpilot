@@ -324,6 +324,61 @@ impl SqliteStorage {
                 Some(game_id),
                 Some(profile_name),
             )?;
+
+            let owner_state: Option<String> = transaction
+                .query_row(
+                    "SELECT state FROM nvapi_owned_profiles
+                      WHERE game_id = ?1 AND profile_name = ?2",
+                    params![game_id, profile_name],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(storage_error)?;
+
+            match owner_state.as_deref() {
+                Some("active") => {}
+                Some(other) => {
+                    return Err(renderpilot_application::AppError::storage_failed(format!(
+                        "RenderPilot-owned NVIDIA profile for game {game_id} is in state '{other}'; deletion is blocked"
+                    )));
+                }
+                None => {
+                    return Err(renderpilot_application::AppError::storage_failed(format!(
+                        "RenderPilot-owned NVIDIA profile for game {game_id} and profile '{profile_name}' is not registered in storage; deletion is blocked"
+                    )));
+                }
+            }
+
+            let target_info: Option<(String, i32)> = transaction
+                .query_row(
+                    "SELECT kind, profile_is_predefined FROM nvapi_drs_targets
+                      WHERE target_id = ?1 AND profile_name = ?1",
+                    [profile_name],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()
+                .map_err(storage_error)?;
+
+            match target_info {
+                Some((kind, is_predefined)) => {
+                    if kind != "renderpilot" {
+                        return Err(renderpilot_application::AppError::storage_failed(format!(
+                            "NVIDIA profile target '{profile_name}' has kind '{kind}'; only 'renderpilot' owned profiles can be deleted"
+                        )));
+                    }
+                    if is_predefined != 0 {
+                        return Err(renderpilot_application::AppError::storage_failed(format!(
+                            "NVIDIA profile target '{profile_name}' is a predefined driver profile; cannot delete as an owned custom profile"
+                        )));
+                    }
+                }
+                None => {
+                    return Err(renderpilot_application::AppError::storage_failed(format!(
+                        "NVIDIA profile target '{profile_name}' is not registered in storage; deletion is blocked"
+                    )));
+                }
+            }
+
             let outside_claims: bool = transaction
                 .query_row(
                     "SELECT EXISTS(
@@ -351,24 +406,34 @@ impl SqliteStorage {
                     [profile_name],
                 )
                 .map_err(storage_error)?;
-            transaction
+            let deleted_owners = transaction
                 .execute(
                     "DELETE FROM nvapi_owned_profiles WHERE game_id = ?1 AND profile_name = ?2",
                     params![game_id, profile_name],
                 )
                 .map_err(storage_error)?;
+            if deleted_owners != 1 {
+                return Err(renderpilot_application::AppError::storage_failed(
+                    "RenderPilot owned profile row was not deleted",
+                ));
+            }
             transaction
                 .execute(
                     "DELETE FROM nvapi_drs_target_app_witnesses WHERE target_id = ?1",
                     [profile_name],
                 )
                 .map_err(storage_error)?;
-            transaction
+            let deleted_targets = transaction
                 .execute(
                     "DELETE FROM nvapi_drs_targets WHERE target_id = ?1 AND kind = 'renderpilot'",
                     [profile_name],
                 )
                 .map_err(storage_error)?;
+            if deleted_targets != 1 {
+                return Err(renderpilot_application::AppError::storage_failed(
+                    "RenderPilot target row was not deleted",
+                ));
+            }
             delete_pending_nvapi_operation(
                 transaction,
                 op_id,

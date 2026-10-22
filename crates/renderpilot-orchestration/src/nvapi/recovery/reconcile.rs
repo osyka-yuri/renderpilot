@@ -32,7 +32,7 @@ pub(super) fn reconcile_row(
     };
     match row.kind.as_str() {
         "create_profile" => reconcile_create(storage, row, &before, &after, observation),
-        "delete_profile" => reconcile_delete(storage, row, &before, observation),
+        "delete_profile" => reconcile_delete(storage, row, &before, &after, observation),
         "move_profile" => reconcile_move(storage, row, &before, &after, observation),
         "setting" => reconcile_setting(storage, row, &before, &after, observation),
         other => mark_conflict(storage, row, &format!("unknown operation kind `{other}`")),
@@ -87,10 +87,29 @@ fn reconcile_create(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeleteProvenance {
+    LiveDelete,
+    ConfirmedAbsent,
+}
+
+fn parse_delete_provenance(after: &Value) -> Result<DeleteProvenance, String> {
+    match after.get("deletion_provenance") {
+        None => Ok(DeleteProvenance::LiveDelete),
+        Some(Value::String(s)) if s == "confirmed_absent_v1" => {
+            Ok(DeleteProvenance::ConfirmedAbsent)
+        }
+        Some(other) => Err(format!(
+            "unknown or malformed deletion provenance: {other:?}"
+        )),
+    }
+}
+
 fn reconcile_delete(
     storage: &SqliteStorage,
     row: &NvapiPendingOperationRow,
     before: &Value,
+    after: &Value,
     observation: &Observation,
 ) -> AppResult<()> {
     let (
@@ -109,30 +128,39 @@ fn reconcile_delete(
     else {
         return mark_conflict(storage, row, "delete receipt is incomplete");
     };
-    if matches!(observation.named_profile, Lookup::Missing) {
-        // The exact RenderPilot profile identity is absent. The path can now
-        // resolve to a separate NVIDIA profile, so it is deliberately ignored.
-        return storage.complete_nvapi_profile_deletion(&row.op_id, game_id, profile_name);
-    }
-    let (Lookup::Found(named), Lookup::Found(by_path)) =
-        (&observation.named_profile, path_lookup(observation, path))
-    else {
-        return classify_unresolved(storage, row, observation, "delete_profile");
+
+    let provenance = match parse_delete_provenance(after) {
+        Ok(provenance) => provenance,
+        Err(error) => return mark_conflict(storage, row, &error),
     };
-    if named.identity.name == profile_name
-        && !named.identity.is_predefined
-        && by_path.identity.name == profile_name
-        && exact_owned_lifecycle_witness_json_for_path(by_path, path).as_deref()
-            == Some(expected_witness)
-        && composition_json(named).as_deref() == Some(expected_composition)
-    {
-        storage.cancel_nvapi_operation(&row.op_id)
-    } else {
-        mark_conflict(
-            storage,
-            row,
-            "observed profile differs from the exact owned delete before-state",
-        )
+
+    match (
+        provenance,
+        &observation.named_profile,
+        path_lookup(observation, path),
+    ) {
+        (DeleteProvenance::ConfirmedAbsent, Lookup::Missing, Lookup::Missing) => {
+            storage.complete_nvapi_profile_deletion(&row.op_id, game_id, profile_name)
+        }
+        (DeleteProvenance::LiveDelete, Lookup::Missing, Lookup::Missing) => {
+            storage.complete_nvapi_profile_deletion(&row.op_id, game_id, profile_name)
+        }
+        (DeleteProvenance::LiveDelete, Lookup::Missing, Lookup::Found(by_path))
+            if by_path.identity.name != profile_name =>
+        {
+            storage.complete_nvapi_profile_deletion(&row.op_id, game_id, profile_name)
+        }
+        (_, Lookup::Found(named), Lookup::Found(by_path))
+            if named.identity.name == profile_name
+                && !named.identity.is_predefined
+                && by_path.identity.name == profile_name
+                && exact_owned_lifecycle_witness_json_for_path(by_path, path).as_deref()
+                    == Some(expected_witness)
+                && composition_json(named).as_deref() == Some(expected_composition) =>
+        {
+            storage.cancel_nvapi_operation(&row.op_id)
+        }
+        _ => classify_unresolved(storage, row, observation, "delete_profile"),
     }
 }
 
@@ -350,19 +378,19 @@ fn reconcile_setting(
     {
         return mark_conflict(storage, row, "a different game owns this NVIDIA profile");
     }
-    if observed == before_state {
-        if let Some(owner) = storage.get_nvapi_owned_profile_by_name(target_id)?
-            && composition_json(profile).as_deref() != Some(owner.composition_json.as_str())
-        {
-            return mark_conflict(
-                storage,
-                row,
-                "owned profile changed outside RenderPilot before the pending write",
-            );
-        }
-        return storage.cancel_nvapi_setting_operation(&row.op_id);
-    }
     if observed != after_state {
+        if observed == before_state {
+            if let Some(owner) = storage.get_nvapi_owned_profile_by_name(target_id)?
+                && composition_json(profile).as_deref() != Some(owner.composition_json.as_str())
+            {
+                return mark_conflict(
+                    storage,
+                    row,
+                    "owned profile changed outside RenderPilot before the pending write",
+                );
+            }
+            return storage.cancel_nvapi_setting_operation(&row.op_id);
+        }
         return mark_conflict(
             storage,
             row,

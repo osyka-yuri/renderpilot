@@ -116,6 +116,11 @@ mod tests;
 
 pub(super) use create::create_owned_profile;
 pub(super) use delete::delete_owned_profile;
+#[cfg(test)]
+pub(crate) use delete::{
+    Lookup as DeleteLookup, ObservedProfileReceipt, OwnedProfileDeleteDrs, OwnedProfileObservation,
+    delete_owned_profile_with_drs,
+};
 pub(super) use move_profile::move_owned_profile;
 pub(super) use status::profile_status;
 fn open_drs_session() -> Result<DrsSession<'static>, NvapiError> {
