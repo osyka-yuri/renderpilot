@@ -6,6 +6,8 @@ import type {
   CoverArtworkResult,
   AutoScanResponse,
   GameSummary,
+  GameRemovalAssessment,
+  NvapiClaimAbandonmentAuthorization,
   RemoveGameFromCatalogResult,
 } from '@entities/game';
 import type {
@@ -76,7 +78,11 @@ export type DesktopCommandPayloadMap = {
   set_game_cover: { gameId: string; sourcePath: string };
   set_game_favorite: { gameId: string; isFavorite: boolean };
   set_game_hidden: { gameId: string; isHidden: boolean };
-  remove_game_from_catalog: { gameId: string };
+  assess_game_removal: { gameId: string };
+  remove_game_from_catalog: {
+    gameId: string;
+    authorization?: NvapiClaimAbandonmentAuthorization | null;
+  };
   get_catalog_setting: { key: string };
   set_catalog_setting: { key: string; value: string };
   plan_swap: { gameId: string; componentId: string; artifactId: string };
@@ -189,6 +195,7 @@ export type DesktopCommandResultMap = {
   set_game_cover: CoverArtworkResult;
   set_game_favorite: { saved: boolean };
   set_game_hidden: { saved: boolean };
+  assess_game_removal: GameRemovalAssessment;
   remove_game_from_catalog: RemoveGameFromCatalogResult;
   get_catalog_setting: CatalogSettingPayload;
   set_catalog_setting: { saved: boolean };
@@ -268,6 +275,7 @@ const ALL_DESKTOP_COMMANDS = [
   'set_game_cover',
   'set_game_favorite',
   'set_game_hidden',
+  'assess_game_removal',
   'remove_game_from_catalog',
   'get_catalog_setting',
   'set_catalog_setting',

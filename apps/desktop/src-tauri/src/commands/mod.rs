@@ -223,14 +223,30 @@ pub async fn add_game(
 }
 
 #[tauri::command]
+pub async fn assess_game_removal(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let boundary = CommandBoundary::new(CommandOperation::AssessGameRemoval);
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    boundary
+        .run(move || desktop::assess_game_removal(&context, game_id))
+        .await
+}
+
+#[tauri::command]
 pub async fn remove_game_from_catalog(
     game_id: String,
+    authorization: Option<desktop::NvapiClaimAbandonmentAuthorization>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let boundary = CommandBoundary::new(CommandOperation::RemoveGameFromCatalog);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     boundary
-        .run(move || desktop::remove_game_from_catalog(&context, game_id))
+        .run(move || match authorization {
+            Some(auth) => desktop::remove_game_from_catalog_authorized(&context, game_id, auth),
+            None => desktop::remove_game_from_catalog(&context, game_id),
+        })
         .await
 }
 

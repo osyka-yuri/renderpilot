@@ -156,6 +156,48 @@ impl CommandError {
                 Kind::GameRemovalCleanupFailed,
                 format_args!("removing game {game_id} could not complete {action}: {reason}"),
             ),
+            ServiceError::NvapiClaimAuthorizationStale {
+                game_id,
+                target_id,
+                setting_id,
+                detail,
+            } => Self::with_diagnostic(
+                Kind::GameRemovalCleanupFailed,
+                format_args!(
+                    "stale authorization for {game_id} setting {target_id}:{setting_id}: {detail}"
+                ),
+            )
+            .with_reason_code("stale_authorization"),
+            ServiceError::NvapiClaimReleaseBlocked {
+                game_id,
+                target_id,
+                setting_id,
+                reason,
+                detail,
+            } => {
+                let reason_code = match reason {
+                    renderpilot_orchestration::NvapiClaimBlockedReason::WitnessMismatch => {
+                        Some("witness_mismatch")
+                    }
+                    renderpilot_orchestration::NvapiClaimBlockedReason::UncertainObservation => {
+                        Some("uncertain_observation")
+                    }
+                    renderpilot_orchestration::NvapiClaimBlockedReason::RequiredAuthorizationMissing => {
+                        None
+                    }
+                };
+                let error = Self::with_diagnostic(
+                    Kind::GameRemovalCleanupFailed,
+                    format_args!(
+                        "claim release for {game_id} setting {target_id}:{setting_id} is blocked: {detail}"
+                    ),
+                );
+                if let Some(code) = reason_code {
+                    error.with_reason_code(code)
+                } else {
+                    error
+                }
+            }
             ServiceError::StaleReplacementSource => Self::new(Kind::StaleReplacementSource),
             ServiceError::StorageFailed(message) => {
                 Self::with_diagnostic(Kind::StorageFailed, message)

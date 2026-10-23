@@ -98,6 +98,9 @@ pub use self::renodx::{
     renodx_update_dlss_fix, renodx_vulkan_layer_management_status, renodx_vulkan_layer_status,
 };
 pub use self::scan::{
-    AutoScanOutput, add_game, inspect_game_install, remove_game_from_catalog, scan_auto_libraries,
-    scan_auto_libraries_background_output,
+    AutoScanOutput, GameRemovalAssessment, NvapiClaimAbandonmentAuthorization,
+    NvapiClaimAbandonmentToken, NvapiClaimAssessment, NvapiClaimDisposition,
+    NvapiRemovalAssessment, NvapiSettingValueDto, add_game, assess_game_removal,
+    inspect_game_install, remove_game_from_catalog, remove_game_from_catalog_authorized,
+    scan_auto_libraries, scan_auto_libraries_background_output,
 };

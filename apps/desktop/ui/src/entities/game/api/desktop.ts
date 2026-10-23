@@ -7,7 +7,9 @@ import type {
   GameCardsResult,
   GameDetails,
   GameFileSafetyAssessment,
+  GameRemovalAssessment,
   GamesCatalogBootstrap,
+  NvapiClaimAbandonmentAuthorization,
   RemoveGameFromCatalogResult,
   SharedVulkanSafetyAssessment,
 } from '../model/types';
@@ -84,8 +86,18 @@ export async function setGameHidden(
   });
 }
 
-export async function removeGameFromCatalog(gameId: string): Promise<RemoveGameFromCatalogResult> {
+export async function assessGameRemoval(gameId: string): Promise<GameRemovalAssessment> {
+  return invokeDesktop<GameRemovalAssessment>('assess_game_removal', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+export async function removeGameFromCatalog(
+  gameId: string,
+  authorization?: NvapiClaimAbandonmentAuthorization,
+): Promise<RemoveGameFromCatalogResult> {
   return invokeDesktop<RemoveGameFromCatalogResult>('remove_game_from_catalog', {
     gameId: requireNonBlankString(gameId, 'gameId'),
+    authorization: authorization ?? null,
   });
 }

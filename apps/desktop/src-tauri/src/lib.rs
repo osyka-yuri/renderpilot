@@ -266,6 +266,7 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         // Library scanning
         commands::inspect_game_install,
         commands::add_game,
+        commands::assess_game_removal,
         commands::remove_game_from_catalog,
         commands::list_retired_game_leftovers,
         commands::clean_retired_game_leftovers,

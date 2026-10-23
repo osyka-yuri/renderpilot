@@ -154,7 +154,7 @@ export const DESKTOP_COMMAND_ERROR_CONTRACT = {
       messageKey: 'user_message.game_removal_cleanup_failed',
       severity: 'error',
       actions: ['reload_game_details'],
-      reasonCodes: [],
+      reasonCodes: ['stale_authorization', 'witness_mismatch', 'uncertain_observation'],
       recoveryBundlePath: false,
     },
     invalid_argument: {

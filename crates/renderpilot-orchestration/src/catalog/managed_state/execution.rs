@@ -117,8 +117,13 @@ fn execute_game_action(
             )
             .map(|_| ())
         }
-        ManagedInverseAction::RestoreNvapi => {
-            crate::nvapi::ops::restore_game_setting_claims(context, guard, game_id.as_str())
+        ManagedInverseAction::RestoreNvapi { authorization } => {
+            crate::nvapi::ops::restore_game_setting_claims(
+                context,
+                guard,
+                game_id.as_str(),
+                authorization.as_ref(),
+            )
         }
     }
 }
@@ -128,9 +133,13 @@ fn map_action_result(
     game_id: &GameId,
     action: &ManagedInverseAction,
 ) -> Result<(), ServiceError> {
-    result.map_err(|error| ServiceError::GameRemovalCleanupFailed {
-        game_id: game_id.as_str().to_owned(),
-        action: action.label(),
-        reason: error.to_string(),
+    result.map_err(|error| match error {
+        ServiceError::NvapiClaimAuthorizationStale { .. }
+        | ServiceError::NvapiClaimReleaseBlocked { .. } => error,
+        other => ServiceError::GameRemovalCleanupFailed {
+            game_id: game_id.as_str().to_owned(),
+            action: action.label(),
+            reason: other.to_string(),
+        },
     })
 }

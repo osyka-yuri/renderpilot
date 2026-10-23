@@ -677,7 +677,12 @@ pub use execute::{
 };
 pub use operations::list_operations;
 pub use read_service::CatalogReadService;
-pub use remove_game::{RemoveGameFromCatalogResult, remove_game_from_catalog};
+pub use remove_game::{
+    GameRemovalAssessment, NvapiClaimAbandonmentAuthorization, NvapiClaimAbandonmentToken,
+    NvapiClaimAssessment, NvapiClaimDisposition, NvapiRemovalAssessment, NvapiSettingValueDto,
+    RemoveGameFromCatalogResult, RemoveGameOptions, assess_game_removal, remove_game_from_catalog,
+    remove_game_from_catalog_with_options,
+};
 pub use swap::{build_swap_plan, find_candidates};
 
 /// Returns the distinct graphics-technology library tags present in the catalog.

@@ -207,6 +207,41 @@ pub enum ServiceError {
     /// The installed OptiScaler variant for this game has a durable Luma
     /// prerequisite, so removing Luma first would break that installation.
     LumaRequiredByOptiScaler,
+    /// A user-supplied NVAPI claim abandonment authorization was stale because live DRS state changed.
+    NvapiClaimAuthorizationStale {
+        /// Game identity being removed.
+        game_id: String,
+        /// Claim target profile or executable.
+        target_id: String,
+        /// Setting identifier.
+        setting_id: u32,
+        /// Technical mismatch detail.
+        detail: String,
+    },
+    /// An NVAPI setting claim cannot be released or abandoned because identity/witness or observation is invalid.
+    NvapiClaimReleaseBlocked {
+        /// Game identity being removed.
+        game_id: String,
+        /// Claim target profile or executable.
+        target_id: String,
+        /// Setting identifier.
+        setting_id: u32,
+        /// Machine-readable reason why release is blocked.
+        reason: NvapiClaimBlockedReason,
+        /// Detailed description.
+        detail: String,
+    },
+}
+
+/// Machine-readable cause for an NVAPI claim release being blocked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NvapiClaimBlockedReason {
+    /// Live profile identity or executable witness does not match SQLite record.
+    WitnessMismatch,
+    /// Live driver observation failed or returned ambiguous state.
+    UncertainObservation,
+    /// User authorization is required because live state diverged from expected.
+    RequiredAuthorizationMissing,
 }
 
 impl fmt::Display for ServiceError {
@@ -326,6 +361,24 @@ impl fmt::Display for ServiceError {
             ),
             Self::LumaRequiredByOptiScaler => formatter.write_str(
                 "installed OptiScaler requires Luma; uninstall OptiScaler before uninstalling Luma",
+            ),
+            Self::NvapiClaimAuthorizationStale {
+                target_id,
+                setting_id,
+                detail,
+                ..
+            } => write!(
+                formatter,
+                "stale authorization for setting claim {target_id}:{setting_id}; DRS state has changed and must be reassessed: {detail}"
+            ),
+            Self::NvapiClaimReleaseBlocked {
+                target_id,
+                setting_id,
+                detail,
+                ..
+            } => write!(
+                formatter,
+                "NVIDIA claim target {target_id} or executable witness for setting {setting_id} changed ({detail}); cannot safely release claim"
             ),
         }
     }

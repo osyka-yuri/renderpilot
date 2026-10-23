@@ -4,8 +4,9 @@ use serde::Deserialize;
 
 use super::pending::{ensure_no_overlapping_nvapi_operations, require_pending_operation};
 use super::{
-    NvapiGameSettingPreparation, NvapiGlobalSettingPreparation, NvapiSettingOperationCompletion,
-    NvapiSettingOperationScope, NvapiSettingState, NvapiTargetSettingClaimRow,
+    NvapiAuthorizedGlobalSettingSetPreparation, NvapiGameSettingPreparation,
+    NvapiGlobalSettingPreparation, NvapiSettingOperationCompletion, NvapiSettingOperationScope,
+    NvapiSettingState, NvapiTargetSettingClaimRow,
 };
 use crate::{
     SqliteStorage,
@@ -82,6 +83,144 @@ impl SettingBeforeReceipt {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(
+    dead_code,
+    reason = "counts are deserialized to enforce exact schema but are intentionally permitted to drift"
+)]
+struct ParsedProfileIdentity {
+    name: String,
+    is_predefined: bool,
+    application_count: u32,
+    setting_count: u32,
+}
+
+fn validate_authorized_global_identity(
+    profile_name: &str,
+    profile_is_predefined: bool,
+    stored_identity_json: &str,
+    observed_identity_json: &str,
+) -> AppResult<()> {
+    let stored: ParsedProfileIdentity =
+        serde_json::from_str(stored_identity_json).map_err(|error| {
+            storage_context("persisted NVIDIA global profile identity is invalid", error)
+        })?;
+    let observed: ParsedProfileIdentity =
+        serde_json::from_str(observed_identity_json).map_err(|error| {
+            storage_context("invalid observed NVIDIA global profile identity", error)
+        })?;
+
+    if stored.name.trim().is_empty() || observed.name.trim().is_empty() {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "NVIDIA global profile identity name must not be empty",
+        ));
+    }
+    if stored.name != profile_name || observed.name != profile_name {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "NVIDIA global profile identity name does not match requested profile",
+        ));
+    }
+    if !profile_is_predefined || !stored.is_predefined || !observed.is_predefined {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "NVIDIA global profile must be predefined",
+        ));
+    }
+    if stored.name != observed.name || stored.is_predefined != observed.is_predefined {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "NVIDIA global profile stable identity changed",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_new_authorized_global_identity(
+    profile_name: &str,
+    profile_is_predefined: bool,
+    observed_identity_json: &str,
+) -> AppResult<()> {
+    let observed: ParsedProfileIdentity =
+        serde_json::from_str(observed_identity_json).map_err(|error| {
+            storage_context("invalid observed NVIDIA global profile identity", error)
+        })?;
+
+    if observed.name.trim().is_empty() {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "NVIDIA global profile identity name must not be empty",
+        ));
+    }
+    if observed.name != profile_name {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "NVIDIA global profile identity name does not match requested profile",
+        ));
+    }
+    if !profile_is_predefined || !observed.is_predefined {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "NVIDIA global profile must be predefined",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_no_game_associations_for_target(
+    transaction: &rusqlite::Transaction<'_>,
+    target_id: &str,
+) -> AppResult<()> {
+    let has_game_claim_refs: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM nvapi_game_claim_refs WHERE target_id = ?1)",
+            [target_id],
+            |row| row.get(0),
+        )
+        .map_err(storage_error)?;
+    if has_game_claim_refs {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "cannot reapply global setting to a target associated with game setting claims",
+        ));
+    }
+
+    let has_app_witnesses: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM nvapi_drs_target_app_witnesses WHERE target_id = ?1)",
+            [target_id],
+            |row| row.get(0),
+        )
+        .map_err(storage_error)?;
+    if has_app_witnesses {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "cannot reapply global setting to a target associated with application witnesses",
+        ));
+    }
+
+    let has_owned_profile: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM nvapi_owned_profiles WHERE profile_name = ?1)",
+            [target_id],
+            |row| row.get(0),
+        )
+        .map_err(storage_error)?;
+    if has_owned_profile {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "cannot reapply global setting to a target owned by a game profile",
+        ));
+    }
+
+    let has_game_pending: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pending_drs_operations WHERE target_id = ?1 AND game_id IS NOT NULL)",
+            [target_id],
+            |row| row.get(0),
+        )
+        .map_err(storage_error)?;
+    if has_game_pending {
+        return Err(renderpilot_application::AppError::storage_failed(
+            "cannot reapply global setting to a target with active game operations",
+        ));
+    }
+
+    Ok(())
 }
 
 // -----------------------------------------------------------------------------
@@ -532,6 +671,184 @@ impl SqliteStorage {
         })
     }
 
+    /// Persists intent for an authorized global setting `Set(u32)` reapplication,
+    /// validating stable identity and game isolation while allowing stale driver baseline
+    /// expectations and mutable identity counts to be updated cleanly upon finalization.
+    pub fn prepare_nvapi_authorized_global_setting_set(
+        &self,
+        preparation: NvapiAuthorizedGlobalSettingSetPreparation<'_>,
+    ) -> AppResult<()> {
+        let NvapiAuthorizedGlobalSettingSetPreparation {
+            op_id,
+            profile_name,
+            profile_is_predefined,
+            profile_identity_json,
+            setting_id,
+            before,
+            value,
+        } = preparation;
+
+        if profile_name.trim().is_empty() {
+            return Err(renderpilot_application::AppError::storage_failed(
+                "global profile name must not be empty",
+            ));
+        }
+        if op_id.trim().is_empty() {
+            return Err(renderpilot_application::AppError::storage_failed(
+                "operation id must not be empty",
+            ));
+        }
+        if !profile_is_predefined {
+            return Err(renderpilot_application::AppError::storage_failed(
+                "NVIDIA global profile must be predefined",
+            ));
+        }
+        if before.present != before.value.is_some() {
+            return Err(renderpilot_application::AppError::storage_failed(
+                "before setting state has inconsistent presence and value",
+            ));
+        }
+
+        let target_id = profile_name;
+        let after_json = serde_json::json!({
+            "setting_id": setting_id,
+            "present": true,
+            "value": value,
+        })
+        .to_string();
+
+        self.with_transaction(|transaction| {
+            let stored_target: Option<(String, String, i32, String, String)> = transaction
+                .query_row(
+                    "SELECT target_id, profile_name, profile_is_predefined, kind, identity_json
+                       FROM nvapi_drs_targets WHERE profile_name = ?1",
+                    [profile_name],
+                    |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(storage_error)?;
+
+            if let Some((
+                stored_target_id,
+                stored_profile_name,
+                stored_is_predefined,
+                stored_kind,
+                stored_identity_json,
+            )) = stored_target
+            {
+                if stored_target_id != target_id || stored_profile_name != profile_name {
+                    return Err(renderpilot_application::AppError::storage_failed(
+                        "persisted profile name mismatch",
+                    ));
+                }
+                if stored_is_predefined != 1 {
+                    return Err(renderpilot_application::AppError::storage_failed(
+                        "persisted global profile must be predefined",
+                    ));
+                }
+                if stored_kind != "external" {
+                    return Err(renderpilot_application::AppError::storage_failed(
+                        "cannot reapply global setting to a target that is not marked external",
+                    ));
+                }
+                validate_authorized_global_identity(
+                    profile_name,
+                    profile_is_predefined,
+                    &stored_identity_json,
+                    profile_identity_json,
+                )?;
+                ensure_no_game_associations_for_target(transaction, target_id)?;
+            } else {
+                validate_new_authorized_global_identity(
+                    profile_name,
+                    profile_is_predefined,
+                    profile_identity_json,
+                )?;
+                transaction
+                    .execute(
+                        "INSERT INTO nvapi_drs_targets
+                            (target_id, profile_name, profile_is_predefined, kind, identity_json)
+                         VALUES (?1, ?1, 1, 'external', ?2)",
+                        params![profile_name, profile_identity_json],
+                    )
+                    .map_err(storage_error)?;
+            }
+
+            let existing = transaction
+                .query_row(
+                    "SELECT original_present, original_value, expected_present, expected_value
+                       FROM nvapi_target_setting_claims
+                      WHERE target_id = ?1 AND setting_id = ?2",
+                    params![target_id, setting_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, i32>(0)? != 0,
+                            row.get::<_, Option<u32>>(1)?,
+                            row.get::<_, i32>(2)? != 0,
+                            row.get::<_, Option<u32>>(3)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(storage_error)?;
+
+            let claim_was_new = existing.is_none();
+            if claim_was_new {
+                transaction
+                    .execute(
+                        "INSERT INTO nvapi_target_setting_claims
+                            (target_id, setting_id, original_present, original_value,
+                             expected_present, expected_value)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        params![
+                            target_id,
+                            setting_id,
+                            i32::from(before.present),
+                            before.value,
+                            i32::from(before.present),
+                            before.value,
+                        ],
+                    )
+                    .map_err(storage_error)?;
+            }
+
+            let before_json = serde_json::json!({
+                "setting_id": setting_id,
+                "present": before.present,
+                "value": before.value,
+                "claim_was_new": claim_was_new,
+                "reference_was_new": false,
+            })
+            .to_string();
+
+            ensure_no_overlapping_nvapi_operations(
+                transaction,
+                Some(target_id),
+                &before_json,
+                &after_json,
+            )?;
+
+            transaction
+                .execute(
+                    "INSERT INTO pending_drs_operations
+                        (op_id, game_id, target_id, kind, before_json, after_json, phase)
+                     VALUES (?1, NULL, ?2, 'setting', ?3, ?4, 'intent')",
+                    params![op_id, target_id, before_json, after_json],
+                )
+                .map_err(storage_error)?;
+
+            Ok(())
+        })
+    }
+
     /// Publishes a setting's verified expected state and receipt after reload
     /// confirmed the requested driver state.
     pub fn finish_nvapi_setting_operation(
@@ -671,13 +988,31 @@ impl SqliteStorage {
         setting_id: u32,
     ) -> AppResult<()> {
         self.with_transaction(|transaction| {
-            transaction
+            let pending_count: i64 = transaction
+                .query_row(
+                    "SELECT COUNT(*) FROM pending_drs_operations WHERE target_id = ?1",
+                    [target_id],
+                    |row| row.get(0),
+                )
+                .map_err(storage_error)?;
+            if pending_count > 0 {
+                return Err(renderpilot_application::AppError::storage_failed(
+                    "cannot release setting claim with pending DRS operations",
+                ));
+            }
+
+            let affected = transaction
                 .execute(
                     "DELETE FROM nvapi_game_claim_refs
                   WHERE game_id = ?1 AND target_id = ?2 AND setting_id = ?3",
                     params![game_id, target_id, setting_id],
                 )
                 .map_err(storage_error)?;
+            if affected == 0 {
+                return Err(renderpilot_application::AppError::storage_failed(
+                    "game setting claim reference not found",
+                ));
+            }
             transaction
                 .execute(
                     "DELETE FROM nvapi_target_setting_claims

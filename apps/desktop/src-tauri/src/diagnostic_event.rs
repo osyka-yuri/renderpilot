@@ -28,6 +28,7 @@ closed_codes! {
     CommandOperation {
         InspectGameInstall => "inspect_game_install",
         AddGame => "add_game",
+        AssessGameRemoval => "assess_game_removal",
         RemoveGameFromCatalog => "remove_game_from_catalog",
         ScanAutoLibraries => "scan_auto_libraries",
         ListRetiredGameLeftovers => "list_retired_game_leftovers",

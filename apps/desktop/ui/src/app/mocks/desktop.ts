@@ -1,4 +1,5 @@
 import { registerPreviewInvoker, type DesktopInvoker } from '@shared/api-preview';
+import type { NvapiClaimAbandonmentAuthorization } from '@entities/game';
 import { mockAddGame, mockInspectGameInstall, mockScanAutoLibraries } from './commands/scan';
 import { mockQueryGameCards, mockGetGameDetails } from './commands/query';
 import { mockFetchGameCover, mockClearGameCover, mockSetGameCover } from './commands/cover';
@@ -23,7 +24,7 @@ import {
   mockListLibraryPackages,
 } from './commands/libraries';
 import { mockSetGameFavorite, mockSetGameHidden } from './commands/game-ui-state';
-import { mockRemoveGameFromCatalog } from './commands/game-catalog';
+import { mockAssessGameRemoval, mockRemoveGameFromCatalog } from './commands/game-catalog';
 import {
   mockClearGameExecutableOverride,
   mockListGameExecutableCandidates,
@@ -194,8 +195,14 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
         readBooleanField(command, payload, 'isHidden'),
       );
 
-    case 'remove_game_from_catalog':
-      return mockRemoveGameFromCatalog(readStringField(command, payload, 'gameId'));
+    case 'assess_game_removal':
+      return mockAssessGameRemoval(readStringField(command, payload, 'gameId'));
+
+    case 'remove_game_from_catalog': {
+      const record = readPayloadRecord(command, payload);
+      const auth = record.authorization as NvapiClaimAbandonmentAuthorization | undefined;
+      return mockRemoveGameFromCatalog(readStringField(command, payload, 'gameId'), auth);
+    }
 
     case 'get_catalog_setting':
       return mockGetCatalogSetting(readStringField(command, payload, 'key'));

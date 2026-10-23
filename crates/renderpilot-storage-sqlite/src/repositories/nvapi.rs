@@ -147,6 +147,25 @@ pub struct NvapiGlobalSettingPreparation<'a> {
     pub after: NvapiSettingState,
 }
 
+/// Input for preparing an authorized setting reapplication to a global profile with a concrete u32 value.
+#[derive(Debug, Clone, Copy)]
+pub struct NvapiAuthorizedGlobalSettingSetPreparation<'a> {
+    /// Stable operation receipt id.
+    pub op_id: &'a str,
+    /// Exact NVIDIA profile name.
+    pub profile_name: &'a str,
+    /// Whether the NVIDIA profile is predefined.
+    pub profile_is_predefined: bool,
+    /// Serialized profile identity receipt.
+    pub profile_identity_json: &'a str,
+    /// NVIDIA setting identifier.
+    pub setting_id: u32,
+    /// Live state observed immediately before this write.
+    pub before: NvapiSettingState,
+    /// Concrete setting value requested to be set.
+    pub value: u32,
+}
+
 /// Scope of a verified setting operation receipt.
 #[derive(Debug, Clone, Copy)]
 pub enum NvapiSettingOperationScope<'a> {

@@ -416,4 +416,86 @@ mod tests {
             json!({ "code": "storage_failed" })
         );
     }
+
+    #[test]
+    fn nvapi_claim_authorization_stale_maps_to_stale_authorization_reason_code() {
+        let error = CommandError::from(ApiError::Service(
+            ServiceError::NvapiClaimAuthorizationStale {
+                game_id: "game-1".into(),
+                target_id: "profile-1".into(),
+                setting_id: 0x10b3_292c,
+                detail: "DRS state changed".into(),
+            },
+        ));
+        let serialized = serde_json::to_value(&error).expect("serialize");
+        assert_eq!(
+            serialized,
+            json!({
+                "code": "game_removal_cleanup_failed",
+                "reasonCode": "stale_authorization"
+            })
+        );
+    }
+
+    #[test]
+    fn nvapi_claim_release_blocked_maps_witness_mismatch_and_uncertain_observation() {
+        let error_wm =
+            CommandError::from(ApiError::Service(ServiceError::NvapiClaimReleaseBlocked {
+                game_id: "game-1".into(),
+                target_id: "profile-1".into(),
+                setting_id: 0x10b3_292c,
+                reason: renderpilot_orchestration::NvapiClaimBlockedReason::WitnessMismatch,
+                detail: "witness mismatch".into(),
+            }));
+        let serialized_wm = serde_json::to_value(&error_wm).expect("serialize");
+        assert_eq!(
+            serialized_wm,
+            json!({
+                "code": "game_removal_cleanup_failed",
+                "reasonCode": "witness_mismatch"
+            })
+        );
+
+        let error_uo =
+            CommandError::from(ApiError::Service(ServiceError::NvapiClaimReleaseBlocked {
+                game_id: "game-1".into(),
+                target_id: "profile-1".into(),
+                setting_id: 0x10b3_292c,
+                reason: renderpilot_orchestration::NvapiClaimBlockedReason::UncertainObservation,
+                detail: "driver query failed".into(),
+            }));
+        let serialized_uo = serde_json::to_value(&error_uo).expect("serialize");
+        assert_eq!(
+            serialized_uo,
+            json!({
+                "code": "game_removal_cleanup_failed",
+                "reasonCode": "uncertain_observation"
+            })
+        );
+
+        // RequiredAuthorizationMissing must NOT be misclassified as witness_mismatch:
+        let error_missing_auth = CommandError::from(ApiError::Service(
+            ServiceError::NvapiClaimReleaseBlocked {
+                game_id: "game-1".into(),
+                target_id: "profile-1".into(),
+                setting_id: 0x10b3_292c,
+                reason:
+                    renderpilot_orchestration::NvapiClaimBlockedReason::RequiredAuthorizationMissing,
+                detail: "confirmation required".into(),
+            },
+        ));
+        let serialized_missing = serde_json::to_value(&error_missing_auth).expect("serialize");
+        assert_eq!(
+            serialized_missing,
+            json!({
+                "code": "game_removal_cleanup_failed"
+            })
+        );
+        assert_ne!(
+            serialized_missing
+                .get("reasonCode")
+                .and_then(|v| v.as_str()),
+            Some("witness_mismatch")
+        );
+    }
 }

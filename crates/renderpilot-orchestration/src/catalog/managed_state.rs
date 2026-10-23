@@ -23,7 +23,9 @@ pub(super) enum ManagedInverseAction {
     UninstallOptiScaler,
     UninstallAddon(AddonKind),
     ReleaseEngineJournal(AddonKind),
-    RestoreNvapi,
+    RestoreNvapi {
+        authorization: Option<crate::nvapi::ops::NvapiClaimAbandonmentAuthorization>,
+    },
 }
 
 /// Lock boundary selected by the complete cleanup plan.
@@ -52,7 +54,7 @@ impl ManagedInverseAction {
             Self::ReleaseEngineJournal(kind) => {
                 format!("{} Engine.ini owner release", addon_kind_name(*kind))
             }
-            Self::RestoreNvapi => "NVIDIA setting claim restore".to_owned(),
+            Self::RestoreNvapi { .. } => "NVIDIA setting claim restore".to_owned(),
         }
     }
 }
@@ -71,6 +73,7 @@ impl ManagedCleanupPlan {
         context: &crate::Context,
         guard: &crate::game_mutation_lock::GameMutationGuard,
         game_id: &GameId,
+        authorization: Option<&crate::nvapi::ops::NvapiClaimAbandonmentAuthorization>,
     ) -> Result<Self, ServiceError> {
         if guard.game_id() != game_id {
             return Err(ServiceError::invalid_input(
@@ -106,6 +109,39 @@ impl ManagedCleanupPlan {
                 action: "RenderPilot-owned NVIDIA profile".to_owned(),
                 reason: "delete the owned NVIDIA profile from the game details page before removing this game".to_owned(),
             });
+        }
+        if inventory.nvapi_claim_count > 0 {
+            let claims = context
+                .storage()
+                .list_nvapi_setting_claims_for_game(game_id.as_str())?;
+            let drs = crate::nvapi::ops::active_external_setting_claim_drs();
+            for claim in &claims {
+                let plan =
+                    crate::nvapi::ops::evaluate_claim_release_plan(context, claim, drs.as_ref())
+                        .map_err(|error| match error {
+                            ServiceError::NvapiClaimAuthorizationStale { .. }
+                            | ServiceError::NvapiClaimReleaseBlocked { .. } => error,
+                            other => ServiceError::GameRemovalCleanupFailed {
+                                game_id: game_id.as_str().to_owned(),
+                                action: "NVIDIA driver setting claim evaluation".to_owned(),
+                                reason: other.to_string(),
+                            },
+                        })?;
+                crate::nvapi::ops::validate_claim_abandonment_authorization(
+                    &plan,
+                    authorization,
+                    game_id.as_str(),
+                )
+                .map_err(|error| match error {
+                    ServiceError::NvapiClaimAuthorizationStale { .. }
+                    | ServiceError::NvapiClaimReleaseBlocked { .. } => error,
+                    other => ServiceError::GameRemovalCleanupFailed {
+                        game_id: game_id.as_str().to_owned(),
+                        action: "NVIDIA driver setting claim authorization".to_owned(),
+                        reason: other.to_string(),
+                    },
+                })?;
+            }
         }
         let optiscaler_footprint = inventory
             .optiscaler_state
@@ -333,6 +369,11 @@ impl ManagedCleanupPlan {
         }
 
         let mut actions = Vec::new();
+        if inventory.nvapi_claim_count > 0 {
+            actions.push(ManagedInverseAction::RestoreNvapi {
+                authorization: authorization.cloned(),
+            });
+        }
         if inventory.optiscaler_state.is_some() {
             actions.push(ManagedInverseAction::UninstallOptiScaler);
         }
@@ -348,9 +389,6 @@ impl ManagedCleanupPlan {
         }
         if let Some(kind) = release_engine_kind {
             actions.push(ManagedInverseAction::ReleaseEngineJournal(kind));
-        }
-        if inventory.nvapi_claim_count > 0 {
-            actions.push(ManagedInverseAction::RestoreNvapi);
         }
         let boundary = match shared_renodx.as_ref() {
             Some(addon) => ManagedCleanupBoundary::SharedRenoDx {

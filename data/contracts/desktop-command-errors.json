@@ -65,7 +65,12 @@
       "rustVariant": "GameRemovalCleanupFailed",
       "messageKey": "user_message.game_removal_cleanup_failed",
       "severity": "error",
-      "actions": ["reload_game_details"]
+      "actions": ["reload_game_details"],
+      "reasonCodes": [
+        "stale_authorization",
+        "witness_mismatch",
+        "uncertain_observation"
+      ]
     },
     {
       "code": "invalid_game_id",
