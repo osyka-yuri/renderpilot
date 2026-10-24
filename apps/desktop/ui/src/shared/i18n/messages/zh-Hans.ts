@@ -127,6 +127,17 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'game.card.removeConfirm.description':
     'RenderPilot 会先安全撤销由其管理的更改，再移除游戏卡片及相关历史记录。游戏文件本身不会被修改。',
   'game.card.removeConfirm.action': '从目录中移除',
+  'game.card.removeConfirm.abandonAction': '保留设置并移除',
+  'game.card.removeConfirm.divergedWarning':
+    'NVIDIA 驱动程序设置已在 RenderPilot 外部更改。移除游戏将保留当前驱动程序设置而不进行修改。',
+  'game.card.removeConfirm.staleWarning':
+    '自评估以来 NVIDIA 驱动程序设置已更改。请在确认前查看更新后的设置。',
+  'game.card.removeConfirm.blockedTitle': '移除已阻止',
+  'game.card.removeConfirm.reassessAction': '重试检查',
+  'game.card.removeConfirm.divergedSettingsTitle': '受影响的驱动程序设置：',
+  'game.card.removeConfirm.settingLive': '当前值：{value}',
+  'game.card.removeConfirm.settingPresent': '已设置',
+  'game.card.removeConfirm.settingAbsent': '未设置 (默认)',
 
   'game.cover.alt': '封面',
   'game.cover.altWithTitle': '封面：{title}',

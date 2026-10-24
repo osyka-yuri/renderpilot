@@ -150,6 +150,17 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'game.card.removeConfirm.description':
     'RenderPilot безопасно отменит управляемые изменения, затем удалит карточку и связанную с ней историю. Файлы самой игры затронуты не будут.',
   'game.card.removeConfirm.action': 'Удалить из каталога',
+  'game.card.removeConfirm.abandonAction': 'Оставить настройки и удалить',
+  'game.card.removeConfirm.divergedWarning':
+    'Настройки драйвера NVIDIA были изменены вне RenderPilot. При удалении текущие настройки в драйвере останутся без изменений.',
+  'game.card.removeConfirm.staleWarning':
+    'Настройки в драйвере NVIDIA изменились с момента проверки. Пожалуйста, проверьте обновлённые настройки перед подтверждением.',
+  'game.card.removeConfirm.blockedTitle': 'Удаление заблокировано',
+  'game.card.removeConfirm.reassessAction': 'Повторить проверку',
+  'game.card.removeConfirm.divergedSettingsTitle': 'Затронутые настройки драйвера:',
+  'game.card.removeConfirm.settingLive': 'В драйвере: {value}',
+  'game.card.removeConfirm.settingPresent': 'Задано',
+  'game.card.removeConfirm.settingAbsent': 'Отсутствует (по умолчанию)',
 
   // ── Game cover ──
   'game.cover.alt': 'Обложка',

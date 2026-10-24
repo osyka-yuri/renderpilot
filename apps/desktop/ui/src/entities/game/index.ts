@@ -39,6 +39,13 @@ export type {
   Launcher,
   CoverArtworkResult,
   RemoveGameFromCatalogResult,
+  GameRemovalAssessment,
+  NvapiRemovalAssessment,
+  NvapiClaimAssessment,
+  NvapiClaimDisposition,
+  NvapiSettingValueDto,
+  NvapiClaimAbandonmentAuthorization,
+  NvapiClaimAbandonmentToken,
   GameCardsQuery,
   GameCardsResult,
   EffectiveGamesFilters,
@@ -89,6 +96,7 @@ export {
   getSharedVulkanSafetyAssessment,
   setGameFavorite,
   setGameHidden,
+  assessGameRemoval,
   removeGameFromCatalog,
 } from './api/desktop';
 export { default as GameCard } from './ui/GameCard.svelte';
@@ -96,5 +104,7 @@ export { default as GameCardActionsMenu } from './ui/GameCardActionsMenu.svelte'
 export { default as GameCardCover } from './ui/GameCardCover.svelte';
 export { default as GamesDashboardSummary } from './ui/GamesDashboardSummary.svelte';
 export type { GameCardMenuHandle } from './ui/types';
+
+export { createRemoveGameFlow, type RemoveGameFlow } from './model/remove-game-flow.svelte';
 
 export { createTitleId } from './model/dom-helpers';

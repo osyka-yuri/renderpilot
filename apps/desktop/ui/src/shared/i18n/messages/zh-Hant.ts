@@ -127,6 +127,17 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'game.card.removeConfirm.description':
     'RenderPilot 會先安全復原其管理的變更，再移除遊戲卡片與相關記錄。遊戲檔案本身不會被修改。',
   'game.card.removeConfirm.action': '從目錄中移除',
+  'game.card.removeConfirm.abandonAction': '保留設定並移除',
+  'game.card.removeConfirm.divergedWarning':
+    'NVIDIA 驅動程式設定已在 RenderPilot 外部變更。移除遊戲將保留當前驅動程式設定而不進行修改。',
+  'game.card.removeConfirm.staleWarning':
+    '自評估以來 NVIDIA 驅動程式設定已變更。請在確認前查看更新後的設定。',
+  'game.card.removeConfirm.blockedTitle': '移除已封鎖',
+  'game.card.removeConfirm.reassessAction': '重試檢查',
+  'game.card.removeConfirm.divergedSettingsTitle': '受影響的驅動程式設定：',
+  'game.card.removeConfirm.settingLive': '當前值：{value}',
+  'game.card.removeConfirm.settingPresent': '已設定',
+  'game.card.removeConfirm.settingAbsent': '未設定 (預設)',
 
   'game.cover.alt': '封面',
   'game.cover.altWithTitle': '封面：{title}',

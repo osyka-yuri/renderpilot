@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import type { getGameDetails } from '@entities/game';
+import type { getGameDetails, NvapiClaimAbandonmentAuthorization } from '@entities/game';
 import { createGameDetails } from '@entities/game';
 import type { AddGameInspection } from '@features/scan-libraries';
 
@@ -425,6 +425,43 @@ describe('desktop-app-workflows', () => {
       expect(removed).toBe(false);
       expect(removeGame).not.toHaveBeenCalled();
       expect(refreshGameCards).not.toHaveBeenCalled();
+    });
+
+    it('passes abandonment authorization to removeGame when provided', async () => {
+      const authorization = {
+        gameId: 'game:diverged',
+        claims: [
+          {
+            targetId: 'Profile',
+            settingId: 0x10b3292c,
+            expectedPresent: true,
+            expectedValue: 1,
+            originalPresent: false,
+            originalValue: null,
+            observedLivePresent: true,
+            observedLiveValue: 2,
+          },
+        ],
+      };
+      const removeGame = vi.fn((gameId: string, auth?: NvapiClaimAbandonmentAuthorization) => {
+        expect(auth).toEqual(authorization);
+        return Promise.resolve({ gameId });
+      });
+      const refreshGameCards = vi.fn(() => Promise.resolve());
+
+      const removed = await removeGameAndRefreshCards(
+        'game:diverged',
+        {
+          runExclusive: (task) => task(),
+          refreshGameCards,
+          removeGame,
+        },
+        authorization,
+      );
+
+      expect(removed).toBe(true);
+      expect(removeGame).toHaveBeenCalledWith('game:diverged', authorization);
+      expect(refreshGameCards).toHaveBeenCalledOnce();
     });
   });
 

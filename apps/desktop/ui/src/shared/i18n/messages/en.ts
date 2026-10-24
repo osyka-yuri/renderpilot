@@ -153,6 +153,17 @@ export const en = defineSourceCatalog({
   'game.card.removeConfirm.description':
     'RenderPilot will safely undo managed changes, then remove the card and its history. The game files themselves will not be changed.',
   'game.card.removeConfirm.action': 'Remove from catalog',
+  'game.card.removeConfirm.abandonAction': 'Abandon settings & remove',
+  'game.card.removeConfirm.divergedWarning':
+    'NVIDIA driver settings were changed outside RenderPilot. Removing the game will leave live driver settings as-is without modifying them.',
+  'game.card.removeConfirm.staleWarning':
+    'NVIDIA driver settings changed since assessment. Please review the updated settings before confirming.',
+  'game.card.removeConfirm.blockedTitle': 'Removal blocked',
+  'game.card.removeConfirm.reassessAction': 'Retry check',
+  'game.card.removeConfirm.divergedSettingsTitle': 'Affected driver settings:',
+  'game.card.removeConfirm.settingLive': 'Live: {value}',
+  'game.card.removeConfirm.settingPresent': 'Configured',
+  'game.card.removeConfirm.settingAbsent': 'Absent (default)',
 
   // ── Game cover ──
   'game.cover.alt': 'Cover',

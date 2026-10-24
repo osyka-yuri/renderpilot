@@ -21,9 +21,12 @@
   import GameCardCover from './GameCardCover.svelte';
   import GameLibraryBadges from './GameLibraryBadges.svelte';
   import type { GameCardMenuHandle } from './types';
+  import type { NvapiClaimAbandonmentAuthorization } from '../model/types';
 
   type VoidHandler = () => void;
-  type ConfirmHandler = () => boolean | Promise<boolean>;
+  type ConfirmHandler = (
+    authorization?: NvapiClaimAbandonmentAuthorization,
+  ) => boolean | Promise<boolean>;
   type MenuOpenChangeHandler = (open: boolean) => void;
   type FocusWithinHandler = (event: FocusEvent) => void;
 
@@ -99,6 +102,7 @@
     <CardAction>
       <GameCardActionsMenu
         bind:this={coverMenuRef}
+        gameId={game.id}
         title={game.title}
         disabled={menuDisabled}
         {pickDisabled}

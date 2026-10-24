@@ -8,6 +8,7 @@
     GameCardActionsMenu,
     GameCardCover,
     type GameCardFocusTarget,
+    type NvapiClaimAbandonmentAuthorization,
   } from '@entities/game';
   import type { AddonCapability } from '@entities/game';
   import StarIcon from '@lucide/svelte/icons/star';
@@ -24,7 +25,10 @@
     onClearCover: GameActionHandler;
     onToggleFavorite: (gameId: GameId, isFavorite: boolean) => void;
     onToggleHidden: (gameId: GameId, isHidden: boolean) => void;
-    onRemoveGame: (gameId: GameId) => boolean | Promise<boolean>;
+    onRemoveGame: (
+      gameId: GameId,
+      authorization?: NvapiClaimAbandonmentAuthorization,
+    ) => boolean | Promise<boolean>;
     onOpenDetails: GameActionHandler;
     onPreloadDetails: () => void;
     onCardFocus: (gameId: GameId, target: GameCardFocusTarget) => void;
@@ -214,6 +218,7 @@
     </Tooltip>
 
     <GameCardActionsMenu
+      gameId={game.id}
       title={game.title}
       disabled={card.isMenuDisabled}
       pickDisabled={card.isPickDisabled}
@@ -241,7 +246,8 @@
         onToggleHidden(game.id, !game.isHidden);
       }}
       canRemoveFromCatalog={game.canRemoveFromCatalog}
-      onRemoveFromCatalog={() => onRemoveGame(game.id)}
+      onRemoveFromCatalog={(auth: NvapiClaimAbandonmentAuthorization | undefined) =>
+        onRemoveGame(game.id, auth)}
     />
   </div>
 </article>

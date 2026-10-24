@@ -138,6 +138,17 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'game.card.removeConfirm.description':
     'RenderPilot は管理対象の変更を安全に元に戻してから、カードと関連履歴を削除します。ゲーム自体のファイルは変更されません。',
   'game.card.removeConfirm.action': 'カタログから削除',
+  'game.card.removeConfirm.abandonAction': '設定を維持して削除',
+  'game.card.removeConfirm.divergedWarning':
+    'NVIDIA ドライバーの設定が RenderPilot の外部で変更されました。ゲームを削除しても、現在のドライバー設定は変更されずにそのまま残ります。',
+  'game.card.removeConfirm.staleWarning':
+    '前回の評価以降に NVIDIA ドライバーの設定が変更されました。確認する前に更新された設定を確認してください。',
+  'game.card.removeConfirm.blockedTitle': '削除がブロックされました',
+  'game.card.removeConfirm.reassessAction': '確認を再試行',
+  'game.card.removeConfirm.divergedSettingsTitle': '影響を受けるドライバー設定:',
+  'game.card.removeConfirm.settingLive': '現在値: {value}',
+  'game.card.removeConfirm.settingPresent': '設定済み',
+  'game.card.removeConfirm.settingAbsent': '未設定 (デフォルト)',
 
   'game.cover.alt': 'カバー画像',
   'game.cover.altWithTitle': 'カバー画像：{title}',

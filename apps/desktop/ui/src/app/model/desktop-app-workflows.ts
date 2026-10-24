@@ -4,10 +4,11 @@ import {
   getGameDetails,
   normalizeSelectableGameId,
   removeGameFromCatalog,
+  type CoverArtworkResult,
   type GameDetails,
   type GameSummary,
+  type NvapiClaimAbandonmentAuthorization,
 } from '@entities/game';
-import type { CoverArtworkResult } from '@entities/game';
 import type { CatalogSettingPayload } from '@entities/settings';
 import {
   executeBackgroundCoverSync,
@@ -344,9 +345,10 @@ export type RemoveGameAndRefreshDeps = Pick<
 export async function removeGameAndRefreshCards(
   gameId: string,
   deps: RemoveGameAndRefreshDeps,
+  authorization?: NvapiClaimAbandonmentAuthorization,
 ): Promise<boolean> {
   const result = await deps.runExclusive(async () => {
-    await (deps.removeGame ?? removeGameFromCatalog)(gameId);
+    await (deps.removeGame ?? removeGameFromCatalog)(gameId, authorization);
     await deps.refreshGameCards();
     return true;
   });

@@ -6,6 +6,7 @@
     type GameCardFocusTarget,
     type GamesCatalogScrollAnchor,
     type Launcher,
+    type NvapiClaimAbandonmentAuthorization,
   } from '@entities/game';
   import GamesFilterEmptyState from './GamesFilterEmptyState.svelte';
   import GamesCardRow from './GamesCardRow.svelte';
@@ -29,7 +30,10 @@
   } from '../model/launcher-groups';
 
   type GameActionHandler = (gameId: GameId) => void;
-  type RemoveGameHandler = (gameId: GameId) => boolean | Promise<boolean>;
+  type RemoveGameHandler = (
+    gameId: GameId,
+    authorization?: NvapiClaimAbandonmentAuthorization,
+  ) => boolean | Promise<boolean>;
   type MenuOpenChangeHandler = (gameId: GameId, next: boolean) => void;
   type Props = {
     games?: readonly GameCardViewModel[];

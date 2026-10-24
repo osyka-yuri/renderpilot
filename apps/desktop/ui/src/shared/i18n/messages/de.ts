@@ -143,6 +143,17 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'game.card.removeConfirm.description':
     'RenderPilot macht verwaltete Änderungen sicher rückgängig und entfernt anschließend die Karte samt Verlauf. Die Dateien des Spiels bleiben unverändert.',
   'game.card.removeConfirm.action': 'Aus Katalog entfernen',
+  'game.card.removeConfirm.abandonAction': 'Einstellungen beibehalten & entfernen',
+  'game.card.removeConfirm.divergedWarning':
+    'Die NVIDIA-Treibereinstellungen wurden außerhalb von RenderPilot geändert. Beim Entfernen des Spiels bleiben die aktuellen Treibereinstellungen unverändert.',
+  'game.card.removeConfirm.staleWarning':
+    'Die NVIDIA-Treibereinstellungen haben sich seit der Überprüfung geändert. Bitte überprüfen Sie die aktualisierten Einstellungen vor der Bestätigung.',
+  'game.card.removeConfirm.blockedTitle': 'Entfernen blockiert',
+  'game.card.removeConfirm.reassessAction': 'Prüfung wiederholen',
+  'game.card.removeConfirm.divergedSettingsTitle': 'Betroffene Treibereinstellungen:',
+  'game.card.removeConfirm.settingLive': 'Aktiv: {value}',
+  'game.card.removeConfirm.settingPresent': 'Gesetzt',
+  'game.card.removeConfirm.settingAbsent': 'Nicht vorhanden (Standard)',
 
   'game.cover.alt': 'Cover',
   'game.cover.altWithTitle': 'Cover: {title}',

@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { GameCard, type GameCardFocusTarget } from '@entities/game';
+  import {
+    GameCard,
+    type GameCardFocusTarget,
+    type NvapiClaimAbandonmentAuthorization,
+  } from '@entities/game';
   import type { GameCardState, GameId } from '../model/launcher-groups';
 
   type GameActionHandler = (gameId: GameId) => void;
@@ -12,7 +16,10 @@
     onClearCover: GameActionHandler;
     onToggleFavorite: (gameId: GameId, isFavorite: boolean) => void;
     onToggleHidden: (gameId: GameId, isHidden: boolean) => void;
-    onRemoveGame: (gameId: GameId) => boolean | Promise<boolean>;
+    onRemoveGame: (
+      gameId: GameId,
+      authorization?: NvapiClaimAbandonmentAuthorization,
+    ) => boolean | Promise<boolean>;
     onOpenDetails: GameActionHandler;
     onPreloadDetails: () => void;
     onCardFocus: (gameId: GameId, target: GameCardFocusTarget) => void;
@@ -65,7 +72,8 @@
       onToggleHidden={() => {
         onToggleHidden(card.id, !card.game.isHidden);
       }}
-      onRemoveFromCatalog={() => onRemoveGame(card.id)}
+      onRemoveFromCatalog={(auth: NvapiClaimAbandonmentAuthorization | undefined) =>
+        onRemoveGame(card.id, auth)}
       onOpenDetails={() => {
         onOpenDetails(card.id);
       }}

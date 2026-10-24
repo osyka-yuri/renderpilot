@@ -111,6 +111,58 @@ export type RemoveGameFromCatalogResult = {
   gameId: string;
 };
 
+export type NvapiSettingValueDto = {
+  present: boolean;
+  value: number | null;
+};
+
+export type NvapiClaimDisposition =
+  | 'safeSharedRelease'
+  | 'safeAutomaticRestore'
+  | 'safeAlreadyOriginal'
+  | 'safeConfirmedAbsent'
+  | 'requiresAbandonmentAuthorization'
+  | 'blocked';
+
+export type NvapiClaimAssessment = {
+  targetId: string;
+  settingId: number;
+  settingName: string;
+  status: string;
+  recordedExpected: NvapiSettingValueDto;
+  recordedOriginal: NvapiSettingValueDto;
+  observedLive: NvapiSettingValueDto | null;
+  disposition: NvapiClaimDisposition;
+};
+
+export type NvapiRemovalAssessment = {
+  requiresUserAuthorization: boolean;
+  blockedReason: string | null;
+  claims: NvapiClaimAssessment[];
+};
+
+export type GameRemovalAssessment = {
+  gameId: string;
+  canRemoveAutomatically: boolean;
+  nvapiAssessment: NvapiRemovalAssessment;
+};
+
+export type NvapiClaimAbandonmentToken = {
+  targetId: string;
+  settingId: number;
+  expectedPresent: boolean;
+  expectedValue: number | null;
+  originalPresent: boolean;
+  originalValue: number | null;
+  observedLivePresent: boolean | null;
+  observedLiveValue: number | null;
+};
+
+export type NvapiClaimAbandonmentAuthorization = {
+  gameId: string;
+  claims: NvapiClaimAbandonmentToken[];
+};
+
 export type GameCardsSortField = 'title' | 'updates' | 'risk';
 export type GameCardsSortDirection = 'asc' | 'desc';
 export type CatalogRevision = number;

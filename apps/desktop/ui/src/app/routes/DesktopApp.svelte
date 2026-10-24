@@ -19,6 +19,7 @@
     fetchGameCover,
     findGameSummaryForSelection,
     getGameDetails,
+    type NvapiClaimAbandonmentAuthorization,
   } from '@entities/game';
   import { rollbackComponent } from '@entities/operation';
   import { getCatalogSetting } from '@entities/settings';
@@ -413,17 +414,24 @@
     await addGameFlow.chooseFolder();
   }
 
-  async function handleRemoveGame(gameId: string): Promise<boolean> {
+  async function handleRemoveGame(
+    gameId: string,
+    authorization?: NvapiClaimAbandonmentAuthorization,
+  ): Promise<boolean> {
     let removalError: unknown = null;
-    const removed = await removeGameAndRefreshCards(gameId, {
-      runExclusive: (task) =>
-        model.runExclusive(task, {
-          onError: (error) => {
-            removalError = error;
-          },
-        }),
-      refreshGameCards,
-    });
+    const removed = await removeGameAndRefreshCards(
+      gameId,
+      {
+        runExclusive: (task) =>
+          model.runExclusive(task, {
+            onError: (error) => {
+              removalError = error;
+            },
+          }),
+        refreshGameCards,
+      },
+      authorization,
+    );
     if (removalError !== null) {
       throw removalError instanceof Error
         ? removalError

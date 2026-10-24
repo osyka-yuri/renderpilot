@@ -143,6 +143,17 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'game.card.removeConfirm.description':
     'RenderPilot revertirá de forma segura los cambios administrados y después eliminará la tarjeta junto con su historial. Los archivos del juego no se modificarán.',
   'game.card.removeConfirm.action': 'Eliminar del catálogo',
+  'game.card.removeConfirm.abandonAction': 'Conservar ajustes y eliminar',
+  'game.card.removeConfirm.divergedWarning':
+    'La configuración del controlador NVIDIA se modificó fuera de RenderPilot. Al eliminar el juego, la configuración actual del controlador se mantendrá sin cambios.',
+  'game.card.removeConfirm.staleWarning':
+    'La configuración del controlador NVIDIA ha cambiado desde la evaluación. Revisa la configuración actualizada antes de confirmar.',
+  'game.card.removeConfirm.blockedTitle': 'Eliminación bloqueada',
+  'game.card.removeConfirm.reassessAction': 'Repetir comprobación',
+  'game.card.removeConfirm.divergedSettingsTitle': 'Configuración del controlador afectada:',
+  'game.card.removeConfirm.settingLive': 'Activo: {value}',
+  'game.card.removeConfirm.settingPresent': 'Configurado',
+  'game.card.removeConfirm.settingAbsent': 'Ausente (predeterminado)',
 
   'game.cover.alt': 'Carátula',
   'game.cover.altWithTitle': 'Carátula: {title}',

@@ -33,6 +33,7 @@
   import { GamesHeaderBar } from '@widgets/games-header';
   import { GamesFilterDialog } from '@features/filter-games';
   import { t } from '@shared/i18n';
+  import type { NvapiClaimAbandonmentAuthorization } from '@entities/game';
   import type { GamesCatalogSession } from '../model/create-games-page-model.svelte';
   import { persistGamesViewMode, readStoredGamesViewMode } from '../model/games-view-mode-storage';
 
@@ -42,7 +43,10 @@
     pickCoverDisabled?: boolean;
 
     onAddGame?: VoidHandler;
-    onRemoveGame?: (gameId: string) => boolean | Promise<boolean>;
+    onRemoveGame?: (
+      gameId: string,
+      authorization?: NvapiClaimAbandonmentAuthorization,
+    ) => boolean | Promise<boolean>;
     onOpenDetails?: GameSelectionHandler;
     onPreloadDetails?: VoidHandler;
     session: GamesCatalogSession;
