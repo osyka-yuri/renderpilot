@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.2] - 2026-10-24
+
+### Fixed
+
+- **NVIDIA settings after driver updates**: Fixed an error that prevented applying or restoring NVIDIA settings after a clean driver installation or driver reset. RenderPilot now recognizes when settings were reset by the driver and safely synchronizes them without conflicts.
+- **Game removal with reset driver settings**: Fixed an issue where removing a game from the catalog could fail if its NVIDIA settings were reset by a driver update or changed in NVIDIA Control Panel. Driver settings are now verified beforehand and safely released before any game files or add-ons are touched.
+- **Externally deleted NVIDIA profiles**: Fixed an error when removing a game whose NVIDIA profile was already deleted outside RenderPilot.
+- **Catalog data preservation**: Startup checks no longer attempt destructive database rebuilds on schema conflicts, ensuring existing catalog data and settings are safely preserved.
+
 ## [1.15.1] - 2026-10-15
 
 ### Added
