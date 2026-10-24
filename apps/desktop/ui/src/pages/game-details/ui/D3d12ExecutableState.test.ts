@@ -177,7 +177,6 @@ describe('D3D12 executable state UI', () => {
     flushSync();
 
     const trigger = target.querySelector<HTMLButtonElement>('[data-slot="select-trigger"]');
-    trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     trigger?.click();
     flushSync();
 
@@ -426,7 +425,6 @@ function previewSwapPlan(
 
 async function selectVersion(version: string): Promise<void> {
   const trigger = document.body.querySelector<HTMLButtonElement>('[data-slot="select-trigger"]');
-  trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
   trigger?.click();
   flushSync();
 

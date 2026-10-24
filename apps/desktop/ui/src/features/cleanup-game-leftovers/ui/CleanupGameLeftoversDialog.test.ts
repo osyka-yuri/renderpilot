@@ -408,4 +408,13 @@ function closeButton(): HTMLButtonElement | null {
 async function render(): Promise<void> {
   flushSync();
   await tick();
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+  flushSync();
+  await tick();
 }

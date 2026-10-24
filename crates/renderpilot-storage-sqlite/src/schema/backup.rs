@@ -35,7 +35,11 @@ fn backup_before_schema_change(
 
     let backup_path = backup_path_for(&db_path, qualifier);
     connection
-        .backup(rusqlite::MAIN_DB, &backup_path, None)
+        .backup(
+            rusqlite::MAIN_DB,
+            &backup_path,
+            None::<fn(rusqlite::backup::Progress)>,
+        )
         .map_err(|error| {
             storage_context(
                 &format!(

@@ -369,7 +369,7 @@ fn open_test_connection() -> Connection {
     Connection::open_in_memory().expect("sqlite should open")
 }
 
-fn install_observational_authorizer(connection: &Connection) -> Arc<AtomicU64> {
+fn install_observational_authorizer(connection: &mut Connection) -> Arc<AtomicU64> {
     use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 
     let denied = Arc::new(AtomicU64::new(0));

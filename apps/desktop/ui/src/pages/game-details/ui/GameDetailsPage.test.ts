@@ -317,7 +317,6 @@ function clickDialogButton(dialog: HTMLElement, name: string): void {
 }
 
 async function chooseSelectOption(trigger: HTMLButtonElement, value: string): Promise<void> {
-  trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
   trigger.click();
   flushSync();
 
@@ -1589,7 +1588,6 @@ describe('GameDetailsPage', () => {
     });
     expect(onSwap).not.toHaveBeenCalled();
 
-    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     trigger.click();
     flushSync();
     const installed = await vi.waitFor(() => {
@@ -1797,7 +1795,6 @@ describe('GameDetailsPage', () => {
         }
         return candidate;
       });
-      trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
       trigger.click();
       flushSync();
       const option = await vi.waitFor(() => {
@@ -1941,7 +1938,6 @@ describe('GameDetailsPage', () => {
     await vi.waitFor(() => {
       expect(trigger.disabled).toBe(false);
     });
-    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     trigger.click();
     flushSync();
     const cancelledOption = await vi.waitFor(() => {

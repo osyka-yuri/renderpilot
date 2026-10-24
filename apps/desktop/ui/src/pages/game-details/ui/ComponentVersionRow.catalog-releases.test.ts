@@ -305,7 +305,6 @@ describe('ComponentVersionRow catalog releases', () => {
 
   async function openVersionSelect(): Promise<void> {
     const trigger = versionSelectTrigger();
-    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     trigger.click();
     flushSync();
     await vi.waitFor(() => {

@@ -133,7 +133,7 @@ impl SqliteStorage {
         Self::finalize_connection(connection)
     }
 
-    fn finalize_connection(connection: Connection) -> AppResult<Self> {
+    fn finalize_connection(mut connection: Connection) -> AppResult<Self> {
         let catalog_generation = Arc::new(AtomicU64::new(0));
         let hook_generation = Arc::clone(&catalog_generation);
         connection
@@ -249,7 +249,7 @@ impl SqliteStorage {
         let count = Arc::new(AtomicU64::new(0));
         let hook_count = Arc::clone(&count);
         {
-            let connection = self.connection().map_err(E::from)?;
+            let mut connection = self.connection().map_err(E::from)?;
             connection
                 .authorizer(Some(move |context: AuthContext<'_>| {
                     if matches!(context.action, AuthAction::Select) {
@@ -266,7 +266,7 @@ impl SqliteStorage {
         }
 
         let result = operation(self);
-        let cleanup = self.connection().and_then(|connection| {
+        let cleanup = self.connection().and_then(|mut connection| {
             connection
                 .authorizer(None::<fn(rusqlite::hooks::AuthContext<'_>) -> Authorization>)
                 .map_err(|error| storage_context("failed to remove SQLite SELECT counter", error))

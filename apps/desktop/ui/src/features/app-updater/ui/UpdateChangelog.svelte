@@ -33,7 +33,7 @@
         <p class="text-sm/relaxed text-muted-foreground">
           <ReleaseNotesInline segments={block.content} />
         </p>
-      {:else if block.type === 'list'}
+      {:else}
         <ul class="list-disc space-y-1 ps-5 text-sm/relaxed text-muted-foreground">
           {#each block.items as item, itemIndex (itemIndex)}
             <li>

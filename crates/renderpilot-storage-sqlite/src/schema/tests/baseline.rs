@@ -42,7 +42,7 @@ fn g_obs_01_healthy_current_apply_is_authorizer_observational() {
             )
             .expect("marker");
 
-        let denied = install_observational_authorizer(&connection);
+        let denied = install_observational_authorizer(&mut connection);
         apply(&mut connection).expect("healthy keep must not execute a mutation");
         assert_eq!(
             denied.load(Ordering::Relaxed),

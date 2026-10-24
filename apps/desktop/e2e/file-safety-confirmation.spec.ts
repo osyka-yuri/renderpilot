@@ -11,7 +11,7 @@ test('long executable confirmation remains usable at 860 by 600', async ({ page 
   await preparePage(page, 'en');
   await page.getByRole('button', { name: 'Open details for Cyberpunk 2077' }).click();
   await page.getByRole('tab', { name: 'Microsoft' }).click();
-  await page.getByRole('button', { name: 'v1.606.4' }).click();
+  await page.getByRole('combobox').filter({ hasText: 'v1.606.4' }).click();
   await page.getByRole('option', { name: '1.619.1' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Change game executable' });

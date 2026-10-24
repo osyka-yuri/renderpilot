@@ -69,7 +69,11 @@ pub fn create(catalog: &Path, update_root: &Path, transaction_id: &str) -> Resul
         rusqlite::Connection::open_with_flags(catalog, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|error| PortableRuntimeError::new("portable_snapshot", error.to_string()))?;
     source
-        .backup(rusqlite::MAIN_DB, &backup, None)
+        .backup(
+            rusqlite::MAIN_DB,
+            &backup,
+            None::<fn(rusqlite::backup::Progress)>,
+        )
         .map_err(|error| PortableRuntimeError::new("portable_snapshot", error.to_string()))?;
     drop(source);
     validate_database(&backup)?;

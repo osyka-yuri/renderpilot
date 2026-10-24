@@ -414,7 +414,7 @@ fn g_obs_02_strict_current_validation_is_authorizer_observational() {
     let current = TemporaryCatalog::new("strict-current-observational");
     prepare_current_catalog(&current.path);
     {
-        let connection = Connection::open(&current.path).expect("open current fixture");
+        let mut connection = Connection::open(&current.path).expect("open current fixture");
         connection
             .execute(
                 "INSERT INTO settings (key, value) VALUES ('portable.marker', 'preserved')",
@@ -422,7 +422,7 @@ fn g_obs_02_strict_current_validation_is_authorizer_observational() {
             )
             .expect("write marker fixture");
 
-        let denied = install_observational_authorizer(&connection);
+        let denied = install_observational_authorizer(&mut connection);
         validate_current_portable_catalog(&connection)
             .expect("strict current validation must not execute a mutation");
         assert_eq!(
@@ -463,8 +463,8 @@ fn g_obs_02_strict_current_validation_is_authorizer_observational() {
 
     for catalog in [&zero, &legacy, &future, &malformed] {
         let before = fs::read(&catalog.path).expect("read invalid catalog before validation");
-        let connection = Connection::open(&catalog.path).expect("open invalid catalog");
-        let denied = install_observational_authorizer(&connection);
+        let mut connection = Connection::open(&catalog.path).expect("open invalid catalog");
+        let denied = install_observational_authorizer(&mut connection);
 
         validate_current_portable_catalog(&connection)
             .expect_err("strict current validation must reject invalid catalogs");
@@ -584,7 +584,7 @@ fn assert_no_backups(directory: &Path) {
     );
 }
 
-fn install_observational_authorizer(connection: &Connection) -> Arc<AtomicU64> {
+fn install_observational_authorizer(connection: &mut Connection) -> Arc<AtomicU64> {
     use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 
     let denied = Arc::new(AtomicU64::new(0));
