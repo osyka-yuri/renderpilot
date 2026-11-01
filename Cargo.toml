@@ -68,7 +68,7 @@ winreg = "0.56"
 
 # Intentionally aligned with Tauri's dependency graph to avoid duplicate majors.
 # Re-check with `cargo tree -d` when updating Tauri.
-zip = { version = "4", default-features = false }
+zip = { version = "9", default-features = false }
 zstd = { version = "0.14", default-features = false }
 
 [workspace.lints.rust]
