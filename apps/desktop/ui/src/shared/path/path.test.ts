@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fileNameFromPath, parentPath, sharedParentPath } from './path';
+import { displayPathRelativeTo, fileNameFromPath, parentPath, sharedParentPath } from './path';
 
 describe('path utils', () => {
   describe('fileNameFromPath', () => {
@@ -46,6 +46,23 @@ describe('path utils', () => {
       expect(sharedParentPath(['C:/one/a.dll', 'C:/two/b.dll'])).toBeNull();
       expect(sharedParentPath(['a.dll', 'b.dll'])).toBeNull();
       expect(sharedParentPath([])).toBeNull();
+    });
+  });
+
+  describe('displayPathRelativeTo', () => {
+    it.each([
+      ['C:\\Games\\Test\\bin\\a.dll', 'c:/games/test/', 'bin/a.dll'],
+      ['//NAS/share/Game/bin/a.dll', '\\\\nas\\share\\game', 'bin/a.dll'],
+      ['//?/C:/Games/Test/bin/a.dll', 'C:/Games/Test', 'bin/a.dll'],
+      ['//?/UNC/NAS/share/Game/bin/a.dll', '//nas/share/game', 'bin/a.dll'],
+      ['C:/Games/Test/bin/a.dll', '//?/C:/Games/Test', 'bin/a.dll'],
+      ['/opt/game/bin/a.so', '/opt/game', 'bin/a.so'],
+      ['/bin/a.so', '/', 'bin/a.so'],
+      ['C:/Games/Test2/a.dll', 'C:/Games/Test', 'C:/Games/Test2/a.dll'],
+      ['/opt/Game/a.so', '/opt/game', '/opt/Game/a.so'],
+      ['C:/a.dll', '', 'C:/a.dll'],
+    ])('presents %s relative to %s when applicable', (path, root, expected) => {
+      expect(displayPathRelativeTo(path, root)).toBe(expected);
     });
   });
 });

@@ -286,10 +286,9 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
 
   'gameDetails.vendor.description': '變更元件版本。',
 
-  'gameDetails.dlss.description': '變更 DLSS 版本或覆寫其設定。',
-  'gameDetails.dlss.descriptionSwapOnly': '變更 DLSS 版本。',
-  'gameDetails.dlss.libraryFileLabel': '檔案版本',
-  'gameDetails.dlss.driverOverridesLabel': 'NVIDIA 設定檔覆寫',
+  'gameDetails.dlss.presetCompatibilityReference':
+    '預設集支援情況會根據 {path} 檢查。其他副本的支援情況可能不同。',
+  'gameDetails.dlss.driverOverridesLabel': 'NVIDIA 設定',
 
   'gameDetails.streamline.description': '管理 Streamline 外掛程式。',
   'gameDetails.streamline.versionTitle': '全域 Streamline 版本',
@@ -384,7 +383,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.nvapi.restoreOriginal': '還原原始值',
   'gameDetails.nvapi.alreadyOriginal': '已處於原始值',
   'gameDetails.nvapi.noOriginal': '未儲存原始值',
-  'gameDetails.nvapi.versionUnavailable': 'DLSS 版本無法使用',
 
   'gameDetails.nvapi.warning.noDll': '在安裝目錄中未偵測到 DLSS DLL。',
   'gameDetails.nvapi.warning.noManifest': '清單中沒有該 DLL 版本的資料。',

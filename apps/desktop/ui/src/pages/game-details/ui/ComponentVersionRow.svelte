@@ -4,6 +4,7 @@
   import { presentComponentFiles } from '@entities/component';
   import { isD3d12ExecutableMutationAction } from '@shared/model';
   import { publishCommandErrorNotification } from '@shared/notifications';
+  import { displayPathRelativeTo } from '@shared/path';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import Undo2Icon from '@lucide/svelte/icons/undo-2';
   import {
@@ -44,6 +45,7 @@
     group: GameCandidateGroup | null;
     installPath: string;
     busy: boolean;
+    layout?: 'component' | 'file';
     onSwap: SwapHandler;
     onRollback: (componentId: string) => void;
   };
@@ -61,20 +63,38 @@
     owner: SwapOwner;
   };
 
-  const { component, group, installPath, busy, onSwap, onRollback }: Props = $props();
+  const {
+    component,
+    group,
+    installPath,
+    busy,
+    layout = 'component',
+    onSwap,
+    onRollback,
+  }: Props = $props();
+  const rowId = $props.id();
+  const isFileRow = $derived(layout === 'file');
+  const fileLocationId = $derived(isFileRow ? `${rowId}-location` : undefined);
+  const fileVersionId = $derived(isFileRow ? `${rowId}-version` : undefined);
 
   const filePresentation = $derived(presentComponentFiles(component));
   const fileName = $derived(filePresentation?.label ?? t('common.unknown'));
   const fileCount = $derived(filePresentation?.fileCount ?? 0);
-  const fileLocations = $derived(filePresentation?.locations ?? []);
+  const fileLocations = $derived(
+    isFileRow
+      ? (filePresentation?.locations.map((path) => displayPathRelativeTo(path, installPath)) ?? [])
+      : (filePresentation?.locations ?? []),
+  );
   const candidates = $derived(group?.candidates ?? []);
   const candidatePartition = $derived(partitionD3d12Candidates(candidates));
 
-  const currentVersion = $derived(
-    group?.version_report.kind === 'known'
-      ? (group.version_report.catalog_release?.version ?? group.version_report.technical_version)
-      : undefined,
-  );
+  const versionReport = $derived(group?.version_report);
+  const currentVersion = $derived.by(() => {
+    if (versionReport?.kind === 'known') {
+      return versionReport.catalog_release?.version ?? versionReport.technical_version;
+    }
+    return isFileRow ? component.files[0]?.version : undefined;
+  });
 
   const currentValue = $derived(
     installedSelectionValue(
@@ -87,8 +107,8 @@
     formatReleaseVersionLabel({
       version: currentVersion,
       releaseLabel:
-        group?.version_report.kind === 'known'
-          ? (group.version_report.catalog_release?.label ?? group.version_report.release_label)
+        versionReport?.kind === 'known'
+          ? (versionReport.catalog_release?.label ?? versionReport.release_label)
           : null,
       unknownLabel: t('common.unknown'),
     }),
@@ -241,8 +261,11 @@
   const progressIds = $derived(pendingArtifactId ? [pendingArtifactId] : []);
 </script>
 
-<Item size="sm">
-  <ItemContent>
+<Item
+  size="sm"
+  class={isFileRow ? 'grid min-w-0 @min-[36rem]:grid-cols-[minmax(0,1fr)_auto]' : undefined}
+>
+  <ItemContent class={isFileRow ? 'min-w-0' : undefined}>
     <ItemTitle>
       <span>{fileName}</span>
       {#if fileCount > 1}
@@ -251,7 +274,7 @@
         </Badge>
       {/if}
     </ItemTitle>
-    <ItemDescription>
+    <ItemDescription id={fileLocationId} class={isFileRow ? 'line-clamp-none' : undefined}>
       {#if fileLocations.length === 0}
         <span>{t('common.unknown')}</span>
       {:else}
@@ -264,8 +287,11 @@
       {/if}
     </ItemDescription>
   </ItemContent>
-  <ItemActions>
+  <ItemActions class={isFileRow ? 'min-w-0 flex-wrap' : undefined}>
     {#if candidates.length === 0}
+      {#if isFileRow}
+        <span class="font-medium">{currentLabel}</span>
+      {/if}
       <span class="text-xs text-muted-foreground">{t('gameDetails.version.noReplacements')}</span>
     {:else}
       <DownloadProgressBar ids={progressIds} active={busy} />
@@ -281,8 +307,12 @@
         disabled={busy || preflight.planning}
         onValueChange={handleSwapChange}
       >
-        <SelectTrigger size="sm" class="w-60">
-          <span class="truncate">{currentLabel}</span>
+        <SelectTrigger
+          size="sm"
+          class={isFileRow ? 'w-60 max-w-full min-w-0' : 'w-60'}
+          aria-labelledby={isFileRow ? `${fileVersionId} ${fileLocationId}` : undefined}
+        >
+          <span id={fileVersionId} class="truncate">{currentLabel}</span>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={currentValue} label={currentLabel}>{currentLabel}</SelectItem>
@@ -345,6 +375,7 @@
                 component.d3d12_executable_status?.status === 'repair_required'}
               onclick={handleRollback}
               aria-label={t('gameDetails.version.restoreOriginal', { fileName })}
+              aria-describedby={fileLocationId}
             >
               <Undo2Icon class="size-4" aria-hidden="true" />
             </Button>

@@ -37,6 +37,28 @@ export function sharedParentPath(paths: readonly string[]): string | null {
     : null;
 }
 
+/** Presents an install-local path relative to its root, preserving other paths as supplied. */
+export function displayPathRelativeTo(path: string, root: string): string {
+  if (!root) {
+    return path;
+  }
+
+  const rootPrefix = `${normalizeInstallPath(root).replace(/\/+$/, '')}/`;
+  const normalized = normalizeInstallPath(path);
+  if (!pathComparisonKey(normalized).startsWith(pathComparisonKey(rootPrefix))) {
+    return path;
+  }
+
+  return normalized.slice(rootPrefix.length) || path;
+}
+
+function normalizeInstallPath(path: string): string {
+  return path
+    .replaceAll('\\', '/')
+    .replace(/^\/\/\?\/unc\//i, '//')
+    .replace(/^\/\/\?\/(?=[a-z]:\/)/i, '');
+}
+
 function pathComparisonKey(path: string): string {
   const normalized = path.replaceAll('\\', '/');
   const isWindowsPath = /^[a-z]:\//i.test(normalized) || normalized.startsWith('//');

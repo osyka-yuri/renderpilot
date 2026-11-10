@@ -288,10 +288,9 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
 
   'gameDetails.vendor.description': '更改组件版本。',
 
-  'gameDetails.dlss.description': '更改 DLSS 版本或覆盖其设置。',
-  'gameDetails.dlss.descriptionSwapOnly': '更改 DLSS 版本。',
-  'gameDetails.dlss.libraryFileLabel': '文件版本',
-  'gameDetails.dlss.driverOverridesLabel': 'NVIDIA 配置文件覆盖',
+  'gameDetails.dlss.presetCompatibilityReference':
+    '预设支持情况根据 {path} 检查。其他副本的支持情况可能不同。',
+  'gameDetails.dlss.driverOverridesLabel': 'NVIDIA 设置',
 
   'gameDetails.streamline.description': '管理 Streamline 插件。',
   'gameDetails.streamline.versionTitle': '全局 Streamline 版本',
@@ -386,7 +385,6 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.nvapi.restoreOriginal': '恢复原始值',
   'gameDetails.nvapi.alreadyOriginal': '已处于原始值',
   'gameDetails.nvapi.noOriginal': '未保存原始值',
-  'gameDetails.nvapi.versionUnavailable': 'DLSS 版本不可用',
 
   'gameDetails.nvapi.warning.noDll': '在安装目录中未检测到 DLSS DLL。',
   'gameDetails.nvapi.warning.noManifest': '清单中没有该 DLL 版本的数据。',

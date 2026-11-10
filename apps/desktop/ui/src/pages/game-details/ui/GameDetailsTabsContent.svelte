@@ -20,7 +20,7 @@
     RollbackHandler,
     SwapHandler,
   } from '../model/create-game-details-page-model';
-  import DlssComponentCard from './DlssComponentCard.svelte';
+  import DlssFamilyCard from './DlssFamilyCard.svelte';
   import NvidiaProfileControl from './NvidiaProfileControl.svelte';
   import StreamlineComponentCard from './StreamlineComponentCard.svelte';
   import VendorComponentCard from './VendorComponentCard.svelte';
@@ -127,7 +127,10 @@
     <TabsContent value={tab.key} class="mt-0 w-full min-w-0">
       <div class="grid min-w-0 gap-3">
         {#if tab.key === 'nvidia'}
-          {@const nonStreamline = tab.components.filter((component) => !isStreamline(component))}
+          {@const componentGroups = Map.groupBy(
+            tab.components.filter((component) => !isStreamline(component)),
+            dlssFamilyCard,
+          )}
           {@const streamline = tab.components.filter(isStreamline)}
 
           {#if details.game.platform === 'Windows'}
@@ -142,26 +145,35 @@
             />
           {/if}
 
-          {#each nonStreamline as component (component.id)}
-            {@const group = getCandidateGroup(component.id)}
-            {@const dlssCard = dlssFamilyCard(component)}
-            {#if dlssCard}
-              <DlssComponentCard
+          {#each componentGroups as [card, components] (`${gameId}:${card?.family ?? 'other'}`)}
+            {#if card}
+              <DlssFamilyCard
                 {gameId}
                 {installPath}
-                {component}
-                {group}
-                family={dlssCard.family}
-                title={dlssCard.title}
+                files={components.map((component) => ({
+                  component,
+                  group: getCandidateGroup(component.id),
+                }))}
+                family={card.family}
+                title={card.title}
                 {nvidia}
                 {driverMutationBlocked}
-                nvapiAvailable={nvidia.nvapiAvailable}
                 {busy}
                 {onSwap}
                 {onRollback}
               />
             {:else}
-              <VendorComponentCard {component} {group} {installPath} {busy} {onSwap} {onRollback} />
+              {#each components as component (component.id)}
+                {@const group = getCandidateGroup(component.id)}
+                <VendorComponentCard
+                  {component}
+                  {group}
+                  {installPath}
+                  {busy}
+                  {onSwap}
+                  {onRollback}
+                />
+              {/each}
             {/if}
           {/each}
 

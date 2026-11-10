@@ -9,7 +9,7 @@ const translations = {
   'Render Preset': 'Пресет рендеринга',
   "Forces a specific DLSS Super Resolution preset. Some games may require 'Forced Model Preset Profile' to apply custom presets.":
     'Принудительно задаёт пресет DLSS Super Resolution. В некоторых играх для применения пользовательских пресетов также может потребоваться «Принудительный профиль пресета модели».',
-  'Off (game default)': 'Выкл. (как в игре)',
+  'Off (game default)': 'Как в игре',
   'Preset A (CNN)': 'Пресет A (CNN)',
   'Preset B (CNN)': 'Пресет B (CNN)',
   'Preset C (CNN)': 'Пресет C (CNN)',

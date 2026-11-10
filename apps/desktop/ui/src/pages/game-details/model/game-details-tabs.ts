@@ -15,9 +15,7 @@ import type { SettingFamily } from '@features/nvapi-settings';
 export const NVIDIA_STREAMLINE_TECHNOLOGY = 'nvidia_streamline';
 export const ADDONS_TAB_VALUE = 'addons';
 
-// Each DLSS DLL family is its own card (physical DLL swap + NVAPI driver
-// overrides), exactly like Super Resolution — keyed off the component's
-// technology. Streamline (sl.*.dll) is unrelated and keeps its own card.
+// Each family card groups its DLL files and shares one set of driver controls.
 export const DLSS_FAMILY_CARDS: Record<string, { family: SettingFamily; title: string }> = {
   dlss_super_resolution: { family: 'sr', title: 'NVIDIA DLSS Super Resolution' },
   dlss_ray_reconstruction: { family: 'rr', title: 'NVIDIA DLSS Ray Reconstruction' },

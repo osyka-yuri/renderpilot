@@ -366,10 +366,9 @@ export const ptBr = defineLocalizedCatalog<'pt-BR', EnglishCatalog>()({
     other: '{count} arquivos',
   }),
   'gameDetails.vendor.description': 'Alterar a versão do componente.',
-  'gameDetails.dlss.description': 'Altere a versão do DLSS ou substitua suas configurações.',
-  'gameDetails.dlss.descriptionSwapOnly': 'Altere a versão do DLSS.',
-  'gameDetails.dlss.libraryFileLabel': 'Versão do arquivo',
-  'gameDetails.dlss.driverOverridesLabel': 'Substituições do perfil NVIDIA',
+  'gameDetails.dlss.presetCompatibilityReference':
+    'O suporte a predefinições é verificado com base em {path}. Ele pode variar em outras cópias.',
+  'gameDetails.dlss.driverOverridesLabel': 'Configurações da NVIDIA',
   'gameDetails.streamline.description': 'Gerencie os complementos do Streamline.',
   'gameDetails.streamline.versionTitle': 'Versão global do Streamline',
   'gameDetails.streamline.versionDescription': 'Aplica a mesma versão a todos os complementos.',
@@ -478,7 +477,6 @@ export const ptBr = defineLocalizedCatalog<'pt-BR', EnglishCatalog>()({
   'gameDetails.nvapi.restoreOriginal': 'Restaurar valor original',
   'gameDetails.nvapi.alreadyOriginal': 'Já está no valor original',
   'gameDetails.nvapi.noOriginal': 'Nenhum valor original salvo',
-  'gameDetails.nvapi.versionUnavailable': 'Versão do DLSS indisponível',
   'gameDetails.nvapi.warning.noDll':
     'Nenhum arquivo DLL do DLSS foi detectado na pasta de instalação.',
   'gameDetails.nvapi.warning.noManifest': 'O manifesto não contém dados para esta versão da DLL.',

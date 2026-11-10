@@ -409,10 +409,9 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.vendor.description': 'Изменить версию компонента.',
 
   // ── Game details: DLSS component card ──
-  'gameDetails.dlss.description': 'Изменить версию DLSS или переопределить настройки.',
-  'gameDetails.dlss.descriptionSwapOnly': 'Изменить версию DLSS.',
-  'gameDetails.dlss.libraryFileLabel': 'Версия файла',
-  'gameDetails.dlss.driverOverridesLabel': 'Настройки драйвера NVIDIA',
+  'gameDetails.dlss.presetCompatibilityReference':
+    'Поддержка пресетов проверяется по файлу {path}. Для других копий она может отличаться.',
+  'gameDetails.dlss.driverOverridesLabel': 'Настройки NVIDIA',
 
   // ── Game details: Streamline card ──
   'gameDetails.streamline.description': 'Управление плагинами Streamline.',
@@ -522,7 +521,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.nvapi.restoreOriginal': 'Восстановить исходное значение',
   'gameDetails.nvapi.alreadyOriginal': 'Уже установлено исходное значение',
   'gameDetails.nvapi.noOriginal': 'Исходное значение не сохранено',
-  'gameDetails.nvapi.versionUnavailable': 'Версия DLSS недоступна',
 
   'gameDetails.nvapi.warning.noDll': 'DLL-файл DLSS не найден в папке с игрой.',
   'gameDetails.nvapi.warning.noManifest': 'В манифесте нет данных для этой версии DLL.',

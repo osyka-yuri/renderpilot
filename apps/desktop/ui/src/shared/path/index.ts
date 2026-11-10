@@ -1,1 +1,1 @@
-export { fileNameFromPath, parentPath, sharedParentPath } from './path';
+export { displayPathRelativeTo, fileNameFromPath, parentPath, sharedParentPath } from './path';

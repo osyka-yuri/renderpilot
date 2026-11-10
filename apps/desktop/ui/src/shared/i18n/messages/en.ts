@@ -391,10 +391,9 @@ export const en = defineSourceCatalog({
   'gameDetails.vendor.description': 'Change the component version.',
 
   // ── Game details: DLSS component card ──
-  'gameDetails.dlss.description': 'Change the DLSS version or override its settings.',
-  'gameDetails.dlss.descriptionSwapOnly': 'Change the DLSS version.',
-  'gameDetails.dlss.libraryFileLabel': 'File version',
-  'gameDetails.dlss.driverOverridesLabel': 'NVIDIA profile overrides',
+  'gameDetails.dlss.presetCompatibilityReference':
+    'Preset support is checked against {path}. It may differ for other copies.',
+  'gameDetails.dlss.driverOverridesLabel': 'NVIDIA settings',
 
   // ── Game details: Streamline card ──
   'gameDetails.streamline.description': 'Manage Streamline plugins.',
@@ -503,7 +502,6 @@ export const en = defineSourceCatalog({
   'gameDetails.nvapi.restoreOriginal': 'Restore original',
   'gameDetails.nvapi.alreadyOriginal': 'Already at original',
   'gameDetails.nvapi.noOriginal': 'No original saved',
-  'gameDetails.nvapi.versionUnavailable': 'DLSS version unavailable',
 
   'gameDetails.nvapi.warning.noDll': 'No DLSS DLL detected in the install directory.',
   'gameDetails.nvapi.warning.noManifest': 'Manifest has no entry for this DLL version.',

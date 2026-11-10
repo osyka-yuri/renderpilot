@@ -4,8 +4,11 @@
 
 **Game Details → NVIDIA** manages driver overrides for DLSS Super Resolution, Frame Generation, and Ray Reconstruction in the selected executable's profile. **Settings → NVIDIA** changes the base profile for games that inherit the setting. In-game support depends on the game, GPU, driver, and installed DLSS components.
 
+Each DLSS technology lists its files with paths relative to the game folder and installed versions. Select a replacement on the row for that file. The driver controls for the selected executable sit below the file rows and start collapsed. When several copies are present, the expanded controls identify the DLL used for preset compatibility checks when available.
+
 RenderPilot rereads the driver when you open the NVIDIA tab, return to the app with that tab visible, or a write fails. If the game, driver, or another tool changes a value, you can select a supported value again while the profile binding can still be verified. The new write starts from the current driver state.
 
+- **Off (game default)** lets the game choose the render preset.
 - **Reset to default** removes the override from the current profile and lets the driver choose the inherited value.
 - **Restore original** reinstates the first saved state of a game profile setting, including whether it had an override. It requires the same verified executable binding.
 

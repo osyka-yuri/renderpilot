@@ -354,6 +354,18 @@ async function chooseSelectOption(trigger: HTMLButtonElement, value: string): Pr
   flushSync();
 }
 
+async function openDriverOverrides(container: HTMLElement): Promise<void> {
+  const trigger = await vi.waitFor(() => {
+    const button = container.querySelector<HTMLButtonElement>('[data-slot="accordion-trigger"]');
+    if (!button) {
+      throw new Error('Expected the NVIDIA driver overrides disclosure');
+    }
+    return button;
+  });
+  trigger.click();
+  flushSync();
+}
+
 describe('GameDetailsPage', () => {
   let target: HTMLDivElement;
   let component: object | undefined;
@@ -934,10 +946,11 @@ describe('GameDetailsPage', () => {
       expect(button?.getAttribute('aria-disabled')).toBeNull();
       return button;
     });
+    await openDriverOverrides(target);
     const getNvapiSelect = () =>
-      [...target.querySelectorAll<HTMLElement>('[data-slot="card"]')]
-        .find((card) => card.textContent.includes('DLSS preset'))
-        ?.querySelector<HTMLButtonElement>('button[role="combobox"]') ?? null;
+      target.querySelector<HTMLButtonElement>(
+        '[data-slot="accordion-content"] button[role="combobox"]',
+      );
     const initialNvapiSelect = await vi.waitFor(() => {
       const button = getNvapiSelect();
       expect(button).not.toBeNull();
@@ -1121,6 +1134,7 @@ describe('GameDetailsPage', () => {
     await vi.waitFor(() => {
       expect(runner.busy).toBe(false);
     });
+    await openDriverOverrides(target);
     const refreshedNvapiSelect = await vi.waitFor(() => {
       expect(executableReads).toBe(2);
       expect(settingsReads).toBe(2);
@@ -1128,11 +1142,11 @@ describe('GameDetailsPage', () => {
       expect(target.querySelector('button[aria-label="Game executable: alternate.exe"]')).not.toBe(
         null,
       );
-      const select = [...target.querySelectorAll<HTMLElement>('[data-slot="card"]')]
-        .find((card) => card.textContent.includes('DLSS preset'))
-        ?.querySelector<HTMLButtonElement>('button[role="combobox"]');
+      const select = target.querySelector<HTMLButtonElement>(
+        '[data-slot="accordion-content"] button[role="combobox"]',
+      );
       expect(select?.disabled).toBe(false);
-      return select ?? null;
+      return select;
     });
     if (!refreshedNvapiSelect) {
       throw new Error('Expected refreshed NVAPI controls after executable persistence');

@@ -333,11 +333,9 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
 
   'gameDetails.vendor.description': 'Ändern Sie die Komponentenversion.',
 
-  'gameDetails.dlss.description':
-    'Ändern Sie die DLSS-Version oder überschreiben Sie die Einstellungen.',
-  'gameDetails.dlss.descriptionSwapOnly': 'Ändern Sie die DLSS-Version.',
-  'gameDetails.dlss.libraryFileLabel': 'Dateiversion',
-  'gameDetails.dlss.driverOverridesLabel': 'NVIDIA-Profil-Überschreibungen',
+  'gameDetails.dlss.presetCompatibilityReference':
+    'Die Preset-Unterstützung wird anhand von {path} geprüft. Bei anderen Kopien kann sie abweichen.',
+  'gameDetails.dlss.driverOverridesLabel': 'NVIDIA-Einstellungen',
 
   'gameDetails.streamline.description': 'Streamline-Plugins verwalten.',
   'gameDetails.streamline.versionTitle': 'Globale Streamline-Version',
@@ -449,7 +447,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.nvapi.restoreOriginal': 'Originalwert wiederherstellen',
   'gameDetails.nvapi.alreadyOriginal': 'Originalwert bereits aktiv',
   'gameDetails.nvapi.noOriginal': 'Kein Originalwert gespeichert',
-  'gameDetails.nvapi.versionUnavailable': 'DLSS-Version nicht verfügbar',
 
   'gameDetails.nvapi.warning.noDll': 'Keine DLSS-DLL im Installationsverzeichnis gefunden.',
   'gameDetails.nvapi.warning.noManifest':

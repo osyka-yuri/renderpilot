@@ -100,6 +100,16 @@ describe('i18n', () => {
       ).toBe('Render Preset');
     });
 
+    it('names the default DLSS render preset as the game choice in Russian', async () => {
+      await setLanguageMode('ru');
+      expect(
+        translateExternalMessage({
+          key: 'nvapi.dlss_sr_render_preset.value.default',
+          fallback: 'Off (game default)',
+        }),
+      ).toBe('Как в игре');
+    });
+
     it('uses the Luma message translation in every translated locale and the manifest fallback in English', async () => {
       const key = 'luma.cod-black-ops-3.warning';
       const fallback =
