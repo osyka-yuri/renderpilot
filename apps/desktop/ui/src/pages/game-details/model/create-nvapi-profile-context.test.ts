@@ -8,6 +8,7 @@ import {
 import {
   createNvapiProfile,
   getNvapiProfileStatus,
+  moveNvapiProfile,
   type NvapiProfileStatus,
 } from '@features/nvapi-settings';
 import { createNvapiProfileContext } from './create-nvapi-profile-context.svelte';
@@ -55,10 +56,12 @@ function profileStatus(overrides: Partial<NvapiProfileStatus> = {}): NvapiProfil
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 async function activateGame(
@@ -231,6 +234,89 @@ describe('createNvapiProfileContext', () => {
     expect(context.busy).toBe(false);
   });
 
+  it.each(['switch', 'clear'] as const)(
+    'refreshes a committed move after returning to game A through %s while retaining the mutation fence',
+    async (transition) => {
+      const action = deferred<undefined>();
+      const dependentRefresh = deferred<undefined>();
+      vi.mocked(moveNvapiProfile).mockReturnValueOnce(action.promise);
+      const statusReads = [
+        profileStatus({ profileName: 'Initial A profile' }),
+        ...(transition === 'switch' ? [profileStatus({ profileName: 'Game B profile' })] : []),
+        profileStatus({ profileName: 'A before move commit' }),
+        profileStatus({ profileName: 'A after move commit' }),
+      ];
+      vi.mocked(getNvapiProfileStatus).mockImplementation(() =>
+        Promise.resolve(statusReads.shift() ?? profileStatus()),
+      );
+      const onChanged = vi.fn(() => dependentRefresh.promise);
+      const context = createNvapiProfileContext(onChanged);
+
+      await context.reload(GAME_ID);
+      const move = context.moveTo(GAME_ID, 'C:/Games/Other/game.exe', true);
+      await vi.waitFor(() => {
+        expect(moveNvapiProfile).toHaveBeenCalledOnce();
+      });
+
+      if (transition === 'switch') {
+        await context.reload(OTHER_GAME_ID);
+      } else {
+        context.clear();
+      }
+      const returnToA = context.reload(GAME_ID);
+      await returnToA;
+      expect(context.status?.profileName).toBe('A before move commit');
+      expect(context.busy).toBe(true);
+      await expect(context.create(GAME_ID)).resolves.toBe(false);
+      expect(createNvapiProfile).not.toHaveBeenCalled();
+
+      action.resolve(undefined);
+      await vi.waitFor(() => {
+        expect(onChanged).toHaveBeenCalledOnce();
+      });
+      expect(context.status?.profileName).toBe('A after move commit');
+      expect(context.busy).toBe(true);
+      await expect(context.moveTo(GAME_ID, 'C:/Games/Other/another.exe', false)).resolves.toBe(
+        false,
+      );
+
+      dependentRefresh.resolve(undefined);
+      await expect(move).resolves.toBe(true);
+      expect(context.busy).toBe(false);
+      expect(onChanged).toHaveBeenCalledWith(GAME_ID);
+      expect(getNvapiProfileStatus).toHaveBeenCalledTimes(
+        statusReads.length + (transition === 'switch' ? 4 : 3),
+      );
+    },
+  );
+
+  it('suppresses a failed old action notification and status refresh while another game is active', async () => {
+    const action = deferred<undefined>();
+    vi.mocked(moveNvapiProfile).mockReturnValueOnce(action.promise);
+    vi.mocked(getNvapiProfileStatus)
+      .mockResolvedValueOnce(profileStatus({ profileName: 'Game A profile' }))
+      .mockResolvedValueOnce(profileStatus({ profileName: 'Game B profile' }));
+    const onChanged = vi.fn();
+    const context = createNvapiProfileContext(onChanged);
+
+    await context.reload(GAME_ID);
+    const move = context.moveTo(GAME_ID, 'C:/Games/Other/game.exe', true);
+    await vi.waitFor(() => {
+      expect(moveNvapiProfile).toHaveBeenCalledOnce();
+    });
+    await context.reload(OTHER_GAME_ID);
+
+    action.reject(new Error('stale move failed'));
+    await expect(move).resolves.toBe(false);
+
+    expect(context.status?.profileName).toBe('Game B profile');
+    expect(context.busy).toBe(false);
+    expect(getNvapiProfileStatus).toHaveBeenCalledTimes(2);
+    expect(onChanged).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+
   it('rejects a mutation for a game other than the active game', async () => {
     const context = createNvapiProfileContext();
     await activateGame(context);
@@ -240,6 +326,16 @@ describe('createNvapiProfileContext', () => {
     expect(createNvapiProfile).not.toHaveBeenCalled();
     expect(context.busy).toBe(false);
     expect(context.status).toEqual(profileStatus());
+  });
+
+  it('rejects profile mutations while the executable selection is pending', async () => {
+    const context = createNvapiProfileContext(undefined, () => false);
+    await activateGame(context);
+
+    await expect(context.create(GAME_ID)).resolves.toBe(false);
+
+    expect(createNvapiProfile).not.toHaveBeenCalled();
+    expect(context.busy).toBe(false);
   });
 
   it('rejects mutations after the active game is cleared', async () => {
@@ -254,16 +350,12 @@ describe('createNvapiProfileContext', () => {
     expect(context.status).toBeNull();
   });
 
-  it('does not let an old action clear the busy state of a newer game action', async () => {
+  it('keeps the profile mutation fence across clear and blocks a second game action', async () => {
     const oldAction = deferred<undefined>();
-    const newAction = deferred<undefined>();
-    vi.mocked(createNvapiProfile)
-      .mockReturnValueOnce(oldAction.promise)
-      .mockReturnValueOnce(newAction.promise);
+    vi.mocked(createNvapiProfile).mockReturnValueOnce(oldAction.promise);
     vi.mocked(getNvapiProfileStatus)
       .mockResolvedValueOnce(profileStatus({ profileName: 'Old game profile' }))
-      .mockResolvedValueOnce(profileStatus({ profileName: 'New game profile' }))
-      .mockResolvedValueOnce(profileStatus({ profileName: 'Updated new game profile' }));
+      .mockResolvedValueOnce(profileStatus({ profileName: 'New game profile' }));
     const context = createNvapiProfileContext();
 
     await context.reload(GAME_ID);
@@ -274,18 +366,13 @@ describe('createNvapiProfileContext', () => {
 
     context.clear();
     await context.reload(OTHER_GAME_ID);
-    const newMutation = context.create(OTHER_GAME_ID);
-    await vi.waitFor(() => {
-      expect(createNvapiProfile).toHaveBeenCalledTimes(2);
-    });
+    expect(context.busy).toBe(true);
+    await expect(context.create(OTHER_GAME_ID)).resolves.toBe(false);
+    expect(createNvapiProfile).toHaveBeenCalledOnce();
 
     oldAction.resolve(undefined);
     await expect(oldMutation).resolves.toBe(true);
-    expect(context.busy).toBe(true);
-
-    newAction.resolve(undefined);
-    await expect(newMutation).resolves.toBe(true);
     expect(context.busy).toBe(false);
-    expect(context.status?.profileName).toBe('Updated new game profile');
+    expect(context.status?.profileName).toBe('New game profile');
   });
 });

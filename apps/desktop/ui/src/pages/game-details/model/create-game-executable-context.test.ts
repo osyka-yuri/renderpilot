@@ -32,28 +32,32 @@ vi.mock('@shared/notifications', async (importOriginal) => ({
 describe('createGameExecutableContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveGameExecutable).mockResolvedValue(null);
+    vi.mocked(listGameExecutableCandidates).mockResolvedValue([]);
   });
 
   it('keeps a localized error after saving an executable selection fails', async () => {
     vi.mocked(setGameExecutableOverride).mockRejectedValueOnce(new Error('write denied'));
     const context = createGameExecutableContext();
+    await context.reload('steam:123');
 
     await expect(context.setOverride('steam:123', 'C:/Games/Test/game.exe')).resolves.toBe(false);
 
     expect(context.changeError).toBeTruthy();
     expect(context.loadError).toBeNull();
-    expect(resolveGameExecutable).not.toHaveBeenCalled();
+    expect(resolveGameExecutable).toHaveBeenCalledOnce();
   });
 
   it('keeps a localized error after clearing an executable selection fails', async () => {
     vi.mocked(clearGameExecutableOverride).mockRejectedValueOnce(new Error('write denied'));
     const context = createGameExecutableContext();
+    await context.reload('steam:123');
 
     await expect(context.clearOverride('steam:123')).resolves.toBe(false);
 
     expect(context.changeError).toBeTruthy();
     expect(context.loadError).toBeNull();
-    expect(resolveGameExecutable).not.toHaveBeenCalled();
+    expect(resolveGameExecutable).toHaveBeenCalledOnce();
   });
 
   it('returns committed success when a dependent refresh fails after setting an override', async () => {
@@ -62,6 +66,7 @@ describe('createGameExecutableContext', () => {
     vi.mocked(listGameExecutableCandidates).mockResolvedValueOnce([]);
     const onChange = vi.fn().mockRejectedValueOnce(new Error('dependent refresh failed'));
     const context = createGameExecutableContext({ onChange });
+    await context.reload('steam:123');
 
     await expect(context.setOverride('steam:123', 'C:/Games/Test/game.exe')).resolves.toBe(true);
 
@@ -80,6 +85,7 @@ describe('createGameExecutableContext', () => {
     vi.mocked(listGameExecutableCandidates).mockResolvedValueOnce([]);
     const onChange = vi.fn().mockRejectedValueOnce(new Error('dependent refresh failed'));
     const context = createGameExecutableContext({ onChange });
+    await context.reload('steam:123');
 
     await expect(context.clearOverride('steam:123')).resolves.toBe(true);
 
@@ -98,5 +104,51 @@ describe('createGameExecutableContext', () => {
     await expect(context.reload('steam:123')).resolves.toBe(false);
 
     expect(context.loadError).toBeTruthy();
+  });
+
+  it('keeps selection pending through dependent refresh and blocks overlapping actions', async () => {
+    let finishDependentRefresh!: () => void;
+    const onChange = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDependentRefresh = resolve;
+        }),
+    );
+    const context = createGameExecutableContext({ onChange });
+    await context.reload('steam:123');
+
+    const action = context.setOverride('steam:123', 'C:/Games/Test/other.exe');
+    expect(context.busy).toBe(true);
+    await vi.waitFor(() => {
+      expect(onChange).toHaveBeenCalledOnce();
+    });
+    expect(context.busy).toBe(true);
+    await expect(context.clearOverride('steam:123')).resolves.toBe(false);
+    expect(clearGameExecutableOverride).not.toHaveBeenCalled();
+
+    finishDependentRefresh();
+    await expect(action).resolves.toBe(true);
+    expect(context.busy).toBe(false);
+  });
+
+  it('does not refresh a previous game after its executable write settles', async () => {
+    let finishWrite!: () => void;
+    vi.mocked(setGameExecutableOverride).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      }),
+    );
+    const onChange = vi.fn();
+    const context = createGameExecutableContext({ onChange });
+    await context.reload('steam:123');
+
+    const action = context.setOverride('steam:123', 'C:/Games/Test/other.exe');
+    await context.reload('steam:456');
+    finishWrite();
+    await expect(action).resolves.toBe(true);
+
+    expect(context.effectiveExe).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(context.busy).toBe(false);
   });
 });

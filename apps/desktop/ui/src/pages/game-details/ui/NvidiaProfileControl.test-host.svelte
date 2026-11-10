@@ -13,6 +13,7 @@
 
   let { gameId: initialGameId, ...props }: Props = $props();
   let gameId = $state(getInitialGameId());
+  let mutationBlocked = $state(false);
 
   function getInitialGameId(): string {
     return initialGameId;
@@ -21,6 +22,10 @@
   export function setGameId(nextGameId: string): void {
     gameId = nextGameId;
   }
+
+  export function setMutationBlocked(blocked: boolean): void {
+    mutationBlocked = blocked;
+  }
 </script>
 
-<NvidiaProfileControl {...props} {gameId} />
+<NvidiaProfileControl {...props} {gameId} {mutationBlocked} />

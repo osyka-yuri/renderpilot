@@ -1,7 +1,9 @@
 //! Live DWORD reads from an open DRS profile.
 
 use renderpilot_nvapi::setting::{NvapiSetting, SettingContext};
-use renderpilot_nvapi::{DwordSettingState, NVAPI_SETTING_NOT_FOUND, NvapiError, Profile};
+use renderpilot_nvapi::{
+    ApplicationIdentity, DwordSettingState, NVAPI_SETTING_NOT_FOUND, NvapiError, Profile,
+};
 
 use super::super::dto::NvapiWarningDto;
 use super::session::open_drs_session;
@@ -19,12 +21,18 @@ pub(super) struct LiveRead {
     pub(super) has_profile_for_exe: bool,
     /// Exact DRS identity of the profile resolved for the selected full path.
     pub(super) profile_name: Option<String>,
+    /// Stable profile status from the same resolved DRS profile.
+    pub(super) profile_is_predefined: Option<bool>,
+    /// Complete application witness returned by the selected full-path lookup.
+    pub(super) matched_application: Option<ApplicationIdentity>,
     /// Set when the live value could not be read; surfaced as a UI warning.
     pub(super) warning: Option<NvapiWarningDto>,
 }
 
 pub(super) struct ProfileReadIdentity {
     profile_name: Option<String>,
+    profile_is_predefined: Option<bool>,
+    matched_application: Option<ApplicationIdentity>,
     warning: Option<NvapiWarningDto>,
 }
 
@@ -41,6 +49,8 @@ impl LiveRead {
             is_current_predefined: true,
             has_profile_for_exe: true,
             profile_name: None,
+            profile_is_predefined: None,
+            matched_application: None,
             warning: None,
         }
     }
@@ -55,6 +65,8 @@ impl LiveRead {
             is_current_predefined: false,
             has_profile_for_exe: false,
             profile_name: None,
+            profile_is_predefined: None,
+            matched_application: None,
             warning,
         }
     }
@@ -112,10 +124,14 @@ pub(super) fn profile_read_identity(profile: &Profile<'_>) -> ProfileReadIdentit
     match profile.identity() {
         Ok(identity) => ProfileReadIdentity {
             profile_name: Some(identity.name),
+            profile_is_predefined: Some(identity.is_predefined),
+            matched_application: profile.matched_application(),
             warning: None,
         },
         Err(_) => ProfileReadIdentity {
             profile_name: None,
+            profile_is_predefined: None,
+            matched_application: None,
             warning: Some(NvapiWarningDto::DrsProfileLookupFailed),
         },
     }
@@ -139,6 +155,8 @@ pub(super) fn read_dword_or_default(
             is_current_predefined: state.is_current_predefined,
             has_profile_for_exe: true,
             profile_name,
+            profile_is_predefined: identity.profile_is_predefined,
+            matched_application: identity.matched_application.clone(),
             warning: identity_warning,
         },
         Err(NvapiError::GetSettingFailed(code)) if code == NVAPI_SETTING_NOT_FOUND => LiveRead {
@@ -148,6 +166,8 @@ pub(super) fn read_dword_or_default(
             is_current_predefined: true,
             has_profile_for_exe: true,
             profile_name,
+            profile_is_predefined: identity.profile_is_predefined,
+            matched_application: identity.matched_application.clone(),
             warning: identity_warning,
         },
         Err(_) => LiveRead {
@@ -157,6 +177,8 @@ pub(super) fn read_dword_or_default(
             is_current_predefined: false,
             has_profile_for_exe: true,
             profile_name,
+            profile_is_predefined: identity.profile_is_predefined,
+            matched_application: identity.matched_application.clone(),
             warning: Some(NvapiWarningDto::DrsFailed),
         },
     }

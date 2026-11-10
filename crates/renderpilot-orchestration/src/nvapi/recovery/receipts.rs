@@ -3,6 +3,7 @@ use renderpilot_domain::normalized_path_key;
 use renderpilot_nvapi::ApplicationIdentity;
 use serde_json::Value;
 
+use super::super::profile_composition::{composition_value, validate_composition};
 use super::{Lookup, Observation, ObservedProfile};
 pub(super) fn profile_receipts(
     profile: &ObservedProfile,
@@ -20,46 +21,11 @@ pub(super) fn profile_receipts(
 }
 
 pub(super) fn composition_json(profile: &ObservedProfile) -> Option<String> {
-    let mut applications = profile.applications.clone();
-    applications.sort_by_cached_key(|application| application.app_name.to_lowercase());
-    let mut settings = profile.settings.clone();
-    settings.sort_by_key(|setting| setting.id);
-    serde_json::to_string(&serde_json::json!({"applications": applications, "settings": settings}))
-        .ok()
+    serde_json::to_string(&observed_composition(profile)).ok()
 }
 
-pub(super) fn composition_matches_except_setting(
-    expected_json: &str,
-    observed: &ObservedProfile,
-    setting_id: u32,
-) -> AppResult<bool> {
-    let mut expected: Value = match serde_json::from_str(expected_json) {
-        Ok(value) => value,
-        Err(error) => {
-            return Err(AppError::storage_failed(format!(
-                "invalid owned profile composition: {error}"
-            )));
-        }
-    };
-    let mut actual: Value = match composition_json(observed) {
-        Some(json) => serde_json::from_str(&json)
-            .map_err(|error| AppError::storage_failed(error.to_string()))?,
-        None => return Ok(false),
-    };
-    remove_setting_from_composition(&mut expected, setting_id);
-    remove_setting_from_composition(&mut actual, setting_id);
-    Ok(expected == actual)
-}
-
-fn remove_setting_from_composition(composition: &mut Value, setting_id: u32) {
-    if let Some(settings) = composition
-        .get_mut("settings")
-        .and_then(Value::as_array_mut)
-    {
-        settings.retain(|setting| {
-            setting.get("id").and_then(Value::as_u64) != Some(u64::from(setting_id))
-        });
-    }
+pub(super) fn observed_composition(profile: &ObservedProfile) -> Value {
+    composition_value(profile.applications.clone(), profile.settings.clone())
 }
 
 pub(super) fn settings_match_before(profile: &ObservedProfile, before: &Value) -> bool {
@@ -69,12 +35,7 @@ pub(super) fn settings_match_before(profile: &ObservedProfile, before: &Value) -
     let Ok(expected) = serde_json::from_str::<Value>(composition) else {
         return false;
     };
-    let Ok(actual) = composition_json(profile)
-        .ok_or(())
-        .and_then(|json| serde_json::from_str::<Value>(&json).map_err(|_| ()))
-    else {
-        return false;
-    };
+    let actual = observed_composition(profile);
     expected.get("settings") == actual.get("settings")
 }
 
@@ -153,7 +114,14 @@ pub(super) fn path_equal(left: &str, right: &str) -> bool {
 }
 
 pub(super) fn parse_snapshot(raw: &str) -> Result<Value, String> {
-    serde_json::from_str(raw).map_err(|error| error.to_string())
+    let value: Value = serde_json::from_str(raw).map_err(|error| error.to_string())?;
+    if let Some(composition) = value.get("owned_before_composition") {
+        let composition = composition
+            .as_str()
+            .ok_or_else(|| "owned profile composition receipt is not a string".to_owned())?;
+        validate_composition(composition)?;
+    }
+    Ok(value)
 }
 
 pub(super) fn string<'a>(snapshot: &'a Value, key: &str) -> Option<&'a str> {

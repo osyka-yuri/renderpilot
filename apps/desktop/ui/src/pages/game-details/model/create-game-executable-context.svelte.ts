@@ -2,6 +2,7 @@ import { formatPresentedError } from '@shared/error-presentation';
 import { reportClientError } from '@shared/errors';
 import { t } from '@shared/i18n';
 import { publishWarningNotification } from '@shared/notifications';
+import { createExclusiveTaskRunner, type ExclusiveTaskRunner } from '@shared/concurrency';
 import {
   clearGameExecutableOverride,
   listGameExecutableCandidates,
@@ -26,9 +27,17 @@ export type GameExecutableContext = ReturnType<typeof createGameExecutableContex
 export type CreateGameExecutableContextOptions = {
   /** Run after the override changes (set or cleared), with the affected game id. */
   onChange?: (gameId: string) => void | Promise<void>;
+  /** Reject selection mutations while another game-details mutation is running. */
+  canMutate?: () => boolean;
+  /** App-scoped lock shared with NVAPI and profile mutations. */
+  mutationRunner?: ExclusiveTaskRunner;
 };
 
-export function createGameExecutableContext({ onChange }: CreateGameExecutableContextOptions = {}) {
+export function createGameExecutableContext({
+  onChange,
+  canMutate = () => true,
+  mutationRunner = createExclusiveTaskRunner(),
+}: CreateGameExecutableContextOptions = {}) {
   let candidates = $state<ExecutableCandidate[]>([]);
   let effective = $state<EffectiveExecutable | null>(null);
   let busy = $state(false);
@@ -36,7 +45,8 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
   let changeError: string | null = $state(null);
   let refreshError: string | null = $state(null);
   // Guards a stale in-flight reload from overwriting a newer game's state.
-  let activeGameId: string | null = $state(null);
+  let activeGameId: string | null = null;
+  let reloadGeneration = 0;
 
   const effectiveExe = $derived(effective?.file_name ?? null);
   const effectiveAbsolutePath = $derived(effective?.absolute_path ?? null);
@@ -45,8 +55,11 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
   const supportedCandidates = $derived(candidates.filter((c) => c.rejection === null));
   const filteredOutCandidates = $derived(candidates.filter((c) => c.rejection !== null));
 
-  async function reload(gameId: string): Promise<boolean> {
-    activeGameId = gameId;
+  function isCurrentReload(gameId: string, generation: number): boolean {
+    return activeGameId === gameId && reloadGeneration === generation;
+  }
+
+  async function read(gameId: string, isCurrent: () => boolean): Promise<boolean> {
     busy = true;
     loadError = null;
     refreshError = null;
@@ -55,14 +68,14 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
         resolveGameExecutable(gameId),
         listGameExecutableCandidates(gameId),
       ]);
-      if (activeGameId !== gameId) {
+      if (!isCurrent()) {
         return false;
       }
       effective = eff;
       candidates = cands;
       return true;
     } catch (e) {
-      if (activeGameId !== gameId) {
+      if (!isCurrent()) {
         return false;
       }
       loadError = formatPresentedError(e);
@@ -70,14 +83,25 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
       candidates = [];
       return false;
     } finally {
-      if (activeGameId === gameId) {
+      if (isCurrent()) {
         busy = false;
       }
     }
   }
 
+  async function reload(gameId: string): Promise<boolean> {
+    if (!gameId) {
+      return false;
+    }
+    activeGameId = gameId;
+    const generation = ++reloadGeneration;
+    return read(gameId, () => isCurrentReload(gameId, generation));
+  }
+
   function clear(): void {
+    reloadGeneration += 1;
     activeGameId = null;
+    busy = false;
     candidates = [];
     effective = null;
     loadError = null;
@@ -86,17 +110,29 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
   }
 
   async function refreshAfterCommittedChange(gameId: string): Promise<void> {
+    if (activeGameId !== gameId) {
+      return;
+    }
     const errors: string[] = [];
     const reloaded = await reload(gameId);
-    if (!reloaded && activeGameId === gameId && loadError) {
+    if (activeGameId !== gameId) {
+      return;
+    }
+    if (!reloaded && loadError) {
       errors.push(loadError);
       loadError = null;
     }
     try {
       await onChange?.(gameId);
     } catch (error) {
+      if (activeGameId !== gameId) {
+        return;
+      }
       errors.push(formatPresentedError(error));
       reportClientError('game_executable_refresh', error);
+    }
+    if (activeGameId !== gameId) {
+      return;
     }
     if (errors.length > 0) {
       refreshError = errors.join('\n');
@@ -104,43 +140,39 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
     }
   }
 
+  async function runMutation(gameId: string, write: () => Promise<void>): Promise<boolean> {
+    if (!gameId || activeGameId !== gameId || busy || mutationRunner.busy || !canMutate()) {
+      return false;
+    }
+    const result = await mutationRunner.run(async () => {
+      loadError = null;
+      changeError = null;
+      refreshError = null;
+      try {
+        await write();
+      } catch (e) {
+        if (activeGameId === gameId) {
+          changeError = formatPresentedError(e);
+        }
+        return false;
+      }
+      await refreshAfterCommittedChange(gameId);
+      return true;
+    });
+    return result ?? false;
+  }
+
   async function setOverride(gameId: string, absolutePath: string): Promise<boolean> {
-    if (!gameId) {
-      return false;
-    }
-    loadError = null;
-    changeError = null;
-    refreshError = null;
-    try {
-      await setGameExecutableOverride(gameId, absolutePath);
-    } catch (e) {
-      changeError = formatPresentedError(e);
-      return false;
-    }
-    await refreshAfterCommittedChange(gameId);
-    return true;
+    return runMutation(gameId, () => setGameExecutableOverride(gameId, absolutePath));
   }
 
   async function clearOverride(gameId: string): Promise<boolean> {
-    if (!gameId) {
-      return false;
-    }
-    loadError = null;
-    changeError = null;
-    refreshError = null;
-    try {
-      await clearGameExecutableOverride(gameId);
-    } catch (e) {
-      changeError = formatPresentedError(e);
-      return false;
-    }
-    await refreshAfterCommittedChange(gameId);
-    return true;
+    return runMutation(gameId, () => clearGameExecutableOverride(gameId));
   }
 
   return {
     get busy() {
-      return busy;
+      return busy || mutationRunner.busy;
     },
     get loadError() {
       return loadError;

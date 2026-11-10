@@ -11,6 +11,7 @@ import type { SettingStateResponse } from '@features/nvapi-settings';
 import { setLanguageMode, t } from '@shared/i18n';
 import { DesktopCommandError } from '@shared/errors';
 import { registerPreviewInvoker, type DesktopInvoker } from '@shared/api-preview';
+import { createExclusiveTaskRunner } from '@shared/concurrency';
 import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
 
 import GameDetailsPageTestHost from './GameDetailsPage.test-host.svelte';
@@ -137,6 +138,24 @@ function detailsWithDlss() {
         game_id: 'game:test',
         kind: 'library',
         technology: 'dlss_super_resolution',
+        swappability: 'swappable',
+        files: [],
+        rollback_available: false,
+        d3d12_executable_status: null,
+      },
+    ],
+  });
+}
+
+function detailsWithDlssAndAmd() {
+  return createGameDetails({
+    components: [
+      ...detailsWithDlss().components,
+      {
+        id: 'component:test-amd-fsr',
+        game_id: 'game:test',
+        kind: 'library',
+        technology: 'amd_fsr',
         swappability: 'swappable',
         files: [],
         rollback_available: false,
@@ -348,8 +367,13 @@ describe('GameDetailsPage', () => {
   let executableCandidatesForGame: (gameId: string) => Promise<unknown>;
   let nvidiaSettingsForGame: (gameId: string) => Promise<SettingStateResponse[]>;
   let deleteProfileForGame: (gameId: string) => Promise<unknown>;
+  let nvapiSettingWrites: { gameId: string; settingKey: string; value: string }[];
+  let executableOverrideForTest: ((absolutePath: string) => Promise<void>) | null;
+  let selectedExecutablePathForTest: string | null;
+  let visibilityStateDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(async () => {
+    visibilityStateDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
     await setLanguageMode('en');
     clearAllNotifications();
     safetyEnginesForGame = [];
@@ -397,6 +421,9 @@ describe('GameDetailsPage', () => {
     lumaUpdatePayloads = [];
     unexpectedCommands = [];
     executableOverrideGameIds = [];
+    nvapiSettingWrites = [];
+    executableOverrideForTest = null;
+    selectedExecutablePathForTest = null;
     profileStatusForGame = () => Promise.resolve(nvapiProfileStatusForTest);
     executableForGame = () => Promise.resolve(null);
     executableCandidatesForGame = () => Promise.resolve([]);
@@ -552,8 +579,28 @@ describe('GameDetailsPage', () => {
       if (command === 'delete_nvapi_profile') {
         return deleteProfileForGame(typeof payload?.gameId === 'string' ? payload.gameId : '');
       }
+      if (command === 'set_nvapi_setting_value') {
+        const gameId = typeof payload?.gameId === 'string' ? payload.gameId : '';
+        const settingKey = typeof payload?.settingKey === 'string' ? payload.settingKey : '';
+        const value = typeof payload?.value === 'string' ? payload.value : '';
+        nvapiSettingWrites.push({ gameId, settingKey, value });
+        return Promise.resolve(
+          driverSetting({
+            current: { wire: value, label: value, dword: 3 },
+            current_is_explicit: true,
+            is_current_predefined: false,
+            effective_exe: selectedExecutablePathForTest,
+            effective_exe_source: selectedExecutablePathForTest ? 'override' : 'auto',
+          }),
+        );
+      }
       if (command === 'set_game_executable_override') {
         executableOverrideGameIds.push(typeof payload?.gameId === 'string' ? payload.gameId : '');
+        const absolutePath = typeof payload?.absolutePath === 'string' ? payload.absolutePath : '';
+        if (executableOverrideForTest) {
+          return executableOverrideForTest(absolutePath);
+        }
+        selectedExecutablePathForTest = absolutePath;
         return Promise.resolve(undefined);
       }
       unexpectedCommands.push(command);
@@ -573,6 +620,11 @@ describe('GameDetailsPage', () => {
     disposeInvoker?.();
     disposeInvoker = undefined;
     clearAllNotifications();
+    if (visibilityStateDescriptor) {
+      Object.defineProperty(document, 'visibilityState', visibilityStateDescriptor);
+    } else {
+      Reflect.deleteProperty(document, 'visibilityState');
+    }
     delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
     delete (HTMLElement.prototype as Partial<HTMLElement>).releasePointerCapture;
     target.remove();
@@ -685,6 +737,413 @@ describe('GameDetailsPage', () => {
       throw new Error('Expected the DLSS card in the NVIDIA tab');
     }
     expect(row.compareDocumentPosition(dlssCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('refreshes live NVIDIA settings and profile status when returning to its tab', async () => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    });
+    let settingsRequests = 0;
+    let profileRequests = 0;
+    nvidiaSettingsForGame = () => {
+      settingsRequests += 1;
+      return Promise.resolve([
+        driverSetting(
+          settingsRequests === 1
+            ? {}
+            : {
+                current: { wire: 'external-reset', label: 'External reset', dword: 2 },
+                current_is_explicit: true,
+                is_current_predefined: false,
+              },
+        ),
+      ]);
+    };
+    profileStatusForGame = () => {
+      profileRequests += 1;
+      return Promise.resolve(nvapiProfileStatusForTest);
+    };
+
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: detailsWithDlssAndAmd() },
+    });
+    flushSync();
+
+    await vi.waitFor(() => {
+      expect(settingsRequests).toBe(1);
+      expect(profileRequests).toBe(1);
+      expect(target.textContent).toContain('Default');
+    });
+
+    const tabs = [...target.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const amdTab = tabs.find((tab) => tab.textContent.includes('AMD'));
+    const nvidiaTab = tabs.find((tab) => tab.textContent.includes('NVIDIA'));
+    expect(amdTab).toBeDefined();
+    expect(nvidiaTab).toBeDefined();
+
+    amdTab?.click();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(amdTab?.getAttribute('aria-selected')).toBe('true');
+    });
+    window.dispatchEvent(new Event('focus'));
+    flushSync();
+    expect(settingsRequests).toBe(1);
+    expect(profileRequests).toBe(1);
+
+    nvidiaTab?.click();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(settingsRequests).toBe(2);
+      expect(profileRequests).toBe(2);
+      expect(target.textContent).toContain('External reset');
+    });
+  });
+
+  it('defers an NVIDIA tab entry until the earlier driver and profile reads settle, then refreshes once', async () => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    });
+    const initialSettings = deferred<SettingStateResponse[]>();
+    const freshSettings = deferred<SettingStateResponse[]>();
+    const initialProfile = deferred<unknown>();
+    const freshProfile = deferred<unknown>();
+    let settingsRequests = 0;
+    let profileRequests = 0;
+    nvidiaSettingsForGame = () => {
+      settingsRequests += 1;
+      return settingsRequests === 1 ? initialSettings.promise : freshSettings.promise;
+    };
+    profileStatusForGame = () => {
+      profileRequests += 1;
+      return profileRequests === 1 ? initialProfile.promise : freshProfile.promise;
+    };
+
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: detailsWithDlssAndAmd() },
+    });
+    flushSync();
+
+    const tabs = await vi.waitFor(() => {
+      expect(settingsRequests).toBe(1);
+      expect(profileRequests).toBe(1);
+      const buttons = [...target.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+      const amd = buttons.find((tab) => tab.textContent.includes('AMD'));
+      const nvidia = buttons.find((tab) => tab.textContent.includes('NVIDIA'));
+      expect(amd).toBeDefined();
+      expect(nvidia).toBeDefined();
+      if (!amd || !nvidia) {
+        throw new Error('Expected AMD and NVIDIA tabs');
+      }
+      return { amd, nvidia };
+    });
+
+    tabs.amd.click();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(tabs.amd.getAttribute('aria-selected')).toBe('true');
+    });
+    tabs.nvidia.click();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(tabs.nvidia.getAttribute('aria-selected')).toBe('true');
+    });
+    expect(settingsRequests).toBe(1);
+    expect(profileRequests).toBe(1);
+
+    initialSettings.resolve([driverSetting()]);
+    initialProfile.resolve(nvapiProfileStatusForTest);
+    await vi.waitFor(() => {
+      expect(settingsRequests).toBe(2);
+      expect(profileRequests).toBe(2);
+    });
+
+    freshSettings.resolve([driverSetting()]);
+    freshProfile.resolve(nvapiProfileStatusForTest);
+    await vi.waitFor(() => {
+      expect(settingsRequests).toBe(2);
+      expect(profileRequests).toBe(2);
+      expect(target.textContent).toContain('Default');
+    });
+    expect(settingsRequests).toBe(2);
+    expect(profileRequests).toBe(2);
+  });
+
+  it('keeps NVAPI rows locked through executable persistence and dependent reload', async () => {
+    const originalExe = 'C:/Games/Test/game.exe';
+    const alternateExe = 'C:/Games/Test/alternate.exe';
+    const persistence = deferred<undefined>();
+    const dependentSettings = deferred<SettingStateResponse[]>();
+    let settingsRequests = 0;
+    selectedExecutablePathForTest = originalExe;
+    executableForGame = () => {
+      const selectedExe = selectedExecutablePathForTest ?? originalExe;
+      return Promise.resolve({
+        file_name: selectedExe.split('/').at(-1) ?? 'game.exe',
+        absolute_path: selectedExe,
+        auto_absolute_path: originalExe,
+        source: selectedExe === originalExe ? 'auto' : 'override',
+      });
+    };
+    executableCandidatesForGame = () =>
+      Promise.resolve([
+        {
+          relative_path: 'alternate.exe',
+          file_name: 'alternate.exe',
+          absolute_path: alternateExe,
+          size_bytes: 1,
+          depth: 0,
+          rank_score: 0,
+          rejection: null,
+          rejection_token: null,
+        },
+      ]);
+    executableOverrideForTest = (path) =>
+      persistence.promise.then(() => {
+        selectedExecutablePathForTest = path;
+      });
+    nvidiaSettingsForGame = () => {
+      settingsRequests += 1;
+      if (settingsRequests === 2) {
+        return dependentSettings.promise;
+      }
+      return Promise.resolve([
+        driverSetting({
+          effective_exe: selectedExecutablePathForTest,
+          effective_exe_source: selectedExecutablePathForTest === originalExe ? 'auto' : 'override',
+          available_values: [{ wire: 'quality', label: 'Quality', supported: true }],
+        }),
+      ]);
+    };
+
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: detailsWithDlss() },
+    });
+    flushSync();
+
+    const executableTrigger = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>(
+        'button[aria-label="Game executable: game.exe"]',
+      );
+      expect(button).not.toBeNull();
+      expect(button?.getAttribute('aria-disabled')).toBeNull();
+      return button;
+    });
+    const getNvapiSelect = () =>
+      [...target.querySelectorAll<HTMLElement>('[data-slot="card"]')]
+        .find((card) => card.textContent.includes('DLSS preset'))
+        ?.querySelector<HTMLButtonElement>('button[role="combobox"]') ?? null;
+    const initialNvapiSelect = await vi.waitFor(() => {
+      const button = getNvapiSelect();
+      expect(button).not.toBeNull();
+      expect(button?.disabled).toBe(false);
+      return button;
+    });
+
+    executableTrigger?.click();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+    });
+    const popover = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    const alternateOption = [...(popover?.querySelectorAll<HTMLLabelElement>('label') ?? [])].find(
+      (label) => label.textContent.includes('alternate.exe'),
+    );
+    expect(alternateOption).toBeDefined();
+    alternateOption?.click();
+    flushSync();
+
+    await vi.waitFor(() => {
+      expect(executableOverrideGameIds).toEqual(['game:test']);
+    });
+    expect(initialNvapiSelect?.disabled).toBe(true);
+    await vi.waitFor(() => {
+      expect(
+        target
+          .querySelector<HTMLButtonElement>('button[aria-label="Game executable: game.exe"]')
+          ?.getAttribute('aria-disabled'),
+      ).toBe('true');
+    });
+    initialNvapiSelect?.click();
+    flushSync();
+    expect(nvapiSettingWrites).toHaveLength(0);
+
+    persistence.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(settingsRequests).toBe(2);
+      expect(
+        target.querySelector('button[aria-label="Game executable: alternate.exe"]'),
+      ).not.toBeNull();
+    });
+    expect(getNvapiSelect()?.disabled).toBe(true);
+    expect(nvapiSettingWrites).toHaveLength(0);
+
+    dependentSettings.resolve([
+      driverSetting({
+        effective_exe: alternateExe,
+        effective_exe_source: 'override',
+        available_values: [{ wire: 'quality', label: 'Quality', supported: true }],
+      }),
+    ]);
+    const refreshedSelect = await vi.waitFor(() => {
+      const button = getNvapiSelect();
+      expect(button?.disabled).toBe(false);
+      return button;
+    });
+    if (!refreshedSelect) {
+      throw new Error('Expected the NVAPI setting selector after executable refresh');
+    }
+    await chooseSelectOption(refreshedSelect, 'quality');
+    await vi.waitFor(() => {
+      expect(nvapiSettingWrites).toHaveLength(1);
+    });
+    expect(nvapiSettingWrites).toEqual([
+      { gameId: 'game:test', settingKey: 'dlss_sr_render_preset', value: 'quality' },
+    ]);
+  });
+
+  it('remounts behind an app-scoped executable mutation and loads the committed target before enabling actions', async () => {
+    const originalExe = 'C:/Games/Test/game.exe';
+    const alternateExe = 'C:/Games/Test/alternate.exe';
+    const runner = createExclusiveTaskRunner();
+    const persistence = deferred<undefined>();
+    let executableReads = 0;
+    let settingsReads = 0;
+    selectedExecutablePathForTest = originalExe;
+    executableForGame = () => {
+      executableReads += 1;
+      const selectedExe = selectedExecutablePathForTest ?? originalExe;
+      return Promise.resolve({
+        file_name: selectedExe.split('/').at(-1) ?? 'game.exe',
+        absolute_path: selectedExe,
+        auto_absolute_path: originalExe,
+        source: selectedExe === originalExe ? 'auto' : 'override',
+      });
+    };
+    executableCandidatesForGame = () =>
+      Promise.resolve([
+        {
+          relative_path: 'alternate.exe',
+          file_name: 'alternate.exe',
+          absolute_path: alternateExe,
+          size_bytes: 1,
+          depth: 0,
+          rank_score: 0,
+          rejection: null,
+          rejection_token: null,
+        },
+      ]);
+    executableOverrideForTest = (path) =>
+      persistence.promise.then(() => {
+        selectedExecutablePathForTest = path;
+      });
+    nvidiaSettingsForGame = () => {
+      settingsReads += 1;
+      const selectedExe = selectedExecutablePathForTest ?? originalExe;
+      return Promise.resolve([
+        driverSetting({
+          effective_exe: selectedExe,
+          effective_exe_source: selectedExe === originalExe ? 'auto' : 'override',
+          current: {
+            wire: selectedExe === originalExe ? 'old-target' : 'fresh-target',
+            label: selectedExe === originalExe ? 'Old target settings' : 'Fresh target settings',
+            dword: 2,
+          },
+          current_is_explicit: true,
+          available_values: [{ wire: 'quality', label: 'Quality', supported: true }],
+        }),
+      ]);
+    };
+
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: detailsWithDlss(), nvapiMutationRunner: runner },
+    });
+    flushSync();
+
+    const executableTrigger = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>(
+        'button[aria-label="Game executable: game.exe"]',
+      );
+      expect(button).not.toBeNull();
+      expect(button?.getAttribute('aria-disabled')).toBeNull();
+      expect(target.textContent).toContain('Old target settings');
+      return button;
+    });
+    executableTrigger?.click();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+    });
+    const popover = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    const alternateOption = [...(popover?.querySelectorAll<HTMLLabelElement>('label') ?? [])].find(
+      (label) => label.textContent.includes('alternate.exe'),
+    );
+    expect(alternateOption).toBeDefined();
+    alternateOption?.click();
+    flushSync();
+    await vi.waitFor(() => {
+      expect(executableOverrideGameIds).toEqual(['game:test']);
+    });
+    expect(runner.busy).toBe(true);
+    expect(executableReads).toBe(1);
+    expect(settingsReads).toBe(1);
+
+    await unmount(component);
+    component = undefined;
+
+    component = mount(GameDetailsPageTestHost, {
+      target,
+      props: { details: detailsWithDlss(), nvapiMutationRunner: runner },
+    });
+    flushSync();
+    const remountedExecutableTrigger = await vi.waitFor(() => {
+      const button = target.querySelector<HTMLButtonElement>(
+        'button[aria-label^="Game executable:"]',
+      );
+      expect(button).not.toBeNull();
+      expect(button?.getAttribute('aria-disabled')).toBe('true');
+      return button;
+    });
+    remountedExecutableTrigger?.click();
+    flushSync();
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(executableReads).toBe(1);
+    expect(settingsReads).toBe(1);
+    expect(nvapiSettingWrites).toHaveLength(0);
+
+    persistence.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(runner.busy).toBe(false);
+    });
+    const refreshedNvapiSelect = await vi.waitFor(() => {
+      expect(executableReads).toBe(2);
+      expect(settingsReads).toBe(2);
+      expect(target.textContent).toContain('Fresh target settings');
+      expect(target.querySelector('button[aria-label="Game executable: alternate.exe"]')).not.toBe(
+        null,
+      );
+      const select = [...target.querySelectorAll<HTMLElement>('[data-slot="card"]')]
+        .find((card) => card.textContent.includes('DLSS preset'))
+        ?.querySelector<HTMLButtonElement>('button[role="combobox"]');
+      expect(select?.disabled).toBe(false);
+      return select ?? null;
+    });
+    if (!refreshedNvapiSelect) {
+      throw new Error('Expected refreshed NVAPI controls after executable persistence');
+    }
+    await chooseSelectOption(refreshedNvapiSelect, 'quality');
+    await vi.waitFor(() => {
+      expect(nvapiSettingWrites).toHaveLength(1);
+    });
+    expect(nvapiSettingWrites).toEqual([
+      { gameId: 'game:test', settingKey: 'dlss_sr_render_preset', value: 'quality' },
+    ]);
   });
 
   it('does not offer profile creation when a DLSS DLL has no driver setting rows', async () => {

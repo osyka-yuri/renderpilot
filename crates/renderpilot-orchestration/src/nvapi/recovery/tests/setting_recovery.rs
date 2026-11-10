@@ -164,6 +164,354 @@ fn restart_setting_rejects_a_changed_lookup_witness_even_when_value_matches() {
 }
 
 #[test]
+fn restart_authorized_owned_write_merges_only_requested_setting_and_preserves_external_drift() {
+    let (storage, games) = storage_with_games(&["authorized-owned-merge"]);
+    let game_id = &games[0];
+    let path = "C:/Games/authorized-owned-merge/Game.exe";
+    create_owned_fixture_with_settings(
+        &storage,
+        game_id,
+        path,
+        vec![
+            setting_identity(SETTING_ID, 1),
+            setting_identity(SETTING_ID + 1, 2),
+        ],
+    );
+
+    let mut before_profile = observed_profile(
+        PROFILE,
+        vec![app(path)],
+        Some((SETTING_ID, true, Some(10))),
+        false,
+    );
+    before_profile
+        .settings
+        .push(setting_identity(SETTING_ID + 1, 200));
+    before_profile.identity.setting_count = 2;
+    prepare_authorized_owned_setting(
+        &storage,
+        AuthorizedOwnedSettingFixture {
+            game_id,
+            path,
+            before_profile: &before_profile,
+            setting_id: SETTING_ID,
+            before: (true, Some(10)),
+            after: (true, Some(11)),
+            op_id: "authorized-owned-merge",
+        },
+    );
+
+    let mut after_profile = before_profile.clone();
+    after_profile.explicit_setting = Some((SETTING_ID, true, Some(11)));
+    after_profile.settings[0] = setting_identity(SETTING_ID, 11);
+    recover_with(&storage, &observation_for_path(path, after_profile))
+        .expect("recover authorized owned setting");
+
+    assert!(
+        storage
+            .list_pending_nvapi_operations()
+            .expect("pending operations")
+            .is_empty()
+    );
+    let owner = storage
+        .get_nvapi_owned_profile(game_id)
+        .expect("query owner")
+        .expect("owned receipt");
+    let saved: serde_json::Value =
+        serde_json::from_str(&owner.composition_json).expect("owner composition JSON");
+    assert_eq!(saved["settings"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        saved["settings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|setting| setting["id"] == SETTING_ID)
+            .unwrap()["current_value"],
+        "11"
+    );
+    assert_eq!(
+        saved["settings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|setting| setting["id"] == SETTING_ID + 1)
+            .unwrap()["current_value"],
+        "2",
+        "unrelated driver changes are not adopted into the owned-profile receipt"
+    );
+    let claim = storage
+        .get_nvapi_target_setting_claim(game_id, PROFILE, SETTING_ID)
+        .expect("query claim")
+        .expect("new claim");
+    assert_eq!(claim.original_value, Some(10));
+    assert_eq!(claim.expected_value, Some(11));
+}
+
+#[test]
+fn authorized_owned_write_rejects_application_composition_or_witness_drift() {
+    let (storage, games) = storage_with_games(&["authorized-owned-binding"]);
+    let game_id = &games[0];
+    let path = "C:/Games/authorized-owned-binding/Game.exe";
+    create_owned_fixture(&storage, game_id, path);
+
+    let mut changed_apps = observed_profile(
+        PROFILE,
+        vec![app(path), app("C:/Games/Other.exe")],
+        None,
+        false,
+    );
+    changed_apps.identity.application_count = 2;
+    let changed_apps_json = composition_json(&changed_apps).expect("changed composition");
+    let identity_json =
+        serde_json::to_string(&changed_apps.identity).expect("changed identity JSON");
+    let witness = serde_json::to_string(&app(path)).expect("witness JSON");
+    let error = storage
+        .prepare_nvapi_authorized_game_setting_operation(
+            NvapiGameSettingPreparation {
+                op_id: "authorized-owned-app-drift",
+                game_id,
+                profile_name: PROFILE,
+                target_kind: "renderpilot",
+                profile_is_predefined: false,
+                profile_identity_json: &identity_json,
+                executable_path: path,
+                application_witness_json: &witness,
+                setting_id: SETTING_ID,
+                original: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                before: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                after: NvapiSettingState {
+                    present: true,
+                    value: Some(7),
+                },
+            },
+            Some(&changed_apps_json),
+        )
+        .expect_err("owned application composition drift is not authorized");
+    assert!(
+        error
+            .to_string()
+            .contains("application composition changed")
+    );
+    assert!(
+        storage
+            .list_pending_nvapi_operations()
+            .expect("pending operations")
+            .is_empty()
+    );
+
+    let valid_before = observed_profile(PROFILE, vec![app(path)], None, false);
+    let valid_composition = composition_json(&valid_before).expect("valid composition");
+    let rebound_witness =
+        serde_json::to_string(&app("C:/Games/Other.exe")).expect("rebound witness JSON");
+    let error = storage
+        .prepare_nvapi_authorized_game_setting_operation(
+            NvapiGameSettingPreparation {
+                op_id: "authorized-owned-witness-drift",
+                game_id,
+                profile_name: PROFILE,
+                target_kind: "renderpilot",
+                profile_is_predefined: false,
+                profile_identity_json: &profile_identity_json(1, 0),
+                executable_path: path,
+                application_witness_json: &rebound_witness,
+                setting_id: SETTING_ID,
+                original: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                before: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                after: NvapiSettingState {
+                    present: true,
+                    value: Some(7),
+                },
+            },
+            Some(&valid_composition),
+        )
+        .expect_err("owned executable witness remains exact");
+    assert!(error.to_string().contains("witness changed"));
+}
+
+#[test]
+fn restart_authorized_owned_write_conflicts_on_third_state_or_concurrent_unrelated_change() {
+    for (suffix, actual_target, actual_other) in
+        [("third-state", 99, 20), ("unrelated-change", 11, 21)]
+    {
+        let (storage, games) = storage_with_games(&[suffix]);
+        let game_id = &games[0];
+        let path = format!("C:/Games/{suffix}/Game.exe");
+        create_owned_fixture_with_settings(
+            &storage,
+            game_id,
+            &path,
+            vec![
+                setting_identity(SETTING_ID, 1),
+                setting_identity(SETTING_ID + 1, 2),
+            ],
+        );
+        let mut before_profile = observed_profile(
+            PROFILE,
+            vec![app(&path)],
+            Some((SETTING_ID, true, Some(10))),
+            false,
+        );
+        before_profile
+            .settings
+            .push(setting_identity(SETTING_ID + 1, 20));
+        before_profile.identity.setting_count = 2;
+        let op_id = format!("authorized-owned-{suffix}");
+        prepare_authorized_owned_setting(
+            &storage,
+            AuthorizedOwnedSettingFixture {
+                game_id,
+                path: &path,
+                before_profile: &before_profile,
+                setting_id: SETTING_ID,
+                before: (true, Some(10)),
+                after: (true, Some(11)),
+                op_id: &op_id,
+            },
+        );
+
+        let mut actual = before_profile;
+        actual.explicit_setting = Some((SETTING_ID, true, Some(actual_target)));
+        actual.settings[0] = setting_identity(SETTING_ID, actual_target);
+        actual.settings[1] = setting_identity(SETTING_ID + 1, actual_other);
+        recover_with(&storage, &observation_for_path(&path, actual))
+            .expect("recover unresolved owned write");
+
+        let pending = storage
+            .list_pending_nvapi_operations()
+            .expect("pending operations");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].op_id, op_id);
+        assert_eq!(pending[0].phase, "conflict");
+    }
+}
+
+#[test]
+fn restart_ignored_owned_write_cancels_and_allows_another_setting_write() {
+    let (storage, games) = storage_with_games(&["authorized-owned-ignored"]);
+    let game_id = &games[0];
+    let path = "C:/Games/authorized-owned-ignored/Game.exe";
+    create_owned_fixture(&storage, game_id, path);
+    let before_profile = observed_profile(
+        PROFILE,
+        vec![app(path)],
+        Some((SETTING_ID, false, None)),
+        false,
+    );
+    prepare_authorized_owned_setting(
+        &storage,
+        AuthorizedOwnedSettingFixture {
+            game_id,
+            path,
+            before_profile: &before_profile,
+            setting_id: SETTING_ID,
+            before: (false, None),
+            after: (true, Some(7)),
+            op_id: "authorized-owned-ignored",
+        },
+    );
+
+    recover_with(
+        &storage,
+        &observation_for_path(path, before_profile.clone()),
+    )
+    .expect("ignored driver change cancels to the exact fresh before state");
+    assert!(
+        storage
+            .list_pending_nvapi_operations()
+            .expect("pending operations")
+            .is_empty()
+    );
+    assert!(
+        storage
+            .get_nvapi_target_setting_claim(game_id, PROFILE, SETTING_ID)
+            .expect("query cancelled claim")
+            .is_none(),
+        "the unconfirmed new claim is rolled back"
+    );
+
+    prepare_authorized_owned_setting(
+        &storage,
+        AuthorizedOwnedSettingFixture {
+            game_id,
+            path,
+            before_profile: &before_profile,
+            setting_id: SETTING_ID + 1,
+            before: (false, None),
+            after: (true, Some(9)),
+            op_id: "authorized-owned-next-setting",
+        },
+    );
+    assert_eq!(
+        storage
+            .list_pending_nvapi_operations()
+            .expect("next setting remains writable")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn restart_malformed_owned_snapshot_is_fenced_without_erasing_journal() {
+    let (storage, games) = storage_with_games(&["authorized-owned-malformed"]);
+    let game_id = &games[0];
+    let path = "C:/Games/authorized-owned-malformed/Game.exe";
+    create_owned_fixture(&storage, game_id, path);
+    let malformed_before = serde_json::json!({
+        "setting_id": SETTING_ID,
+        "executable_path": path,
+        "reference_previous_path": null,
+        "present": false,
+        "value": null,
+        "claim_was_new": false,
+        "reference_was_new": true,
+        "owned_before_composition": "not a composition"
+    })
+    .to_string();
+    storage
+        .begin_nvapi_operation(
+            "authorized-owned-malformed",
+            Some(game_id),
+            Some(PROFILE),
+            "setting",
+            &malformed_before,
+            &serde_json::json!({
+                "setting_id": SETTING_ID,
+                "present": true,
+                "value": 7
+            })
+            .to_string(),
+        )
+        .expect("persist malformed receipt fixture");
+    let actual = observed_profile(
+        PROFILE,
+        vec![app(path)],
+        Some((SETTING_ID, true, Some(7))),
+        false,
+    );
+
+    recover_with(&storage, &observation_for_path(path, actual))
+        .expect("malformed snapshot is retained as a conflict");
+    let pending = storage
+        .list_pending_nvapi_operations()
+        .expect("read retained journal");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].phase, "conflict");
+    assert_eq!(pending[0].before_json, malformed_before);
+}
+
+#[test]
 fn restart_setting_rejects_a_missing_recorded_witness() {
     let (storage, games) = storage_with_games(&["setting-missing-receipt", "witness-other-path"]);
     let path = "C:/Games/setting-missing-receipt/Game.exe";

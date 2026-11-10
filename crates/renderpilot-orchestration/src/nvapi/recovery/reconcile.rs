@@ -6,11 +6,14 @@ use renderpilot_storage_sqlite::{
 };
 use serde_json::Value;
 
+use super::super::profile_composition::{
+    composition_matches_except_setting, reconcile_owned_setting,
+};
 use super::receipts::{
-    composition_json, composition_matches_except_setting, created_profile_matches,
-    effective_setting_witness_json, exact_owned_lifecycle_witness_for_path,
-    exact_owned_lifecycle_witness_json_for_path, found_path, parse_snapshot, path_equal,
-    path_lookup, profile_receipts, setting_state, settings_match_before, string, unsigned,
+    composition_json, created_profile_matches, effective_setting_witness_json,
+    exact_owned_lifecycle_witness_for_path, exact_owned_lifecycle_witness_json_for_path,
+    found_path, observed_composition, parse_snapshot, path_equal, path_lookup, profile_receipts,
+    setting_state, settings_match_before, string, unsigned,
 };
 use super::{Lookup, Observation, ObservedProfile};
 pub(super) fn reconcile_row(
@@ -313,6 +316,9 @@ fn reconcile_setting(
     else {
         return mark_conflict(storage, row, "setting profile identity receipt is missing");
     };
+    let owned_before_composition = before
+        .get("owned_before_composition")
+        .and_then(Value::as_str);
     let (profile, observed) = if row.game_id.is_none() {
         let Lookup::Found(profile) = &observation.base_profile else {
             return classify_unresolved(storage, row, observation, "global setting");
@@ -371,31 +377,86 @@ fn reconcile_setting(
         }
         (profile, (present, value))
     };
-    if let Some(game_id) = row.game_id.as_deref()
-        && storage
-            .get_nvapi_owned_profile_by_name(target_id)?
-            .is_some_and(|owner| owner.game_id != game_id)
-    {
-        return mark_conflict(storage, row, "a different game owns this NVIDIA profile");
+    let owner = if let Some(game_id) = row.game_id.as_deref() {
+        match storage.get_nvapi_owned_profile_by_name(target_id)? {
+            Some(owner) if owner.game_id != game_id => {
+                return mark_conflict(storage, row, "a different game owns this NVIDIA profile");
+            }
+            Some(owner) => {
+                let path = string(before, "executable_path").unwrap_or_default();
+                let observed_witness = effective_setting_witness_json(profile);
+                if owner.state != "active"
+                    || renderpilot_domain::normalized_path_key(&owner.binding_path)
+                        != renderpilot_domain::normalized_path_key(path)
+                    || observed_witness.as_deref() != Some(owner.application_witness_json.as_str())
+                {
+                    return mark_conflict(
+                        storage,
+                        row,
+                        "owned NVIDIA profile or executable binding changed during setting recovery",
+                    );
+                }
+                Some(owner)
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+    let applied = observed == after_state;
+    if !applied && observed != before_state {
+        return mark_conflict(
+            storage,
+            row,
+            "setting value matches neither its durable before-state nor after-state",
+        );
     }
-    if observed != after_state {
-        if observed == before_state {
-            if let Some(owner) = storage.get_nvapi_owned_profile_by_name(target_id)?
-                && composition_json(profile).as_deref() != Some(owner.composition_json.as_str())
+    let composition = if let Some(owner) = owner.as_ref() {
+        let actual = observed_composition(profile);
+        if let Some(snapshot) = owned_before_composition {
+            let before = serde_json::from_str(snapshot)
+                .map_err(|error| AppError::storage_failed(error.to_string()))?;
+            match reconcile_owned_setting(
+                &owner.composition_json,
+                &before,
+                &actual,
+                setting_id,
+                applied,
+            ) {
+                Ok(composition) => composition,
+                Err(error) => {
+                    return mark_conflict(storage, row, &error);
+                }
+            }
+        } else if applied {
+            if !composition_matches_except_setting(&owner.composition_json, &actual, setting_id)
+                .map_err(AppError::storage_failed)?
             {
+                return mark_conflict(
+                    storage,
+                    row,
+                    "owned profile composition changed beyond the pending setting",
+                );
+            }
+            Some(actual.to_string())
+        } else {
+            let actual = actual.to_string();
+            if owner.composition_json != actual {
                 return mark_conflict(
                     storage,
                     row,
                     "owned profile changed outside RenderPilot before the pending write",
                 );
             }
-            return storage.cancel_nvapi_setting_operation(&row.op_id);
+            None
         }
-        return mark_conflict(
-            storage,
-            row,
-            "setting value matches neither its durable before-state nor after-state",
-        );
+    } else if owned_before_composition.is_some() {
+        return mark_conflict(storage, row, "owned NVIDIA profile receipt is missing");
+    } else {
+        None
+    };
+    if !applied {
+        return storage.cancel_nvapi_setting_operation(&row.op_id);
     }
     let identity_json = match serde_json::to_string(&profile.identity) {
         Ok(json) => json,
@@ -406,23 +467,6 @@ fn reconcile_setting(
                 &format!("could not encode recovered profile identity: {error}"),
             );
         }
-    };
-    let composition = if let Some(owner) = storage.get_nvapi_owned_profile_by_name(target_id)? {
-        if Some(owner.game_id.as_str()) != row.game_id.as_deref() {
-            return mark_conflict(storage, row, "a different game owns this NVIDIA profile");
-        }
-        if !composition_matches_except_setting(&owner.composition_json, profile, setting_id)? {
-            return mark_conflict(
-                storage,
-                row,
-                "owned profile composition changed beyond the pending setting",
-            );
-        }
-        Some(composition_json(profile).ok_or_else(|| {
-            AppError::storage_failed("could not encode recovered NVIDIA profile composition")
-        })?)
-    } else {
-        None
     };
     storage.finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
         op_id: &row.op_id,

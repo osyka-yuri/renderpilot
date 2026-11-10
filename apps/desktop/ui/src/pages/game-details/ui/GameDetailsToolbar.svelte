@@ -26,6 +26,7 @@
     hasAddonsTab: boolean;
     gameId: string;
     exe: GameExecutableContext;
+    driverMutationBusy?: boolean;
     lockReason: ExecutableLockReason | null;
     ownedBindingPath: string | null;
     profileSelectionBlockReason?: ProfileSelectionBlockReason | null;
@@ -51,6 +52,7 @@
     hasAddonsTab,
     gameId,
     exe,
+    driverMutationBusy = false,
     lockReason,
     ownedBindingPath,
     profileSelectionBlockReason = null,
@@ -181,6 +183,7 @@
     <GameExecutablePopover
       {gameId}
       {exe}
+      {driverMutationBusy}
       {lockReason}
       {ownedBindingPath}
       {profileSelectionBlockReason}

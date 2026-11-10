@@ -1,16 +1,19 @@
 # NVIDIA settings and artwork
 
-RenderPilot includes two optional conveniences that do not change its core library workflow: per-game NVIDIA DLSS settings and locally stored game artwork.
-
 ## NVIDIA DLSS settings
 
-On supported NVIDIA systems, RenderPilot can read and manage driver-level settings for DLSS Super Resolution, Frame Generation, and Ray Reconstruction, including available presets. Settings are applied to the selected game's NVIDIA profile through NVAPI; they do not replace a game's own graphics menu and cannot add a feature the game, installed library, GPU, or driver does not support.
+**Game Details → NVIDIA** manages driver overrides for DLSS Super Resolution, Frame Generation, and Ray Reconstruction in the selected executable's profile. **Settings → NVIDIA** changes the base profile for games that inherit the setting. In-game support depends on the game, GPU, driver, and installed DLSS components.
 
-Review the selected executable and current value before applying an override. Driver updates, NVIDIA profile changes, or game updates may alter effective behavior. Return a setting to its default when troubleshooting differences between RenderPilot, the game menu, and the driver.
+RenderPilot rereads the driver when you open the NVIDIA tab, return to the app with that tab visible, or a write fails. If the game, driver, or another tool changes a value, you can select a supported value again while the profile binding can still be verified. The new write starts from the current driver state.
 
-RenderPilot reads DLL availability and version details from its game catalog rather than scanning the game folder during an NVIDIA settings request. A background catalog refresh normally keeps this current; you can also use **Rescan game** after repairing or changing game files. The UI distinguishes three cases: **DLL not found** means a completed scan found no matching DLL, **version unavailable** means a DLL was found but its version resource could not be read, and **catalog not ready** means the game has not completed a scan or its prior scan was invalidated. While the catalog is not ready, live NVIDIA driver values remain visible, but DLL-dependent changes and reverts stay disabled until a rescan completes.
+- **Reset to default** removes the override from the current profile and lets the driver choose the inherited value.
+- **Restore original** reinstates the first saved state of a game profile setting, including whether it had an override. It requires the same verified executable binding.
 
-The NVIDIA DLSS indicator can also be toggled to display the active upscaler information in a supported game. It is a diagnostic overlay, not a compatibility test, and still depends on the driver, game, and installed DLSS component.
+RenderPilot blocks writes if it cannot verify the profile binding or an unresolved operation overlaps the profile or executable. Deleting a profile created by RenderPilot requires its applications and settings to match the last confirmed profile state.
+
+DLL-dependent options use the game catalog. **DLL not found** means a scan found no matching DLL. **Version unavailable** means the DLL was found but its version could not be read. **Catalog not ready** means a fresh scan is needed. In that case, driver values stay visible and DLL-dependent changes stay disabled until a scan completes. **Rescan game** refreshes these details.
+
+Enable **DLSS Indicator** in **Settings → NVIDIA** to see active DLSS information in supported games.
 
 ## Covers
 

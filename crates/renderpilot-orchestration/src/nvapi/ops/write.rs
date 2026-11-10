@@ -2,11 +2,11 @@
 
 use renderpilot_nvapi::setting::{CatalogReadiness, NvapiSetting, SettingContext};
 use renderpilot_storage_sqlite::{
-    NvapiAuthorizedGlobalSettingSetPreparation, NvapiGameSettingPreparation,
-    NvapiGlobalSettingPreparation, NvapiSettingOperationCompletion, NvapiSettingOperationScope,
-    NvapiSettingState, SqliteStorage,
+    NvapiGameSettingPreparation, NvapiGlobalSettingPreparation, NvapiSettingOperationCompletion,
+    NvapiSettingOperationScope, NvapiSettingState, SqliteStorage,
 };
 
+use super::super::profile_composition::{composition_value, reconcile_owned_setting};
 use super::assemble::known_preset_set;
 use super::live::read_pre_state;
 use super::session::{map_nvapi_write_error, open_drs_session, warning_to_service_error};
@@ -39,7 +39,10 @@ pub fn resolve_revert_op(
     }
 }
 
-fn restore_original_op(present: bool, value: Option<u32>) -> Result<WriteOp, ServiceError> {
+pub(super) fn restore_original_op(
+    present: bool,
+    value: Option<u32>,
+) -> Result<WriteOp, ServiceError> {
     if present {
         value.map(WriteOp::Set).ok_or_else(|| {
             ServiceError::command_failed("the recorded original NVIDIA setting value is missing")
@@ -96,6 +99,7 @@ pub(super) struct GamePreparationScope<'a> {
     pub target_kind: &'a str,
     pub executable_path: &'a str,
     pub application_witness_json: &'a str,
+    pub owned_before_composition_json: Option<&'a str>,
 }
 
 /// Parameters for dispatching setting operation preparation to the appropriate storage preparation entry point.
@@ -114,14 +118,13 @@ pub(super) struct SettingPreparationDispatch<'a> {
 
 /// Dispatches setting operation preparation to the appropriate storage preparation entry point.
 ///
-/// When the target is `SettingTarget::Global` and the operation is `WriteOp::Set(value)`,
-/// authorized global preparation is used to allow safe reapplication when live driver state
-/// has drifted or reset from persisted SQLite expectations.
-/// All other operations (global Delete, game Set, game Delete) use strict preparation paths.
+/// Explicit Set and Delete operations use authorized preparation so a user can
+/// reapply a setting after the live driver state has drifted. Automatic claim
+/// cleanup continues to use the strict storage preparation path.
 pub(super) fn dispatch_setting_preparation(
     storage: &SqliteStorage,
     dispatch: SettingPreparationDispatch<'_>,
-) -> Result<(), ServiceError> {
+) -> Result<NvapiSettingState, ServiceError> {
     let SettingPreparationDispatch {
         target,
         op_id,
@@ -134,27 +137,25 @@ pub(super) fn dispatch_setting_preparation(
         game_scope,
     } = dispatch;
 
-    match (target, op) {
-        (SettingTarget::Global, WriteOp::Set(value)) => storage
-            .prepare_nvapi_authorized_global_setting_set(
-                NvapiAuthorizedGlobalSettingSetPreparation {
-                    op_id,
-                    profile_name,
-                    profile_is_predefined,
-                    profile_identity_json,
-                    setting_id,
-                    before,
-                    value,
-                },
-            )
-            .map_err(Into::into),
-        (SettingTarget::Global, WriteOp::Delete) => {
-            let after = NvapiSettingState {
-                present: false,
-                value: None,
-            };
-            storage
-                .prepare_nvapi_global_setting_operation(NvapiGlobalSettingPreparation {
+    let after = match op {
+        WriteOp::Set(value) => NvapiSettingState {
+            present: true,
+            value: Some(value),
+        },
+        WriteOp::Delete => NvapiSettingState {
+            present: false,
+            value: None,
+        },
+        WriteOp::RestoreOriginal => {
+            return Err(ServiceError::command_failed(
+                "WriteOp::RestoreOriginal must be resolved before preparation",
+            ));
+        }
+    };
+    match target {
+        SettingTarget::Global => {
+            storage.prepare_nvapi_authorized_global_setting_operation(
+                NvapiGlobalSettingPreparation {
                     op_id,
                     profile_name,
                     profile_is_predefined,
@@ -163,10 +164,10 @@ pub(super) fn dispatch_setting_preparation(
                     original: before,
                     before,
                     after,
-                })
-                .map_err(Into::into)
+                },
+            )?;
         }
-        (SettingTarget::Game { game_id }, WriteOp::Set(_) | WriteOp::Delete) => {
+        SettingTarget::Game { game_id } => {
             let scope = game_scope.ok_or_else(|| {
                 ServiceError::command_failed("game setting preparation requires game scope details")
             })?;
@@ -175,19 +176,8 @@ pub(super) fn dispatch_setting_preparation(
                     "game id mismatch in setting preparation",
                 ));
             }
-            let after = match op {
-                WriteOp::Set(value) => NvapiSettingState {
-                    present: true,
-                    value: Some(value),
-                },
-                WriteOp::Delete => NvapiSettingState {
-                    present: false,
-                    value: None,
-                },
-                WriteOp::RestoreOriginal => unreachable!("matched above"),
-            };
-            storage
-                .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
+            storage.prepare_nvapi_authorized_game_setting_operation(
+                NvapiGameSettingPreparation {
                     op_id,
                     game_id,
                     profile_name,
@@ -200,13 +190,12 @@ pub(super) fn dispatch_setting_preparation(
                     original: before,
                     before,
                     after,
-                })
-                .map_err(Into::into)
+                },
+                scope.owned_before_composition_json,
+            )?;
         }
-        (_, WriteOp::RestoreOriginal) => Err(ServiceError::command_failed(
-            "WriteOp::RestoreOriginal must be resolved before preparation",
-        )),
     }
+    Ok(after)
 }
 
 /// Writes a new value (or deletes the override) for `setting` in the game's NVIDIA driver profile.
@@ -233,42 +222,26 @@ pub fn write_setting_value(
     })?;
     let profile_name = identity.name;
     let pre = read_pre_state(setting, &profile)?;
-    let before_present = pre.is_explicit_in_profile;
-    let before_value = before_present.then_some(pre.current);
-    let mut resolved_op = op;
-    if matches!(op, WriteOp::RestoreOriginal) {
-        let game_id = target.game_id().ok_or_else(|| {
-            ServiceError::command_failed("original revert is not available for global settings")
-        })?;
-        let original = context
-            .storage()
-            .get_nvapi_target_setting_claim(game_id, &profile_name, setting.nvapi_id())?
-            .map(|claim| (claim.original_present, claim.original_value))
-            .ok_or_else(|| {
-                ServiceError::command_failed(
-                    "no verified original NVIDIA setting state is recorded for this profile",
-                )
-            })?;
-        resolved_op = restore_original_op(original.0, original.1)?;
-    }
-    let (expected_present, expected_value) = match resolved_op {
-        WriteOp::Set(value) => (true, Some(value)),
-        WriteOp::Delete => (false, None),
-        WriteOp::RestoreOriginal => unreachable!("resolved above"),
+    let before = NvapiSettingState {
+        present: pre.is_explicit_in_profile,
+        value: pre.is_explicit_in_profile.then_some(pre.current),
     };
-    let application = profile.matched_application();
-    let application_json = setting_application_witness_json(application.as_ref())?;
-    let executable_path = ctx.effective_exe_path.as_deref();
-    if let Some(game_id) = target.game_id() {
-        let path = executable_path
+    let setting_id = setting.nvapi_id();
+    let mut resolved_op = op;
+    let mut before_composition = None;
+    let before_composition_json;
+    let application_json;
+    let storage = context.storage();
+    let game_scope = if let Some(game_id) = target.game_id() {
+        let path = ctx
+            .effective_exe_path
+            .as_deref()
             .ok_or_else(|| ServiceError::command_failed("no executable detected for game"))?;
-        let owned = context.storage().get_nvapi_owned_profile(game_id)?;
+        let owned = storage.get_nvapi_owned_profile(game_id)?;
         let is_owned = owned
             .as_ref()
             .is_some_and(|row| row.profile_name == profile_name);
-        let profile_owner = context
-            .storage()
-            .get_nvapi_owned_profile_by_name(&profile_name)?;
+        let profile_owner = storage.get_nvapi_owned_profile_by_name(&profile_name)?;
         ensure_profile_owner_matches_game(game_id, profile_owner.as_ref())?;
         if let Some(owner) = owned.as_ref()
             && (!is_owned
@@ -279,138 +252,65 @@ pub fn write_setting_value(
                 "the selected NVIDIA profile does not match RenderPilot's confirmed executable binding",
             ));
         }
+        application_json =
+            setting_application_witness_json(profile.matched_application().as_ref())?;
         let app_json = application_json.as_deref().ok_or_else(|| {
             ServiceError::command_failed(
                 "full-path NVIDIA profile lookup returned no application witness",
             )
         })?;
-        let before_composition = if is_owned {
-            let composition = profile_composition(&profile)?;
-            if serde_json::to_string(&composition).ok().as_deref()
-                != owned.as_ref().map(|row| row.composition_json.as_str())
-            {
-                return Err(ServiceError::command_failed(
-                    "RenderPilot-owned NVIDIA profile composition changed externally; resolve the conflict before writing",
-                ));
-            }
-            Some(composition)
-        } else {
-            None
-        };
-        let op_id = ulid::Ulid::generate().to_string();
-        dispatch_setting_preparation(
-            context.storage(),
-            SettingPreparationDispatch {
-                target,
-                op_id: &op_id,
-                profile_name: &profile_name,
-                profile_is_predefined: identity.is_predefined,
-                profile_identity_json: &identity_json,
-                setting_id: setting.nvapi_id(),
-                before: NvapiSettingState {
-                    present: before_present,
-                    value: before_value,
-                },
-                op: resolved_op,
-                game_scope: Some(GamePreparationScope {
-                    game_id,
-                    target_kind: if is_owned { "renderpilot" } else { "external" },
-                    executable_path: path,
-                    application_witness_json: app_json,
-                }),
-            },
-        )?;
-
-        if let Err(error) = apply_drs_write(&profile, setting, resolved_op) {
-            drop(session);
-            let outcome = reconcile_setting_write(
-                context,
-                SettingWriteReconciliation {
-                    target,
-                    ctx,
-                    setting,
-                    op_id: &op_id,
-                    game_id: Some(game_id),
-                    profile_name: &profile_name,
-                    before_state: (before_present, before_value),
-                    after_state: (expected_present, expected_value),
-                    before_composition: before_composition.as_ref(),
-                },
-            )?;
-            return finish_reconciled_write(
-                outcome,
-                Some(map_nvapi_write_error(error, "setting write failed")),
-            );
+        if matches!(op, WriteOp::RestoreOriginal) {
+            let original = storage.get_nvapi_bound_setting_original(
+                game_id, &profile_name, setting_id, path, identity.is_predefined, app_json,
+            )?
+            .ok_or_else(|| ServiceError::command_failed(
+                "no verified original NVIDIA setting state is recorded for this executable binding",
+            ))?;
+            resolved_op = restore_original_op(original.present, original.value)?;
         }
-        let save_result = session.save();
-        drop(session);
-        let outcome = reconcile_setting_write(
-            context,
-            SettingWriteReconciliation {
-                target,
-                ctx,
-                setting,
-                op_id: &op_id,
-                game_id: Some(game_id),
-                profile_name: &profile_name,
-                before_state: (before_present, before_value),
-                after_state: (expected_present, expected_value),
-                before_composition: before_composition.as_ref(),
-            },
-        )?;
-        return finish_reconciled_write(
-            outcome,
-            save_result.err().map(|error| {
-                map_nvapi_write_error(
-                    error,
-                    "save result was uncertain; a fresh NVIDIA session reconciled the receipt",
-                )
-            }),
-        );
-    }
+        before_composition = is_owned
+            .then(|| profile_composition(&profile))
+            .transpose()?;
+        before_composition_json = before_composition
+            .as_ref()
+            .map(serde_json::Value::to_string);
+        Some(GamePreparationScope {
+            game_id,
+            target_kind: if is_owned { "renderpilot" } else { "external" },
+            executable_path: path,
+            application_witness_json: app_json,
+            owned_before_composition_json: before_composition_json.as_deref(),
+        })
+    } else {
+        None
+    };
 
-    // Global profile writes also use a durable receipt and explicit original state,
-    // keyed by the exact base-profile identity returned by DRS.
     let op_id = ulid::Ulid::generate().to_string();
-    dispatch_setting_preparation(
-        context.storage(),
+    let after = dispatch_setting_preparation(
+        storage,
         SettingPreparationDispatch {
             target,
             op_id: &op_id,
             profile_name: &profile_name,
             profile_is_predefined: identity.is_predefined,
             profile_identity_json: &identity_json,
-            setting_id: setting.nvapi_id(),
-            before: NvapiSettingState {
-                present: before_present,
-                value: before_value,
-            },
+            setting_id,
+            before,
             op: resolved_op,
-            game_scope: None,
+            game_scope,
         },
     )?;
-    if let Err(error) = apply_drs_write(&profile, setting, resolved_op) {
-        drop(session);
-        let outcome = reconcile_setting_write(
-            context,
-            SettingWriteReconciliation {
-                target,
-                ctx,
-                setting,
-                op_id: &op_id,
-                game_id: None,
-                profile_name: &profile_name,
-                before_state: (before_present, before_value),
-                after_state: (expected_present, expected_value),
-                before_composition: None,
-            },
-        )?;
-        return finish_reconciled_write(
-            outcome,
-            Some(map_nvapi_write_error(error, "global setting write failed")),
-        );
-    }
-    let save_result = session.save();
+    let write_error = apply_drs_write(&profile, setting, resolved_op)
+        .map_err(|error| map_nvapi_write_error(error, "setting write failed"))
+        .and_then(|()| {
+            session.save().map_err(|error| {
+                map_nvapi_write_error(
+                    error,
+                    "save result was uncertain; a fresh NVIDIA session reconciled the receipt",
+                )
+            })
+        })
+        .err();
     drop(session);
     let outcome = reconcile_setting_write(
         context,
@@ -419,22 +319,13 @@ pub fn write_setting_value(
             ctx,
             setting,
             op_id: &op_id,
-            game_id: None,
             profile_name: &profile_name,
-            before_state: (before_present, before_value),
-            after_state: (expected_present, expected_value),
-            before_composition: None,
+            before_state: (before.present, before.value),
+            after_state: (after.present, after.value),
+            before_composition: before_composition.as_ref(),
         },
     )?;
-    finish_reconciled_write(
-        outcome,
-        save_result.err().map(|error| {
-            map_nvapi_write_error(
-                error,
-                "global save result was uncertain; a fresh NVIDIA session reconciled the receipt",
-            )
-        }),
-    )
+    finish_reconciled_write(outcome, write_error)
 }
 
 #[cfg(test)]
@@ -480,18 +371,13 @@ fn read_setting_presence(
 pub(super) fn profile_composition(
     profile: &renderpilot_nvapi::Profile<'_>,
 ) -> Result<serde_json::Value, ServiceError> {
-    let mut applications = profile
+    let applications = profile
         .applications()
         .map_err(|error| map_nvapi_write_error(error, "application composition read failed"))?;
-    applications.sort_by_cached_key(|application| application.app_name.to_lowercase());
-    let mut settings = profile
+    let settings = profile
         .settings()
         .map_err(|error| map_nvapi_write_error(error, "setting composition read failed"))?;
-    settings.sort_by_key(|setting| setting.id);
-    Ok(serde_json::json!({
-        "applications": applications,
-        "settings": settings,
-    }))
+    Ok(composition_value(applications, settings))
 }
 
 pub(super) fn setting_application_witness_json(
@@ -525,7 +411,6 @@ struct SettingWriteReconciliation<'request, 'game> {
     ctx: &'request SettingContext,
     setting: &'request dyn NvapiSetting,
     op_id: &'request str,
-    game_id: Option<&'request str>,
     profile_name: &'request str,
     before_state: (bool, Option<u32>),
     after_state: (bool, Option<u32>),
@@ -541,12 +426,12 @@ fn reconcile_setting_write(
         ctx,
         setting,
         op_id,
-        game_id,
         profile_name,
         before_state: (before_present, before_value),
         after_state: (after_present, after_value),
         before_composition,
     } = request;
+    let game_id = target.game_id();
     // Reconciliation never reuses the session that attempted the write. A
     // newly loaded DRS session is the persisted-state observation boundary.
     let session = open_drs_session().map_err(warning_to_service_error)?;
@@ -621,29 +506,43 @@ fn reconcile_setting_write(
         )?;
         return Ok(ReconciledWrite::Conflict);
     }
-    let after_composition = if owner.is_some() {
-        Some(profile_composition(&profile)?)
-    } else {
-        None
+    let verified_owned_composition = match (owner, before_composition) {
+        (Some(owner), Some(before)) => {
+            let actual = profile_composition(&profile)?;
+            match reconcile_owned_setting(
+                &owner.composition_json,
+                before,
+                &actual,
+                setting.nvapi_id(),
+                outcome == ReconciledWrite::After,
+            ) {
+                Ok(composition) => composition,
+                Err(error) => {
+                    mark_setting_conflict(
+                        context,
+                        op_id,
+                        &serde_json::json!({
+                            "composition": actual,
+                            "reconciliation_error": error,
+                        }),
+                    )?;
+                    return Ok(ReconciledWrite::Conflict);
+                }
+            }
+        }
+        (None, None) => None,
+        _ => {
+            mark_setting_conflict(
+                context,
+                op_id,
+                &serde_json::json!({"reconciliation_error": "NVIDIA profile ownership changed"}),
+            )?;
+            return Ok(ReconciledWrite::Conflict);
+        }
     };
-    if let (Some(owner), Some(actual), Some(before)) = (
-        owner.as_ref(),
-        after_composition.as_ref(),
-        before_composition,
-    ) && !reconciled_owned_composition_matches(
-        outcome,
-        &owner.composition_json,
-        before,
-        actual,
-        setting.nvapi_id(),
-    )? {
-        mark_setting_conflict(context, op_id, &serde_json::json!({"composition": actual}))?;
-        return Ok(ReconciledWrite::Conflict);
-    }
     if outcome == ReconciledWrite::After {
         let identity_json = serde_json::to_string(&identity)
             .map_err(|error| ServiceError::command_failed(error.to_string()))?;
-        let composition_json = after_composition.as_ref().map(serde_json::Value::to_string);
         context
             .storage()
             .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
@@ -659,7 +558,7 @@ fn reconcile_setting_write(
                     value: after_value,
                 },
                 profile_identity_json: &identity_json,
-                composition_json: composition_json.as_deref(),
+                composition_json: verified_owned_composition.as_deref(),
             })?;
         return Ok(ReconciledWrite::After);
     }
@@ -698,49 +597,6 @@ fn classify_reconciled_write(
         ReconciledWrite::Before
     } else {
         ReconciledWrite::Conflict
-    }
-}
-
-pub(super) fn composition_matches_except_setting(
-    before_json: &str,
-    after: &serde_json::Value,
-    setting_id: u32,
-) -> Result<bool, ServiceError> {
-    let mut before: serde_json::Value = serde_json::from_str(before_json).map_err(|error| {
-        ServiceError::command_failed(format!("invalid NVIDIA composition receipt: {error}"))
-    })?;
-    let mut after = after.clone();
-    for composition in [&mut before, &mut after] {
-        if let Some(settings) = composition
-            .get_mut("settings")
-            .and_then(serde_json::Value::as_array_mut)
-        {
-            settings.retain(|setting| {
-                setting.get("id").and_then(serde_json::Value::as_u64) != Some(u64::from(setting_id))
-            });
-        }
-    }
-    Ok(before == after)
-}
-
-fn reconciled_owned_composition_matches(
-    outcome: ReconciledWrite,
-    owner_composition_json: &str,
-    before: &serde_json::Value,
-    actual: &serde_json::Value,
-    setting_id: u32,
-) -> Result<bool, ServiceError> {
-    let before_json = before.to_string();
-    if owner_composition_json != before_json.as_str() {
-        return Ok(false);
-    }
-
-    match outcome {
-        ReconciledWrite::After => {
-            composition_matches_except_setting(owner_composition_json, actual, setting_id)
-        }
-        ReconciledWrite::Before => Ok(actual == before),
-        ReconciledWrite::Conflict => Ok(false),
     }
 }
 

@@ -47,6 +47,8 @@ export {
   type NvapiSettingsStore,
 } from './model/create-nvapi-settings-store.svelte';
 
+export { createNvapiViewRefresh } from './model/nvapi-view-refresh';
+
 export {
   createGlobalNvidiaPresetsContext,
   type GlobalNvidiaPresetsContext,

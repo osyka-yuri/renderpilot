@@ -9,12 +9,17 @@
 
   const { ...props }: Props = $props();
   let profileSelectionBlockReason = $state<ProfileSelectionBlockReason | null>(null);
+  let driverMutationBusy = $state(false);
 
   export function setProfileSelectionBlockReason(reason: ProfileSelectionBlockReason | null): void {
     profileSelectionBlockReason = reason;
   }
+
+  export function setDriverMutationBusy(value: boolean): void {
+    driverMutationBusy = value;
+  }
 </script>
 
 <TooltipProvider delayDuration={0}>
-  <GameExecutablePopover {...props} {profileSelectionBlockReason} />
+  <GameExecutablePopover {...props} {profileSelectionBlockReason} {driverMutationBusy} />
 </TooltipProvider>

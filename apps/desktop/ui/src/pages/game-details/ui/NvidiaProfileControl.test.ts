@@ -123,6 +123,7 @@ function render(
       onOpenGameDetails,
       onRecoveryDeleteComplete,
       canCreate: true,
+      mutationBlocked: false,
     },
   });
   flushSync();
@@ -144,6 +145,7 @@ function renderWithReactiveGameId(
       onOpenGameDetails: vi.fn(),
       onRecoveryDeleteComplete,
       canCreate: true,
+      mutationBlocked: false,
     },
   });
   flushSync();
@@ -153,6 +155,19 @@ function renderWithReactiveGameId(
 function setRenderedGameId(gameId: string): void {
   (component as { setGameId: (gameId: string) => void }).setGameId(gameId);
   flushSync();
+}
+
+function setMutationBlocked(blocked: boolean): void {
+  (component as { setMutationBlocked: (blocked: boolean) => void }).setMutationBlocked(blocked);
+  flushSync();
+}
+
+async function unmountCurrentComponent(): Promise<void> {
+  if (!component) {
+    throw new Error('Expected the NVIDIA profile control to be mounted');
+  }
+  await unmount(component);
+  component = null;
 }
 
 function controlRow(): HTMLDivElement | null {
@@ -477,6 +492,60 @@ describe('NvidiaProfileControl', () => {
     expect(controlRow()?.textContent).toContain('RenderPilot - Test');
     expect(buttonContaining('Delete profile')).toBeDefined();
     expect(buttonContaining('Create profile')).toBeUndefined();
+  });
+
+  it('blocks create/delete controls and confirmation during a driver mutation while keeping recovery retry available', async () => {
+    const missingProfile = staticProfile(profileStatus('missing'));
+    renderWithReactiveGameId(missingProfile, GAME_ID);
+    setMutationBlocked(true);
+    expect(buttonContaining('Create profile')?.disabled).toBe(true);
+    buttonContaining('Create profile')?.click();
+    flushSync();
+    expect(missingProfile.create).not.toHaveBeenCalled();
+
+    await unmountCurrentComponent();
+    target.replaceChildren();
+    const profile = staticProfile(profileStatus('owned'));
+    renderWithReactiveGameId(profile, GAME_ID, 'settings');
+
+    const deleteTrigger = buttonContaining('Delete profile');
+    expect(deleteTrigger?.disabled).toBe(false);
+    deleteTrigger?.click();
+    flushSync();
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+
+    setMutationBlocked(true);
+    const confirm = buttonContaining('Delete profile', dialog ?? target);
+    expect(confirm?.disabled).toBe(true);
+    expect(dialog?.getAttribute('data-state')).not.toBe('closed');
+    expect(deleteNvapiProfile).not.toHaveBeenCalled();
+
+    await unmountCurrentComponent();
+    target.replaceChildren();
+    const recoveryProfile = staticProfile(null, {
+      loadError: 'The NVIDIA profile could not be inspected.',
+    });
+    component = mount(NvidiaProfileControlTestHost, {
+      target,
+      props: {
+        gameId: GAME_ID,
+        mode: 'recovery',
+        profile: recoveryProfile,
+        onOpenGameDetails: vi.fn(),
+        onRecoveryDeleteComplete: vi.fn(),
+        canCreate: false,
+      },
+    });
+    flushSync();
+    setMutationBlocked(true);
+
+    expect(buttonContaining('Retry')?.disabled).toBe(false);
+    expect(buttonContaining('Delete profile')).toBeUndefined();
+    buttonContaining('Retry')?.click();
+    flushSync();
+    expect(recoveryProfile.reload).toHaveBeenCalledWith(GAME_ID);
+    expect(recoveryProfile.remove).not.toHaveBeenCalled();
   });
 
   it('shows the delete action and a reason when an owned profile is blocked', () => {

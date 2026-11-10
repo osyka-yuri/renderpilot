@@ -1,4 +1,4 @@
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap } from 'svelte/reactivity';
 import { reportClientError } from '@shared/errors';
 import { publishPresentedErrorNotification } from '@shared/notifications';
 import { t } from '@shared/i18n';
@@ -45,8 +45,8 @@ export function createNvapiSettingsStore() {
   let states: SettingStateResponse[] = $state([]);
   let busy = $state(false);
   let loadError: string | null = $state(null);
-  // Keys with an in-flight write; SvelteSet is reactive on mutation.
-  const pending = new SvelteSet<string>();
+  let session = $state(0);
+  const inFlightWrites = new SvelteMap<string, number>();
 
   // ── derived: profile-level info (shared by all settings) ─────────
   const hasStates = $derived(states.length > 0);
@@ -90,11 +90,10 @@ export function createNvapiSettingsStore() {
     loadError = value;
   }
 
-  function clearAll(): void {
+  function clearAll(): number {
     states = [];
     loadError = null;
-    busy = false;
-    pending.clear();
+    return beginSession();
   }
 
   function patch(updated: SettingStateResponse): void {
@@ -112,15 +111,33 @@ export function createNvapiSettingsStore() {
     key: string,
     errorLabel: string,
     write: () => Promise<SettingStateResponse>,
-  ): Promise<void> {
-    pending.add(key);
-    try {
-      patch(await write());
-    } catch (e) {
-      reportActionError(errorLabel, e);
-    } finally {
-      pending.delete(key);
+  ): Promise<boolean> {
+    if (inFlightWrites.has(key)) {
+      return false;
     }
+    const activeSession = session;
+    inFlightWrites.set(key, activeSession);
+    try {
+      const updated = await write();
+      if (session !== activeSession) {
+        return false;
+      }
+      patch(updated);
+      return true;
+    } catch (e) {
+      if (session === activeSession) {
+        reportActionError(errorLabel, e);
+      }
+      return false;
+    } finally {
+      inFlightWrites.delete(key);
+    }
+  }
+
+  function beginSession(): number {
+    session += 1;
+    busy = false;
+    return session;
   }
 
   return {
@@ -132,7 +149,7 @@ export function createNvapiSettingsStore() {
       return hasStates;
     },
     get busy() {
-      return busy;
+      return busy || inFlightWrites.size > 0;
     },
     get loadError() {
       return loadError;
@@ -143,17 +160,16 @@ export function createNvapiSettingsStore() {
     get profileWarnings() {
       return profileWarnings;
     },
-    isPending: (key: string) => pending.has(key),
+    isPending: (key: string) => inFlightWrites.get(key) === session,
     settingsForFamily,
     familyWarnings,
     dllInfoForFamily,
     // mutation / actions
     setStates,
+    beginSession,
     setBusy,
     setLoadError,
     clearAll,
-    patch,
-    reportActionError,
     runWrite,
   };
 }

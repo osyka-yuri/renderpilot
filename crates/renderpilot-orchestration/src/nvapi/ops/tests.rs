@@ -8,7 +8,8 @@ use renderpilot_domain::{
     GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
 };
 use renderpilot_nvapi::{
-    CatalogReadiness, DlssDllKind, DlssVersion, NvapiSetting, SettingContext, setting::DllInfo,
+    ApplicationIdentity, CatalogReadiness, DlssDllKind, DlssVersion, NvapiSetting, SettingContext,
+    setting::DllInfo,
 };
 use renderpilot_storage_sqlite::{
     NvapiGameSettingPreparation, NvapiSettingOperationCompletion, NvapiSettingOperationScope,
@@ -21,11 +22,15 @@ use super::assemble::{
 use super::live::LiveRead;
 use super::target::{SettingTarget, WriteOp};
 use super::write::{
+    GamePreparationScope, SettingPreparationDispatch, dispatch_setting_preparation,
     ensure_dll_setting_catalog_ready, ensure_profile_owner_matches_game, resolve_revert_op,
-    validate_value_supported,
+    restore_original_op, validate_value_supported,
 };
 use crate::dlss::settings_catalog::{self, CatalogSetting};
 use crate::nvapi::dto::{CatalogReadinessDto, NvapiWarningDto};
+
+const CLAIM_PROFILE_IDENTITY: &str = r#"{"name":"NVIDIA Claim Fixture","is_predefined":false,"application_count":1,"setting_count":1}"#;
+const CLAIM_APPLICATION_WITNESS: &str = r#"{"app_name":"/tmp/game.exe","user_friendly_name":"Claim fixture","launcher":"","file_in_folder":"","flags":0,"command_line":"","is_predefined":false}"#;
 
 #[test]
 fn sr_dll_file_name_matches_detection_constant() {
@@ -88,9 +93,9 @@ fn seed_nvapi_setting_claim(
     storage.upsert_game(&game).expect("persist game");
 
     let profile_name = "NVIDIA Claim Fixture";
-    let profile_identity_json = r#"{"name":"NVIDIA Claim Fixture"}"#;
+    let profile_identity_json = CLAIM_PROFILE_IDENTITY;
     let executable_path = "/tmp/game.exe";
-    let application_witness_json = r#"{"app_name":"/tmp/game.exe"}"#;
+    let application_witness_json = CLAIM_APPLICATION_WITNESS;
     let op_id = format!("op-{}", game_id.as_str().replace(':', "-"));
     storage
         .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
@@ -147,22 +152,47 @@ fn response_with_claim(
     let storage = SqliteStorage::in_memory().expect("storage");
     seed_nvapi_setting_claim(&storage, game_id, &setting, original, expected);
     let ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
-    assemble_response(
+    assemble_claim_response(
+        &storage,
+        game_id,
         &setting,
         &ctx,
-        &storage,
+        &claim_live_read(current, current_is_explicit),
+    )
+}
+
+fn assemble_claim_response(
+    storage: &SqliteStorage,
+    game_id: &str,
+    setting: &dyn NvapiSetting,
+    ctx: &SettingContext,
+    live: &LiveRead,
+) -> crate::nvapi::dto::SettingStateResponse {
+    assemble_response(
+        setting,
+        ctx,
+        storage,
         &SettingTarget::Game { game_id },
-        &LiveRead {
-            current,
-            current_is_explicit: Some(current_is_explicit),
-            predefined: None,
-            is_current_predefined: current == setting.default_dword(),
-            has_profile_for_exe: true,
-            profile_name: Some("NVIDIA Claim Fixture".to_owned()),
-            warning: None,
-        },
+        live,
     )
     .expect("assemble response")
+}
+
+fn claim_live_read(current: u32, current_is_explicit: bool) -> LiveRead {
+    LiveRead {
+        current,
+        current_is_explicit: Some(current_is_explicit),
+        predefined: None,
+        is_current_predefined: false,
+        has_profile_for_exe: true,
+        profile_name: Some("NVIDIA Claim Fixture".to_owned()),
+        profile_is_predefined: Some(false),
+        matched_application: Some(
+            serde_json::from_str::<ApplicationIdentity>(CLAIM_APPLICATION_WITNESS)
+                .expect("claim application witness"),
+        ),
+        warning: None,
+    }
 }
 
 #[test]
@@ -171,14 +201,237 @@ fn response_exposes_claimed_explicit_original_for_exact_live_profile_and_path() 
         "manual:nvapi-original-explicit",
         (true, Some(7)),
         (true, Some(5)),
-        5,
+        9,
         true,
     );
 
     let original = response.original.expect("claimed original");
     assert!(original.present);
     assert_eq!(original.value.expect("explicit original").dword, 7);
+    assert_eq!(response.current.dword, 9);
     assert_eq!(response.current_is_explicit, Some(true));
+}
+
+#[test]
+fn response_keeps_original_restore_available_after_external_value_drift() {
+    let game_id = "manual:nvapi-original-after-drift";
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let storage = SqliteStorage::in_memory().expect("storage");
+    seed_nvapi_setting_claim(
+        &storage,
+        game_id,
+        &setting,
+        (true, Some(4)),
+        (true, Some(7)),
+    );
+    let ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    let target = SettingTarget::Game { game_id };
+    let response =
+        assemble_claim_response(&storage, game_id, &setting, &ctx, &claim_live_read(9, true));
+
+    let original = response
+        .original
+        .expect("drifted live value keeps original visible");
+    assert_eq!(original.value.expect("explicit original").dword, 4);
+    assert_eq!(response.current.dword, 9);
+    assert_matches!(
+        resolve_revert_op(&target, "original").expect("original restore option"),
+        WriteOp::RestoreOriginal
+    );
+    let claim = storage
+        .get_nvapi_bound_setting_original(
+            game_id,
+            "NVIDIA Claim Fixture",
+            setting.nvapi_id(),
+            "/tmp/game.exe",
+            false,
+            CLAIM_APPLICATION_WITNESS,
+        )
+        .expect("query verified original")
+        .expect("recorded binding");
+    let restore = restore_original_op(claim.present, claim.value)
+        .expect("resolve original value to a driver write");
+    assert_matches!(restore, WriteOp::Set(4));
+
+    dispatch_setting_preparation(
+        &storage,
+        SettingPreparationDispatch {
+            target: &target,
+            op_id: "op-original-after-external-drift",
+            profile_name: "NVIDIA Claim Fixture",
+            profile_is_predefined: false,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
+            setting_id: setting.nvapi_id(),
+            before: NvapiSettingState {
+                present: true,
+                value: Some(9),
+            },
+            op: restore,
+            game_scope: Some(GamePreparationScope {
+                game_id,
+                target_kind: "external",
+                executable_path: "/tmp/game.exe",
+                application_witness_json: CLAIM_APPLICATION_WITNESS,
+                owned_before_composition_json: None,
+            }),
+        },
+    )
+    .expect("authorized direct restore accepts changed live value");
+    let pending = storage
+        .list_pending_nvapi_operations()
+        .expect("pending restore");
+    assert_eq!(pending.len(), 1);
+    assert!(pending[0].after_json.contains("\"value\":4"));
+
+    storage
+        .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+            op_id: "op-original-after-external-drift",
+            scope: NvapiSettingOperationScope::Game { game_id },
+            target_id: "NVIDIA Claim Fixture",
+            setting_id: setting.nvapi_id(),
+            expected: NvapiSettingState {
+                present: true,
+                value: Some(4),
+            },
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
+            composition_json: None,
+        })
+        .expect("verify direct original restore");
+    let restored = storage
+        .get_nvapi_target_setting_claim(game_id, "NVIDIA Claim Fixture", setting.nvapi_id())
+        .expect("query restored claim")
+        .expect("claim persists");
+    assert_eq!(restored.original_value, Some(4));
+    assert_eq!(restored.expected_value, Some(4));
+}
+
+#[test]
+fn response_hides_original_when_profile_identity_or_binding_is_unverified() {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let cases = [
+        (
+            "profile-name-drift",
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+        ),
+        (
+            "predefined-status-drift",
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+        ),
+        (
+            "changed-application-witness",
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+        ),
+        (
+            "missing-full-path-witness",
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+        ),
+        (
+            "unreadable-setting",
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+        ),
+        ("ambiguous-profile", false, false, false, false, false, true),
+    ];
+
+    for (
+        suffix,
+        changed_name,
+        changed_status,
+        changed_witness,
+        missing_witness,
+        setting_unreadable,
+        unavailable,
+    ) in cases
+    {
+        let game_id = format!("manual:nvapi-original-unverified-{suffix}");
+        let storage = SqliteStorage::in_memory().expect("storage");
+        seed_nvapi_setting_claim(
+            &storage,
+            &game_id,
+            &setting,
+            (true, Some(4)),
+            (true, Some(7)),
+        );
+        let ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+        let mut live = if unavailable {
+            LiveRead::unavailable(
+                setting.default_dword(),
+                Some(NvapiWarningDto::ExecutableAmbiguous),
+            )
+        } else {
+            claim_live_read(9, true)
+        };
+        if changed_name {
+            live.profile_name = Some("different NVIDIA profile".to_owned());
+        }
+        if changed_status {
+            live.profile_is_predefined = Some(true);
+        }
+        if changed_witness {
+            let mut application = live
+                .matched_application
+                .take()
+                .expect("current application witness");
+            application.user_friendly_name = "different NVIDIA application".to_owned();
+            live.matched_application = Some(application);
+        }
+        if missing_witness {
+            live.matched_application = None;
+        }
+        if setting_unreadable {
+            live.current_is_explicit = None;
+        }
+
+        let response = assemble_claim_response(&storage, &game_id, &setting, &ctx, &live);
+        assert!(
+            response.original.is_none(),
+            "unverified profile or application binding must hide original state ({suffix})"
+        );
+    }
+
+    let game_id = "manual:nvapi-original-unverified-rebound-path";
+    let storage = SqliteStorage::in_memory().expect("storage");
+    seed_nvapi_setting_claim(
+        &storage,
+        game_id,
+        &setting,
+        (true, Some(4)),
+        (true, Some(7)),
+    );
+    let mut ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    ctx.effective_exe_path = Some("/tmp/rebound.exe".to_owned());
+    let response =
+        assemble_claim_response(&storage, game_id, &setting, &ctx, &claim_live_read(9, true));
+    assert!(
+        response.original.is_none(),
+        "rebound path has no recorded witness"
+    );
 }
 
 #[test]
@@ -421,9 +674,6 @@ fn global_context_imposes_no_dll_version_constraints() {
     assert!(validate_value_supported(&setting, preset_a, &ctx).is_ok());
 }
 
-use super::write::{
-    GamePreparationScope, SettingPreparationDispatch, dispatch_setting_preparation,
-};
 use rusqlite::OptionalExtension;
 
 const GLOBAL_PROFILE: &str = "Base Profile";
@@ -1051,7 +1301,7 @@ fn orchestration_dispatch_global_set_zero_remains_distinct_from_delete() {
 }
 
 #[test]
-fn orchestration_dispatch_global_delete_preserves_strict_preparation() {
+fn orchestration_dispatch_global_delete_authorizes_external_reapplication() {
     let storage = SqliteStorage::in_memory().expect("storage");
     let identity = global_identity_json(GLOBAL_PROFILE, 50, 120, true);
     let original = NvapiSettingState {
@@ -1069,7 +1319,7 @@ fn orchestration_dispatch_global_delete_preserves_strict_preparation() {
         value: None,
     };
 
-    let error = dispatch_setting_preparation(
+    dispatch_setting_preparation(
         &storage,
         SettingPreparationDispatch {
             target: &SettingTarget::Global,
@@ -1083,45 +1333,16 @@ fn orchestration_dispatch_global_delete_preserves_strict_preparation() {
             game_scope: None,
         },
     )
-    .expect_err("global Delete with stale before state must be rejected");
-
-    assert!(error.to_string().contains("conflict"));
-    assert!(
-        storage
-            .list_pending_nvapi_operations()
-            .expect("pending")
-            .is_empty(),
-        "failed global Delete must not create a pending intent"
-    );
-
-    let matching_before = NvapiSettingState {
-        present: true,
-        value: Some(1),
-    };
-    dispatch_setting_preparation(
-        &storage,
-        SettingPreparationDispatch {
-            target: &SettingTarget::Global,
-            op_id: "op-delete-matching",
-            profile_name: GLOBAL_PROFILE,
-            profile_is_predefined: true,
-            profile_identity_json: &identity,
-            setting_id: TEST_SETTING_ID,
-            before: matching_before,
-            op: WriteOp::Delete,
-            game_scope: None,
-        },
-    )
-    .expect("global Delete with matching before state must succeed");
+    .expect("global Delete may reconcile externally reset state");
 
     let pending = storage.list_pending_nvapi_operations().expect("pending");
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].op_id, "op-delete-matching");
+    assert_eq!(pending[0].op_id, "op-delete-stale");
     assert!(pending[0].after_json.contains("\"present\":false"));
 }
 
 #[test]
-fn orchestration_dispatch_game_setting_preserves_strict_preparation() {
+fn orchestration_dispatch_game_setting_authorizes_external_reapplication() {
     let storage = SqliteStorage::in_memory().expect("storage");
     let game_id = "manual:game-non-regression";
     let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog setting");
@@ -1138,33 +1359,96 @@ fn orchestration_dispatch_game_setting_preserves_strict_preparation() {
         game_id,
         target_kind: "external",
         executable_path: "/tmp/game.exe",
-        application_witness_json: r#"{"app_name":"/tmp/game.exe"}"#,
+        application_witness_json: CLAIM_APPLICATION_WITNESS,
+        owned_before_composition_json: None,
     };
 
-    // Game-scoped setting preparation requires strict CAS against expected state, disallowing authorized global reapply.
-    let err = dispatch_setting_preparation(
+    dispatch_setting_preparation(
         &storage,
         SettingPreparationDispatch {
             target: &SettingTarget::Game { game_id },
             op_id: "op-game-stale",
             profile_name: "NVIDIA Claim Fixture",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
             setting_id: setting.nvapi_id(),
             before: stale_before,
             op: WriteOp::Set(2),
             game_scope: Some(game_scope),
         },
     )
-    .expect_err("game Set with stale before state must fail CAS check");
+    .expect("explicit game Set may reapply an externally reset value");
 
-    assert!(err.to_string().contains("outside RenderPilot"));
+    let pending = storage.list_pending_nvapi_operations().expect("pending");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].op_id, "op-game-stale");
+    let claim = storage
+        .get_nvapi_target_setting_claim(game_id, "NVIDIA Claim Fixture", setting.nvapi_id())
+        .expect("query claim")
+        .expect("claim remains recorded");
+    assert_eq!(claim.expected_value, Some(1));
+    assert_eq!(claim.original_value, None);
+
+    storage
+        .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+            op_id: "op-game-stale",
+            scope: NvapiSettingOperationScope::Game { game_id },
+            target_id: "NVIDIA Claim Fixture",
+            setting_id: setting.nvapi_id(),
+            expected: NvapiSettingState {
+                present: true,
+                value: Some(2),
+            },
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
+            composition_json: None,
+        })
+        .expect("confirmed write updates the expected value");
+    let confirmed = storage
+        .get_nvapi_target_setting_claim(game_id, "NVIDIA Claim Fixture", setting.nvapi_id())
+        .expect("query confirmed claim")
+        .expect("claim remains recorded");
+    assert_eq!(confirmed.expected_value, Some(2));
+    assert_eq!(confirmed.original_value, None);
+
+    let strict_storage = SqliteStorage::in_memory().expect("strict storage");
+    seed_nvapi_setting_claim(
+        &strict_storage,
+        game_id,
+        &setting,
+        (false, None),
+        (true, Some(1)),
+    );
+    let error = strict_storage
+        .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
+            op_id: "op-auto-restore-stale",
+            game_id,
+            profile_name: "NVIDIA Claim Fixture",
+            target_kind: "external",
+            profile_is_predefined: false,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
+            executable_path: "/tmp/game.exe",
+            application_witness_json: CLAIM_APPLICATION_WITNESS,
+            setting_id: setting.nvapi_id(),
+            original: NvapiSettingState {
+                present: false,
+                value: None,
+            },
+            before: NvapiSettingState {
+                present: false,
+                value: None,
+            },
+            after: NvapiSettingState {
+                present: true,
+                value: Some(2),
+            },
+        })
+        .expect_err("automatic restore must retain strict expected-state comparison");
+    assert!(error.to_string().contains("outside RenderPilot"));
     assert!(
-        storage
+        strict_storage
             .list_pending_nvapi_operations()
-            .expect("pending")
-            .is_empty(),
-        "failed game Set must not create a pending intent"
+            .expect("strict pending")
+            .is_empty()
     );
 }
 
@@ -1203,7 +1487,7 @@ fn seed_nvapi_predefined_game_setting_claim(
             profile_is_predefined: true,
             profile_identity_json: &profile_identity_json,
             executable_path: "/tmp/game.exe",
-            application_witness_json: r#"{"app_name":"/tmp/game.exe"}"#,
+            application_witness_json: CLAIM_APPLICATION_WITNESS,
             setting_id,
             original: NvapiSettingState {
                 present: false,
@@ -1465,7 +1749,8 @@ fn game_setting_preparation_delete_creates_pending_intent_with_correct_after_sta
         game_id,
         target_kind: "external",
         executable_path: "/tmp/game.exe",
-        application_witness_json: r#"{"app_name":"/tmp/game.exe"}"#,
+        application_witness_json: CLAIM_APPLICATION_WITNESS,
+        owned_before_composition_json: None,
     };
 
     dispatch_setting_preparation(
@@ -1475,7 +1760,7 @@ fn game_setting_preparation_delete_creates_pending_intent_with_correct_after_sta
             op_id: "op-game-char-delete",
             profile_name: "NVIDIA Claim Fixture",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
             setting_id: setting.nvapi_id(),
             before,
             op: WriteOp::Delete,
@@ -1511,7 +1796,7 @@ fn game_setting_preparation_delete_creates_pending_intent_with_correct_after_sta
 }
 
 #[test]
-fn game_setting_preparation_set_creates_pending_intent_with_strict_cas() {
+fn game_setting_preparation_set_allows_explicit_reapplication_but_strict_storage_stays_strict() {
     let storage = SqliteStorage::in_memory().expect("storage");
     let game_id = "manual:game-char-set";
     let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog setting");
@@ -1527,7 +1812,8 @@ fn game_setting_preparation_set_creates_pending_intent_with_strict_cas() {
         game_id,
         target_kind: "external",
         executable_path: "/tmp/game.exe",
-        application_witness_json: r#"{"app_name":"/tmp/game.exe"}"#,
+        application_witness_json: CLAIM_APPLICATION_WITNESS,
+        owned_before_composition_json: None,
     };
 
     dispatch_setting_preparation(
@@ -1537,7 +1823,7 @@ fn game_setting_preparation_set_creates_pending_intent_with_strict_cas() {
             op_id: "op-game-char-set-zero",
             profile_name: "NVIDIA Claim Fixture",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
             setting_id: setting.nvapi_id(),
             before,
             op: WriteOp::Set(0),
@@ -1566,21 +1852,28 @@ fn game_setting_preparation_set_creates_pending_intent_with_strict_cas() {
         present: false,
         value: None,
     };
-    let err = dispatch_setting_preparation(
-        &storage_cas,
-        SettingPreparationDispatch {
-            target: &SettingTarget::Game { game_id },
+    let err = storage_cas
+        .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
             op_id: "op-game-char-set-stale",
+            game_id,
             profile_name: "NVIDIA Claim Fixture",
+            target_kind: "external",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
+            executable_path: "/tmp/game.exe",
+            application_witness_json: CLAIM_APPLICATION_WITNESS,
             setting_id: setting.nvapi_id(),
+            original: NvapiSettingState {
+                present: false,
+                value: None,
+            },
             before: stale_before,
-            op: WriteOp::Set(0),
-            game_scope: Some(game_scope),
-        },
-    )
-    .expect_err("stale before state must fail CAS check");
+            after: NvapiSettingState {
+                present: true,
+                value: Some(0),
+            },
+        })
+        .expect_err("strict automatic preparation must retain the CAS check");
     assert!(err.to_string().contains("outside RenderPilot"));
     assert!(
         storage_cas
@@ -1610,7 +1903,7 @@ fn game_setting_preparation_rejects_missing_game_scope_for_set_and_delete() {
             op_id: "op-missing-scope-set",
             profile_name: "NVIDIA Claim Fixture",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
             setting_id: setting.nvapi_id(),
             before,
             op: WriteOp::Set(1),
@@ -1630,7 +1923,7 @@ fn game_setting_preparation_rejects_missing_game_scope_for_set_and_delete() {
             op_id: "op-missing-scope-delete",
             profile_name: "NVIDIA Claim Fixture",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
             setting_id: setting.nvapi_id(),
             before,
             op: WriteOp::Delete,
@@ -1678,7 +1971,8 @@ fn game_setting_preparation_rejects_mismatched_game_id_for_set_and_delete() {
         game_id: "manual:different-game",
         target_kind: "external",
         executable_path: "/tmp/game.exe",
-        application_witness_json: r#"{"app_name":"/tmp/game.exe"}"#,
+        application_witness_json: CLAIM_APPLICATION_WITNESS,
+        owned_before_composition_json: None,
     };
 
     let err_set = dispatch_setting_preparation(
@@ -1688,7 +1982,7 @@ fn game_setting_preparation_rejects_mismatched_game_id_for_set_and_delete() {
             op_id: "op-mismatch-scope-set",
             profile_name: "NVIDIA Claim Fixture",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
             setting_id: setting.nvapi_id(),
             before,
             op: WriteOp::Set(1),
@@ -1708,7 +2002,7 @@ fn game_setting_preparation_rejects_mismatched_game_id_for_set_and_delete() {
             op_id: "op-mismatch-scope-delete",
             profile_name: "NVIDIA Claim Fixture",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
             setting_id: setting.nvapi_id(),
             before,
             op: WriteOp::Delete,
@@ -1754,7 +2048,8 @@ fn setting_preparation_rejects_unresolved_restore_original() {
         game_id,
         target_kind: "external",
         executable_path: "/tmp/game.exe",
-        application_witness_json: r#"{"app_name":"/tmp/game.exe"}"#,
+        application_witness_json: CLAIM_APPLICATION_WITNESS,
+        owned_before_composition_json: None,
     };
 
     let err_game = dispatch_setting_preparation(
@@ -1764,7 +2059,7 @@ fn setting_preparation_rejects_unresolved_restore_original() {
             op_id: "op-restore-orig-game",
             profile_name: "NVIDIA Claim Fixture",
             profile_is_predefined: false,
-            profile_identity_json: r#"{"name":"NVIDIA Claim Fixture"}"#,
+            profile_identity_json: CLAIM_PROFILE_IDENTITY,
             setting_id: setting.nvapi_id(),
             before,
             op: WriteOp::RestoreOriginal,

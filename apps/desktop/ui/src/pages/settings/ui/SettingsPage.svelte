@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { Component } from 'svelte';
   import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
   import ImageIcon from '@lucide/svelte/icons/image';
@@ -13,7 +13,9 @@
   import {
     createDlssIndicatorContext,
     createGlobalNvidiaPresetsContext,
+    createNvapiViewRefresh,
   } from '@features/nvapi-settings';
+  import { createExclusiveTaskRunner, type ExclusiveTaskRunner } from '@shared/concurrency';
   import {
     type LanguageModeHandler,
     type ThemeModeHandler,
@@ -39,6 +41,7 @@
     languageBusy?: boolean;
     appVersion?: string | null;
     updateAction?: SettingsUpdateAction;
+    nvapiMutationRunner?: ExclusiveTaskRunner;
     onThemeModeChange?: ThemeModeHandler;
     onLanguageModeChange?: LanguageModeHandler;
     onCheckForUpdates?: () => void;
@@ -50,14 +53,19 @@
     languageBusy = false,
     appVersion = null,
     updateAction = 'check',
+    nvapiMutationRunner: providedNvapiMutationRunner,
     onThemeModeChange = () => undefined,
     onLanguageModeChange = () => Promise.resolve(),
     onCheckForUpdates = () => undefined,
   }: Props = $props();
+  const nvapiMutationRunner = untrack(
+    () => providedNvapiMutationRunner ?? createExclusiveTaskRunner(),
+  );
 
   const model = createSettingsPanelModel();
   const dlssIndicator = createDlssIndicatorContext();
-  const globalPresets = createGlobalNvidiaPresetsContext();
+  const globalPresets = createGlobalNvidiaPresetsContext(nvapiMutationRunner);
+  const nvapiViewRefresh = createNvapiViewRefresh(() => void globalPresets.refresh());
 
   const localizedThemeOptions = $derived(
     themeOptions.map((option) => ({ value: option.value, label: t(option.labelKey) })),
@@ -74,14 +82,30 @@
   };
 
   let activeTab = $state<SettingsTabValue>(settingsTabMemory.getInitialTab());
+  let hasVisitedNvidia = false;
   $effect(() => {
     settingsTabMemory.rememberTab(activeTab);
+  });
+
+  $effect(() => {
+    const currentTab = activeTab;
+    if (currentTab !== 'nvidia' && !hasVisitedNvidia) {
+      return;
+    }
+    if (currentTab === 'nvidia') {
+      hasVisitedNvidia = true;
+    }
+    const ready = globalPresets.loaded && !globalPresets.busy;
+    untrack(() => {
+      nvapiViewRefresh.sync(currentTab === 'nvidia' ? 'global-nvidia-settings' : null, ready);
+    });
   });
 
   onMount(() => {
     model.init();
 
     return () => {
+      nvapiViewRefresh.destroy();
       model.dispose();
     };
   });
@@ -135,7 +159,9 @@
     </SettingsTabPanel>
 
     <SettingsTabPanel value="nvidia">
-      <SettingsNvidiaSection {dlssIndicator} {globalPresets} />
+      {#if activeTab === 'nvidia'}
+        <SettingsNvidiaSection {dlssIndicator} {globalPresets} />
+      {/if}
     </SettingsTabPanel>
   </Tabs>
 </section>

@@ -11,10 +11,11 @@ use renderpilot_storage_sqlite::{
     NvapiSettingState, NvapiTargetSettingClaimRow,
 };
 
+use super::super::profile_composition::composition_matches_except_setting;
 use super::session::{map_nvapi_write_error, open_drs_session, warning_to_service_error};
 use super::write::{
-    application_witness_matches, composition_matches_except_setting, profile_composition,
-    setting_application_witness_json, stable_profile_identity_matches,
+    application_witness_matches, profile_composition, setting_application_witness_json,
+    stable_profile_identity_matches,
 };
 use crate::ServiceError;
 use crate::error::NvapiClaimBlockedReason;

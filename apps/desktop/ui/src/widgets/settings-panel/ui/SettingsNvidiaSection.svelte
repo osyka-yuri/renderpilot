@@ -32,12 +32,15 @@
   const isLoading = $derived(!dlssIndicator.loaded || !globalPresets.loaded);
   const isUnsupported = $derived(!dlssIndicator.supported && !globalPresets.nvapiAvailable);
 
+  $effect(() => {
+    if (!globalPresets.loaded && !globalPresets.busy) {
+      void globalPresets.load();
+    }
+  });
+
   onMount(() => {
     if (!dlssIndicator.loaded) {
       void dlssIndicator.load();
-    }
-    if (!globalPresets.loaded) {
-      void globalPresets.load();
     }
   });
 </script>

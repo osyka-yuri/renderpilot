@@ -6,6 +6,7 @@ use renderpilot_nvapi::Nvapi;
 use renderpilot_nvapi::setting::{
     CatalogReadiness as NvapiCatalogReadiness, NvapiSetting, NvapiValueOption, SettingContext,
 };
+use renderpilot_storage_sqlite::SqliteStorage;
 
 use super::super::dto::{
     CatalogReadinessDto, DllInfoDto, NvapiWarningDto, OriginalStateDto, SettingStateResponse,
@@ -23,60 +24,22 @@ use crate::dlss::preset_manifest::{
 pub(super) fn assemble_response(
     setting: &dyn NvapiSetting,
     ctx: &SettingContext,
-    storage: &renderpilot_storage_sqlite::SqliteStorage,
+    storage: &SqliteStorage,
     target: &SettingTarget<'_>,
     live: &LiveRead,
 ) -> Result<SettingStateResponse, ServiceError> {
-    // A game original is visible only when a setting claim matches the exact
-    // live DRS profile, executable path, and last verified value. This keeps a
-    // stale claim from advertising a restore action for a different target.
     let (original, effective_exe, effective_exe_source) = match target.game_id() {
-        Some(game_id) => {
-            let original = match (
-                live.profile_name.as_deref(),
-                live.current_is_explicit,
+        Some(game_id) => (
+            original_state(
+                storage,
+                game_id,
+                setting,
                 ctx.effective_exe_path.as_deref(),
-            ) {
-                (Some(profile_name), Some(current_present), Some(executable_path))
-                    if live.has_profile_for_exe =>
-                {
-                    let current_state = if current_present {
-                        (true, Some(live.current))
-                    } else {
-                        (false, None)
-                    };
-                    let claim = storage.get_nvapi_target_setting_claim(
-                        game_id,
-                        profile_name,
-                        setting.nvapi_id(),
-                    )?;
-                    claim
-                        .filter(|claim| {
-                            renderpilot_domain::normalized_path_key(&claim.executable_path)
-                                == renderpilot_domain::normalized_path_key(executable_path)
-                                && (claim.expected_present, claim.expected_value) == current_state
-                        })
-                        .and_then(|claim| {
-                            if claim.original_present {
-                                claim.original_value.map(|dword| OriginalStateDto {
-                                    present: true,
-                                    value: Some(value_descriptor(setting, dword)),
-                                })
-                            } else {
-                                Some(OriginalStateDto {
-                                    present: false,
-                                    value: None,
-                                })
-                            }
-                        })
-                }
-                _ => None,
-            };
-            let effective_exe = ctx.effective_exe.clone();
-            let effective_exe_source =
-                resolve_effective_exe_source(storage, game_id, ctx.effective_exe_path.as_deref())?;
-            (original, effective_exe, effective_exe_source)
-        }
+                live,
+            )?,
+            ctx.effective_exe.clone(),
+            resolve_effective_exe_source(storage, game_id, ctx.effective_exe_path.as_deref())?,
+        ),
         None => (None, None, None),
     };
 
@@ -139,6 +102,52 @@ pub(super) fn assemble_response(
         dll_info,
         warnings,
     })
+}
+
+fn original_state(
+    storage: &SqliteStorage,
+    game_id: &str,
+    setting: &dyn NvapiSetting,
+    executable_path: Option<&str>,
+    live: &LiveRead,
+) -> Result<Option<OriginalStateDto>, ServiceError> {
+    let (Some(name), Some(predefined), Some(application), Some(path)) = (
+        live.profile_name.as_deref(),
+        live.profile_is_predefined,
+        live.matched_application.as_ref(),
+        executable_path,
+    ) else {
+        return Ok(None);
+    };
+    if !live.has_profile_for_exe || live.current_is_explicit.is_none() {
+        return Ok(None);
+    }
+    let witness = serde_json::to_string(application).map_err(|error| {
+        ServiceError::command_failed(format!(
+            "could not encode live NVIDIA application identity: {error}"
+        ))
+    })?;
+    let original = storage.get_nvapi_bound_setting_original(
+        game_id,
+        name,
+        setting.nvapi_id(),
+        path,
+        predefined,
+        &witness,
+    )?;
+    Ok(original.and_then(|state| {
+        if state.present {
+            state.value.map(|dword| OriginalStateDto {
+                present: true,
+                value: Some(value_descriptor(setting, dword)),
+            })
+        } else {
+            Some(OriginalStateDto {
+                present: false,
+                value: None,
+            })
+        }
+    }))
 }
 
 fn value_descriptor(setting: &dyn NvapiSetting, dword: u32) -> ValueDescriptorDto {

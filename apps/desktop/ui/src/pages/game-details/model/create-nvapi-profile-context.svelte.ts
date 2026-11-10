@@ -12,22 +12,22 @@ import {
   moveNvapiProfile,
   type NvapiProfileStatus,
 } from '@features/nvapi-settings';
+import { createExclusiveTaskRunner, type ExclusiveTaskRunner } from '@shared/concurrency';
 
 export type NvapiProfileContext = ReturnType<typeof createNvapiProfileContext>;
 
 export function createNvapiProfileContext(
   refreshAfterProfileMutation?: (gameId: string) => void | Promise<void>,
+  canMutate: () => boolean = () => true,
+  mutationRunner: ExclusiveTaskRunner = createExclusiveTaskRunner(),
 ) {
   let status = $state<NvapiProfileStatus | null>(null);
   let loading = $state(false);
-  let busy = $state(false);
   let loadError = $state<string | null>(null);
   let actionError = $state<string | null>(null);
   let refreshError = $state<string | null>(null);
   let activeGameId: string | null = null;
   let reloadGeneration = 0;
-  let sessionGeneration = 0;
-  let actionGeneration = 0;
 
   function clearErrors(): void {
     loadError = null;
@@ -41,7 +41,6 @@ export function createNvapiProfileContext(
 
   async function reload(gameId: string): Promise<void> {
     if (activeGameId !== null && activeGameId !== gameId) {
-      sessionGeneration += 1;
       status = null;
     }
     const generation = ++reloadGeneration;
@@ -67,12 +66,9 @@ export function createNvapiProfileContext(
 
   function clear(): void {
     reloadGeneration += 1;
-    sessionGeneration += 1;
-    actionGeneration += 1;
     activeGameId = null;
     status = null;
     loading = false;
-    busy = false;
     clearErrors();
   }
 
@@ -81,53 +77,46 @@ export function createNvapiProfileContext(
     errorKey: MessageKeyWithoutParams,
     mutation: () => Promise<void>,
   ): Promise<boolean> {
-    if (!gameId || activeGameId !== gameId || busy || loading) {
+    if (!gameId || activeGameId !== gameId || mutationRunner.busy || loading || !canMutate()) {
       return false;
     }
-    const actionToken = ++actionGeneration;
-    const session = sessionGeneration;
-    busy = true;
-    clearErrors();
-    try {
+    const result = await mutationRunner.run(async () => {
+      clearErrors();
       try {
         await mutation();
       } catch (error) {
-        const label = t(errorKey);
-        const presentedError = formatPresentedError(error);
-        reportClientError('nvapi_profile_action', error);
-        publishPresentedErrorNotification(label, error);
-        if (sessionGeneration === session) {
+        if (activeGameId === gameId) {
+          const presentedError = formatPresentedError(error);
+          reportClientError('nvapi_profile_action', error);
+          publishPresentedErrorNotification(t(errorKey), error);
           await reload(gameId);
-          if (sessionGeneration === session) {
+          if (activeGameId === gameId) {
             actionError = presentedError;
           }
         }
         return false;
       }
 
-      if (sessionGeneration === session) {
-        await reload(gameId);
-        if (sessionGeneration === session) {
-          try {
-            await refreshAfterProfileMutation?.(gameId);
-          } catch (error) {
-            // The driver mutation has already succeeded; the game-details refresh
-            // failure is a separate warning and does not change the action result.
-            if (sessionGeneration === session) {
-              refreshError = t('gameDetails.profile.refreshFailed');
-              reportClientError('nvapi_profile_refresh', error);
-              publishWarningNotification(refreshError, formatPresentedError(error));
-            }
-          }
+      if (activeGameId !== gameId) {
+        return true;
+      }
+      await reload(gameId);
+      if (activeGameId !== gameId) {
+        return true;
+      }
+      try {
+        await refreshAfterProfileMutation?.(gameId);
+      } catch (error) {
+        // The driver mutation succeeded even if the game-details refresh failed.
+        if (activeGameId === gameId) {
+          refreshError = t('gameDetails.profile.refreshFailed');
+          reportClientError('nvapi_profile_refresh', error);
+          publishWarningNotification(refreshError, formatPresentedError(error));
         }
       }
-
       return true;
-    } finally {
-      if (actionGeneration === actionToken) {
-        busy = false;
-      }
-    }
+    });
+    return result ?? false;
   }
 
   async function create(gameId: string): Promise<boolean> {
@@ -164,7 +153,7 @@ export function createNvapiProfileContext(
       return loading;
     },
     get busy() {
-      return busy;
+      return mutationRunner.busy;
     },
     get loadError() {
       return loadError;

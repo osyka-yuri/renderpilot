@@ -1,15 +1,15 @@
 use std::assert_matches;
 
 use super::{
-    ReconciledWrite, application_witness_matches, classify_reconciled_write,
-    reconciled_owned_composition_matches, restore_original_op, setting_application_witness_json,
-    stable_profile_identity_matches,
+    ReconciledWrite, application_witness_matches, classify_reconciled_write, restore_original_op,
+    setting_application_witness_json, stable_profile_identity_matches,
 };
 use crate::nvapi::ops::WriteOp;
 use crate::nvapi::ops::claim_release::{
     ClaimRestoreCompositionObservation, ClaimRestoreExpectation, ClaimRestoreObservation,
     validate_claim_restore_observation,
 };
+use crate::nvapi::profile_composition::reconcile_owned_setting;
 use renderpilot_storage_sqlite::NvapiSettingState;
 
 #[test]
@@ -396,192 +396,124 @@ fn claim_restore_allows_only_the_claimed_setting_to_change_in_owned_composition(
     );
 }
 
-fn sample_owned_composition() -> serde_json::Value {
-    serde_json::json!({
-        "applications": [{
-            "app_name": "C:/Games/Game/game.exe",
-            "user_friendly_name": "Game",
-            "launcher": "",
-            "file_in_folder": "",
-            "flags": 0,
-            "command_line": "",
-            "is_predefined": false,
-        }],
+#[test]
+fn authorized_owned_write_merges_only_selected_setting_into_saved_receipt() {
+    let applications = serde_json::json!([{
+        "app_name": "C:/Games/Game.exe",
+        "user_friendly_name": "Game",
+        "launcher": "",
+        "file_in_folder": "",
+        "flags": 0,
+        "command_line": "",
+        "is_predefined": false
+    }]);
+    let owner = serde_json::json!({
+        "applications": applications,
         "settings": [
-            {"id": 10, "value": 7},
-            {"id": 11, "value": 2},
-        ],
-    })
-}
+            {"id": 10, "current_value": "1", "setting_type": 0},
+            {"id": 20, "current_value": "2", "setting_type": 0}
+        ]
+    });
+    let fresh_before = serde_json::json!({
+        "applications": applications,
+        "settings": [
+            {"id": 10, "current_value": "10", "setting_type": 0},
+            {"id": 20, "current_value": "200", "setting_type": 0}
+        ]
+    });
+    let actual_after = serde_json::json!({
+        "applications": applications,
+        "settings": [
+            {"id": 10, "current_value": "11", "setting_type": 0},
+            {"id": 20, "current_value": "200", "setting_type": 0}
+        ]
+    });
 
-#[test]
-fn reconciled_owned_composition_after_accepts_when_only_claimed_setting_changed() {
-    let before = sample_owned_composition();
-    let owner_json = before.to_string();
-    let mut after = before.clone();
-    after["settings"][0]["value"] = serde_json::json!(9);
-
-    let result = reconciled_owned_composition_matches(
-        ReconciledWrite::After,
-        &owner_json,
-        &before,
-        &after,
-        10,
+    let merged =
+        reconcile_owned_setting(&owner.to_string(), &fresh_before, &actual_after, 10, true)
+            .expect("verified selected setting can be merged")
+            .expect("owned profile produces a receipt");
+    let merged: serde_json::Value = serde_json::from_str(&merged).expect("merged JSON");
+    assert_eq!(merged["applications"], owner["applications"]);
+    assert_eq!(merged["settings"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        merged["settings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|setting| setting["id"] == 10)
+            .unwrap()["current_value"],
+        "11"
     );
-    assert!(result.expect("validation succeeds"));
-}
-
-#[test]
-fn reconciled_owned_composition_after_rejects_unrelated_setting_change() {
-    let before = sample_owned_composition();
-    let owner_json = before.to_string();
-    let mut after = before.clone();
-    after["settings"][0]["value"] = serde_json::json!(9);
-    after["settings"][1]["value"] = serde_json::json!(3);
-
-    let result = reconciled_owned_composition_matches(
-        ReconciledWrite::After,
-        &owner_json,
-        &before,
-        &after,
-        10,
+    assert_eq!(
+        merged["settings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|setting| setting["id"] == 20)
+            .unwrap()["current_value"],
+        "2",
+        "the user's write must not absorb unrelated external setting drift"
     );
-    assert!(!result.expect("validation succeeds"));
 }
 
 #[test]
-fn reconciled_owned_composition_after_rejects_application_composition_change() {
-    let before = sample_owned_composition();
-    let owner_json = before.to_string();
-    let mut after = before.clone();
-    after["settings"][0]["value"] = serde_json::json!(9);
-    after["applications"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({
-            "app_name": "C:/Games/Game/launcher.exe",
-            "user_friendly_name": "Launcher",
-            "launcher": "",
-            "file_in_folder": "",
-            "flags": 0,
-            "command_line": "",
-            "is_predefined": false,
-        }));
-
-    let result = reconciled_owned_composition_matches(
-        ReconciledWrite::After,
-        &owner_json,
-        &before,
-        &after,
-        10,
+fn authorized_owned_write_conflicts_on_concurrent_unrelated_or_application_drift() {
+    let applications = serde_json::json!([{
+        "app_name": "C:/Games/Game.exe",
+        "user_friendly_name": "Game",
+        "launcher": "",
+        "file_in_folder": "",
+        "flags": 0,
+        "command_line": "",
+        "is_predefined": false
+    }]);
+    let owner = serde_json::json!({
+        "applications": applications,
+        "settings": [
+            {"id": 10, "current_value": "1"},
+            {"id": 20, "current_value": "2"}
+        ]
+    });
+    let before = serde_json::json!({
+        "applications": applications,
+        "settings": [
+            {"id": 10, "current_value": "10"},
+            {"id": 20, "current_value": "20"}
+        ]
+    });
+    let mut changed_unrelated = before.clone();
+    changed_unrelated["settings"][1]["current_value"] = serde_json::json!("21");
+    assert!(
+        reconcile_owned_setting(&owner.to_string(), &before, &changed_unrelated, 10, true).is_err()
     );
-    assert!(!result.expect("validation succeeds"));
+
+    let mut changed_application = before.clone();
+    changed_application["applications"][0]["app_name"] = serde_json::json!("C:/Games/Other.exe");
+    assert!(
+        reconcile_owned_setting(&owner.to_string(), &before, &changed_application, 10, true)
+            .is_err()
+    );
 }
 
 #[test]
-fn reconciled_owned_composition_before_accepts_exact_restored_composition() {
-    let before = sample_owned_composition();
-    let owner_json = before.to_string();
-
-    let result = reconciled_owned_composition_matches(
+fn ignored_setting_write_cancels_to_fresh_before_while_third_state_conflicts() {
+    let before = (true, Some(7));
+    let requested_after = (true, Some(8));
+    assert_eq!(
+        classify_reconciled_write(true, true, before, before, requested_after),
         ReconciledWrite::Before,
-        &owner_json,
-        &before,
-        &before,
-        10,
+        "a driver that ignores the write leaves a cancellable intent"
     );
-    assert!(result.expect("validation succeeds"));
-}
-
-#[test]
-fn reconciled_owned_composition_before_rejects_any_composition_drift() {
-    let before = sample_owned_composition();
-    let owner_json = before.to_string();
-
-    let mut drifted_setting = before.clone();
-    drifted_setting["settings"][0]["value"] = serde_json::json!(9);
-    let result_setting = reconciled_owned_composition_matches(
-        ReconciledWrite::Before,
-        &owner_json,
-        &before,
-        &drifted_setting,
-        10,
-    );
-    assert!(!result_setting.expect("validation succeeds"));
-
-    let mut drifted_app = before.clone();
-    drifted_app["applications"] = serde_json::json!([]);
-    let result_app = reconciled_owned_composition_matches(
-        ReconciledWrite::Before,
-        &owner_json,
-        &before,
-        &drifted_app,
-        10,
-    );
-    assert!(!result_app.expect("validation succeeds"));
-}
-
-#[test]
-fn reconciled_owned_composition_rejects_when_owner_receipt_differs_from_before_snapshot() {
-    let before = sample_owned_composition();
-    let mut drifted_owner = before.clone();
-    drifted_owner["settings"][0]["value"] = serde_json::json!(1);
-    let drifted_owner_json = drifted_owner.to_string();
-
-    let mut actual_after = before.clone();
-    actual_after["settings"][0]["value"] = serde_json::json!(9);
-
-    let result_after = reconciled_owned_composition_matches(
-        ReconciledWrite::After,
-        &drifted_owner_json,
-        &before,
-        &actual_after,
-        10,
-    );
-    assert!(!result_after.expect("validation succeeds"));
-
-    let result_before = reconciled_owned_composition_matches(
-        ReconciledWrite::Before,
-        &drifted_owner_json,
-        &before,
-        &before,
-        10,
-    );
-    assert!(!result_before.expect("validation succeeds"));
-}
-
-#[test]
-fn reconciled_owned_composition_handles_malformed_receipt_and_missing_inputs() {
-    let before = sample_owned_composition();
-    let after = before.clone();
-
-    // 1. If owner receipt is malformed or drifted from before, validation safely short-circuits
-    // to Ok(false) without failing or attempting to parse malformed JSON, because the
-    // owner_composition_json != before_json string comparison runs first.
-    let malformed_owner = "not valid json {{{";
-    let mismatch_result = reconciled_owned_composition_matches(
-        ReconciledWrite::After,
-        malformed_owner,
-        &before,
-        &after,
-        10,
-    );
-    assert!(!mismatch_result.expect("short circuits on mismatch"));
-
-    // 2. Direct parsing of malformed JSON in composition_matches_except_setting returns an Err(ServiceError).
-    assert!(super::composition_matches_except_setting(malformed_owner, &before, 10).is_err());
-
-    // 3. ReconciledWrite::Conflict outcome directly returns Ok(false).
-    let conflict_result = reconciled_owned_composition_matches(
+    assert_eq!(
+        classify_reconciled_write(true, true, (true, Some(9)), before, requested_after),
         ReconciledWrite::Conflict,
-        &before.to_string(),
-        &before,
-        &after,
-        10,
+        "an unrelated third state must remain fenced"
     );
-    assert!(!conflict_result.expect("conflict outcome returns false"));
-
-    // Missing inputs (e.g. global writes or unobserved composition) are guarded at the caller boundary:
-    // `if let (Some(owner), Some(actual), Some(before)) = (owner.as_ref(), after_composition.as_ref(), before_composition)`
-    // ensuring the helper only executes when all required components are present.
+    let absent = (false, None);
+    assert_eq!(
+        classify_reconciled_write(true, true, absent, absent, absent),
+        ReconciledWrite::After,
+        "Delete of an already absent setting is an idempotent verified outcome"
+    );
 }

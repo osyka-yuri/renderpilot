@@ -32,11 +32,13 @@
     gameId: string;
     installPath: string;
     profile: NvapiProfileContext;
+    profileMutationBlocked: boolean;
     onOpenGameDetails: (gameId: string) => void | Promise<void>;
     onRecoveryDeleteComplete: () => void;
     vendorTabs: readonly VendorTab[];
     hasAddonsTab: boolean;
     nvidia: NvidiaDriverContext;
+    driverMutationBlocked: boolean;
     busy: boolean;
     exclusiveBusy: boolean;
     launcher: string;
@@ -59,11 +61,13 @@
     gameId,
     installPath,
     profile,
+    profileMutationBlocked,
     onOpenGameDetails,
     onRecoveryDeleteComplete,
     vendorTabs,
     hasAddonsTab,
     nvidia,
+    driverMutationBlocked,
     busy,
     exclusiveBusy,
     launcher,
@@ -115,6 +119,7 @@
       {onOpenGameDetails}
       {onRecoveryDeleteComplete}
       canCreate={false}
+      mutationBlocked={profileMutationBlocked}
     />
   {/if}
 
@@ -133,6 +138,7 @@
               {onOpenGameDetails}
               {onRecoveryDeleteComplete}
               canCreate={canCreateProfile}
+              mutationBlocked={profileMutationBlocked}
             />
           {/if}
 
@@ -148,6 +154,7 @@
                 family={dlssCard.family}
                 title={dlssCard.title}
                 {nvidia}
+                {driverMutationBlocked}
                 nvapiAvailable={nvidia.nvapiAvailable}
                 {busy}
                 {onSwap}

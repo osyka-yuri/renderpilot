@@ -6,6 +6,7 @@ pub mod dto;
 pub mod game_session;
 /// Read/write operations for NVAPI driver profile settings.
 pub mod ops;
+mod profile_composition;
 /// Explicit create, delete, and move lifecycle operations.
 pub mod profiles;
 /// Restart recovery for durable NVIDIA DRS mutation intents.

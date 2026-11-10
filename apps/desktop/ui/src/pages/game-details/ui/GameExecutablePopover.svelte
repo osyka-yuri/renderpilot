@@ -37,6 +37,7 @@
   type Props = {
     gameId: string;
     exe: GameExecutableContext;
+    driverMutationBusy?: boolean;
     lockReason?: ExecutableLockReason | null;
     ownedBindingPath?: string | null;
     profileSelectionBlockReason?: ProfileSelectionBlockReason | null;
@@ -53,6 +54,7 @@
   const {
     gameId,
     exe,
+    driverMutationBusy = false,
     lockReason = null,
     ownedBindingPath = null,
     profileSelectionBlockReason = null,
@@ -69,7 +71,9 @@
   let movingProfile = $state(false);
   let moveError = $state<string | null>(null);
 
-  const locked = $derived(lockReason !== null || profileSelectionBlockReason !== null);
+  const locked = $derived(
+    lockReason !== null || profileSelectionBlockReason !== null || exe.busy || driverMutationBusy,
+  );
   const isOverride = $derived(exe.effectiveExeSource === 'override');
 
   const triggerLabel = $derived(exe.effectiveExe ?? t('gameDetails.profile.noExe'));

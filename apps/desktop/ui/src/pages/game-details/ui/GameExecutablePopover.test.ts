@@ -99,6 +99,22 @@ describe('GameExecutablePopover', () => {
     });
   });
 
+  it('locks executable selection while a driver mutation is running', () => {
+    render();
+    const host = component as { setDriverMutationBusy: (value: boolean) => void };
+
+    host.setDriverMutationBusy(true);
+    flushSync();
+
+    const lockedTrigger = target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Game executable: game.exe"]',
+    );
+    expect(lockedTrigger?.getAttribute('aria-disabled')).toBe('true');
+    lockedTrigger?.click();
+    flushSync();
+    expect(document.body.querySelector(openPopoverSelector)).toBeNull();
+  });
+
   it('uses profile-check copy without a D3D12 heading and preserves D3D12 precedence', async () => {
     render();
     const host = component as {

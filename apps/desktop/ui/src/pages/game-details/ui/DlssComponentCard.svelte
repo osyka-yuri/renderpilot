@@ -22,6 +22,7 @@
     family: SettingFamily;
     title: string;
     nvidia: NvidiaDriverContext;
+    driverMutationBlocked: boolean;
     nvapiAvailable: boolean;
     busy: boolean;
     onSwap: SwapHandler;
@@ -36,6 +37,7 @@
     family,
     title,
     nvidia,
+    driverMutationBlocked,
     nvapiAvailable,
     busy,
     onSwap,
@@ -53,6 +55,7 @@
     return (
       busy ||
       nvidia.busy ||
+      driverMutationBlocked ||
       nvidia.isPending(state.setting_key) ||
       !state.has_profile_for_exe ||
       isDllDependentCatalogBlocked(state)

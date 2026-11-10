@@ -1,5 +1,8 @@
 import { formatPresentedError } from '@shared/error-presentation';
 import { t } from '@shared/i18n';
+import { reportClientError } from '@shared/errors';
+import { publishWarningNotification } from '@shared/notifications';
+import { createExclusiveTaskRunner, type ExclusiveTaskRunner } from '@shared/concurrency';
 import {
   createNvapiSettingsStore,
   listNvapiSettingStates,
@@ -18,16 +21,26 @@ import {
  * calls {@link reload} so every setting re-reads from the new profile's exe.
  *
  * The settings half is delegated to the shared {@link createNvapiSettingsStore}
- * (family grouping, warnings, optimistic writes).
+ * (family grouping, warnings, and confirmed setting updates).
  */
 
 export type NvidiaDriverContext = ReturnType<typeof createNvidiaDriverContext>;
 
-export function createNvidiaDriverContext() {
+export function createNvidiaDriverContext(
+  onSettingsChanged?: (gameId: string) => void | Promise<void>,
+  canMutate: () => boolean = () => true,
+  mutationRunner: ExclusiveTaskRunner = createExclusiveTaskRunner(),
+) {
   const store = createNvapiSettingsStore();
 
   // Guards a stale in-flight reload from overwriting a newer game's state.
   let activeGameId: string | null = $state(null);
+  let activeStoreSession = 0;
+  let loaded = $state(false);
+
+  function isCurrent(gameId: string, storeSession: number): boolean {
+    return activeGameId === gameId && activeStoreSession === storeSession;
+  }
 
   // ── derived: profile-level info (shared by all settings) ─────────
   const representative = $derived<SettingStateResponse | null>(
@@ -38,24 +51,35 @@ export function createNvidiaDriverContext() {
   const hasProfile = $derived(representative?.has_profile_for_exe ?? false);
 
   // ── actions ──────────────────────────────────────────────────────
-  async function reload(gameId: string): Promise<void> {
+  async function reload(
+    gameId: string,
+    options: { reportRefreshError?: boolean } = {},
+  ): Promise<void> {
     activeGameId = gameId;
+    const storeSession = store.beginSession();
+    activeStoreSession = storeSession;
+    loaded = false;
     store.setBusy(true);
     store.setLoadError(null);
     try {
       const stateResponse = await listNvapiSettingStates(gameId);
-      if (activeGameId !== gameId) {
+      if (!isCurrent(gameId, storeSession)) {
         return;
       }
       store.setStates(stateResponse);
     } catch (e) {
-      if (activeGameId !== gameId) {
+      if (!isCurrent(gameId, storeSession)) {
         return;
       }
       store.setLoadError(formatPresentedError(e));
       store.setStates([]);
+      if (options.reportRefreshError) {
+        reportClientError('nvapi_settings_refresh', e);
+        publishWarningNotification(t('nvidia.changeSettingFailed'), formatPresentedError(e));
+      }
     } finally {
-      if (activeGameId === gameId) {
+      if (isCurrent(gameId, storeSession)) {
+        loaded = true;
         store.setBusy(false);
       }
     }
@@ -63,14 +87,64 @@ export function createNvidiaDriverContext() {
 
   function clear(): void {
     activeGameId = null;
-    store.clearAll();
+    activeStoreSession = store.clearAll();
+    loaded = false;
+  }
+
+  async function refreshProfileStatus(
+    gameId: string,
+    settingApplied: boolean,
+    stillCurrent: () => boolean,
+  ): Promise<void> {
+    try {
+      await onSettingsChanged?.(gameId);
+    } catch (error) {
+      if (!stillCurrent()) {
+        return;
+      }
+      reportClientError('nvapi_profile_refresh', error);
+      publishWarningNotification(
+        settingApplied ? t('gameDetails.profile.refreshFailed') : t('nvidia.changeSettingFailed'),
+        formatPresentedError(error),
+      );
+    }
+  }
+
+  async function refreshActiveGame(gameId: string): Promise<void> {
+    if (activeGameId !== gameId) {
+      return;
+    }
+    await reload(gameId, { reportRefreshError: true });
+    if (activeGameId === gameId) {
+      const refreshSession = activeStoreSession;
+      await refreshProfileStatus(gameId, false, () => isCurrent(gameId, refreshSession));
+    }
+  }
+
+  async function runSettingOperation(
+    gameId: string,
+    key: string,
+    errorLabel: string,
+    write: () => Promise<SettingStateResponse>,
+  ): Promise<void> {
+    if (!gameId || activeGameId !== gameId || store.busy || mutationRunner.busy || !canMutate()) {
+      return;
+    }
+
+    const storeSession = activeStoreSession;
+    const current = () => isCurrent(gameId, storeSession);
+    await mutationRunner.run(async () => {
+      const applied = await store.runWrite(key, errorLabel, write);
+      if (!applied || !current()) {
+        await refreshActiveGame(gameId);
+      } else {
+        await refreshProfileStatus(gameId, true, current);
+      }
+    });
   }
 
   async function setValue(gameId: string, key: string, wire: string): Promise<void> {
-    if (!gameId) {
-      return;
-    }
-    await store.runWrite(key, t('nvidia.changeSettingFailed'), () =>
+    await runSettingOperation(gameId, key, t('nvidia.changeSettingFailed'), () =>
       setNvapiSettingValue(gameId, key, wire),
     );
   }
@@ -80,12 +154,9 @@ export function createNvidiaDriverContext() {
     key: string,
     target: 'predefined' | 'original',
   ): Promise<void> {
-    if (!gameId) {
-      return;
-    }
     const label =
       target === 'predefined' ? t('nvidia.revertDefaultFailed') : t('nvidia.revertOriginalFailed');
-    await store.runWrite(key, label, () => revertNvapiSetting(gameId, key, target));
+    await runSettingOperation(gameId, key, label, () => revertNvapiSetting(gameId, key, target));
   }
 
   return {
@@ -93,11 +164,14 @@ export function createNvidiaDriverContext() {
     get hasStates() {
       return store.hasStates;
     },
+    get loaded() {
+      return loaded;
+    },
     get loadError() {
       return store.loadError;
     },
     get busy() {
-      return store.busy;
+      return store.busy || mutationRunner.busy;
     },
     get effectiveExe() {
       return effectiveExe;

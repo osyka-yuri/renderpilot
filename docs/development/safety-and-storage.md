@@ -16,7 +16,7 @@ Transport tokens are parsed once at the API-to-orchestration boundary; mutation 
 
 A shared-resource token protects operations that actually mutate the shared Vulkan layer. Combined RenoDX commits acquire the game lock before the shared-layer lock, validate both permits, and only then begin one synchronous commit. The shared observation is independent from a game assessment and is not evidence that the layer is active for every game. The user-facing anti-cheat notice remains game-scoped.
 
-Game and shared-resource mutation locks are process-local. RenderPilot does not coordinate simultaneous writes from independent application instances or catalogs. Completed operations remain interoperable through ReShade's canonical `%ProgramData%\ReShade` layout even if the physical SQLite catalog database is later lost, reset, or deleted; loss of the database grants no cleanup authority over that external layout. This is distinct from explicit removal of a game card, which runs the add-on's uninstall policy: it unregisters that game's app and may remove the canonical DLL, manifest, and registration only when the exact app-list observation proves that it was the last registered app. The durable transaction record exists to recover one interrupted operation, not to turn the external layout into app-owned storage.
+Game-file and shared-resource mutation locks are process-local. Completed operations remain interoperable through ReShade's canonical `%ProgramData%\ReShade` layout even if the physical SQLite catalog database is later lost, reset, or deleted; loss of the database grants no cleanup authority over that external layout. This is distinct from explicit removal of a game card, which runs the add-on's uninstall policy: it unregisters that game's app and may remove the canonical DLL, manifest, and registration only when the exact app-list observation proves that it was the last registered app. The durable transaction record exists to recover one interrupted operation, not to turn the external layout into app-owned storage.
 
 ## Baselines and rollback
 
@@ -37,6 +37,14 @@ A confirmed missing game, or a directory containing only exactly recorded Render
 Existing installation records remain useful while their recorded remnants exist. The cleanup dialog shows current files and supported external changes, accepts a backend-issued intent, and rechecks the game and ownership before removal. Missing files are omitted; when local remnants are gone, the existing ordered metadata collection runs. A reinstalled game receives fresh scan facts and uses the ordinary installer.
 
 Explicit cleanup removes unchanged owned files and recorded empty directories without restoring game files or recreating a directory. Engine.ini release preserves user settings; Vulkan cleanup removes this game's app registration while retaining the shared layer and other apps. Unsupported or changed objects are preserved and reported. Successful steps remain completed after a later failure, and retry observes only remaining objects. Leave suppresses an unchanged proposal. NVIDIA operations remain under their existing lifecycle and are not cleanup items.
+
+## NVIDIA driver settings
+
+RenderPilot serializes its game and global DRS operations across processes in the same Windows session. Game-scoped operations also hold the game mutation lock. Explicit changes and reverts use the current setting state as the before-state after validating the profile name and predefined status. Game writes verify the application record returned for the selected executable path. Application and setting counts may differ from the last observation.
+
+The SQLite intent stores the observed and requested states ahead of the driver write. A fresh DRS session verifies the result. If the requested state matches, RenderPilot updates the claim's expected state and preserves its first original state, including override presence. If only the exact before-state matches, RenderPilot cancels the intent. Recovery checks outstanding intents on the next DRS access for that game or global profile without repeating the write. Conflicting or unresolved intents block overlapping operations.
+
+For a RenderPilot-owned profile, the application list must match the ownership record. The intent captures the live profile composition. Verification allows only the requested setting to differ from that snapshot, and RenderPilot updates only that entry in the ownership record. Deletion checks the entire profile against that record. Legacy intents without a live snapshot use the recorded ownership composition. Automatic restoration during game removal requires the last confirmed expected setting state.
 
 ## SQLite and migrations
 
@@ -66,6 +74,8 @@ Portable startup derives the data root beside the raw supervisor and passes the 
 - [Mutation safety policy](../../crates/renderpilot-domain/src/mutation_features.rs)
 - [Removed game cleanup](../../crates/renderpilot-orchestration/src/catalog/leftovers.rs)
 - [Game mutation lock](../../crates/renderpilot-orchestration/src/game_mutation_lock.rs)
+- [NVIDIA setting writes](../../crates/renderpilot-orchestration/src/nvapi/ops/write.rs)
+- [NVIDIA restart recovery](../../crates/renderpilot-orchestration/src/nvapi/recovery.rs)
 - [Baseline handling](../../crates/renderpilot-orchestration/src/coordinated_files/baseline.rs)
 - [Portable runtime release contract](../../data/contracts/portable-runtime-release.json)
 - [Storage contract projection](../../crates/renderpilot-storage-sqlite/build.rs)

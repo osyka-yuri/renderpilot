@@ -29,6 +29,7 @@
     onOpenGameDetails: (gameId: string) => void | Promise<void>;
     onRecoveryDeleteComplete: () => void;
     canCreate: boolean;
+    mutationBlocked: boolean;
   };
 
   type DeleteTarget = Pick<NvapiProfileStatus, 'selectedExecutable' | 'bindingPath'> & {
@@ -41,8 +42,15 @@
     gameId: string;
   };
 
-  const { gameId, mode, profile, onOpenGameDetails, onRecoveryDeleteComplete, canCreate }: Props =
-    $props();
+  const {
+    gameId,
+    mode,
+    profile,
+    onOpenGameDetails,
+    onRecoveryDeleteComplete,
+    canCreate,
+    mutationBlocked,
+  }: Props = $props();
   const componentId = $props.id();
   const blockedDescriptionId = `${componentId}-delete-blocked`;
   let activeAction = $state.raw<ActiveAction | null>(null);
@@ -146,6 +154,7 @@
       !profile.loading &&
       !profile.busy,
   );
+  const canStartDelete = $derived(canDeleteCurrentProfile && !mutationBlocked);
   const deletionBlocked = $derived(
     showDeleteAction &&
       (status?.state !== 'owned' || !status.canDelete || status.profileName === null),
@@ -180,7 +189,7 @@
       closeDeleteDialog();
       return;
     }
-    if (canDeleteCurrentProfile && status?.state === 'owned' && status.profileName !== null) {
+    if (canStartDelete && status?.state === 'owned' && status.profileName !== null) {
       deleteTarget = {
         gameId,
         selectedExecutable: status.selectedExecutable,
@@ -208,7 +217,7 @@
   }
 
   async function createProfile(): Promise<void> {
-    if (!canCreateProfile || isBusy) {
+    if (!canCreateProfile || isBusy || mutationBlocked) {
       return;
     }
     const action = beginAction('create', gameId);
@@ -312,7 +321,7 @@
         {#if showProfileAction && canCreateProfile}
           <Button
             size="sm"
-            disabled={profile.busy || profile.loading}
+            disabled={profile.busy || profile.loading || mutationBlocked}
             aria-busy={currentAction?.kind === 'create' || currentAction?.kind === 'delete'}
             onclick={() => void createProfile()}
           >
@@ -347,7 +356,7 @@
           <Button
             variant="destructive"
             size="sm"
-            disabled={deletionBlocked || isBusy}
+            disabled={deletionBlocked || isBusy || mutationBlocked}
             aria-describedby={deletionBlocked ? blockedDescriptionId : undefined}
             aria-busy={currentAction?.kind === 'delete'}
             onclick={() => {
@@ -491,7 +500,7 @@
       <Button
         variant="destructive"
         size="sm"
-        disabled={profile.busy || !deleteTargetMatches}
+        disabled={profile.busy || mutationBlocked || !deleteTargetMatches}
         onclick={() => void confirmDelete()}
       >
         {t('gameDetails.profile.deleteConfirmAction')}

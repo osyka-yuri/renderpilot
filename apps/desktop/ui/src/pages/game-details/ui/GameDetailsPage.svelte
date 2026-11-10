@@ -29,6 +29,8 @@
   import { createUpdateAllWorkflow } from '../model/create-update-all-workflow.svelte';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createGameExecutableContext } from '../model/create-game-executable-context.svelte';
+  import { createNvapiViewRefresh } from '@features/nvapi-settings';
+  import { createExclusiveTaskRunner, type ExclusiveTaskRunner } from '@shared/concurrency';
   import type { MutationSafetyTokens } from '@entities/addon';
   import type { UpdateAllOwner } from '../model/run-update-all';
   import {
@@ -57,6 +59,7 @@
     onOpenRenoDxSettings?: () => void;
     onPreloadRenoDxSettings?: () => void;
     onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
+    nvapiMutationRunner?: ExclusiveTaskRunner;
   };
 
   const {
@@ -72,7 +75,11 @@
     onOpenRenoDxSettings = () => undefined,
     onPreloadRenoDxSettings = () => undefined,
     onGameDetailsInvalidate = () => undefined,
+    nvapiMutationRunner: providedNvapiMutationRunner,
   }: Props = $props();
+  const nvapiMutationRunner = untrack(
+    () => providedNvapiMutationRunner ?? createExclusiveTaskRunner(),
+  );
 
   const tabs = $derived(createGameDetailsTabs(details));
   const vendorTabs = $derived(tabs.vendorTabs);
@@ -212,7 +219,10 @@
     mutationConfirmation.destroy();
     gameAddons.destroy();
     fileSafety.destroy();
+    gameExe.clear();
+    nvidia.clear();
     nvidiaProfile.clear();
+    nvapiViewRefresh.destroy();
   });
   const safetyConfirmationOpen = $derived(mutationConfirmation.pending !== null);
   const safetyGateActive = $derived(mutationConfirmation.requesting || safetyConfirmationOpen);
@@ -463,16 +473,24 @@
       .join('|');
   });
 
-  // ── Single NVIDIA driver context, owned by the page ──────────────
-  // Owns every DLSS setting's live state plus the profile executable
-  // selection. One reload covers both, so changing the executable refreshes
-  // every family card's values.
-  const nvidia = createNvidiaDriverContext();
-
-  // The executable is a game-level identity feeding both the NVIDIA profile target
-  // and the RenoDX install location, so it lives above the tabs in its own context.
-  // Changing it re-reads the NVIDIA settings (they key off the profile's exe).
+  // The page coordinates reads for the executable, its profile, and the DLSS settings.
+  // A newly mounted page waits if a write on the previous screen is still running.
+  let deferInitialReadsUntilSharedIdle = $state(nvapiMutationRunner.busy);
+  const nvapiViewRefresh = createNvapiViewRefresh((viewKey) => {
+    const id = gameId;
+    if (!id) {
+      return;
+    }
+    if (viewKey === 'nvidia-settings' && hasNvidiaTab) {
+      void nvidia.reload(id);
+    }
+    if (isWindowsGame) {
+      void nvidiaProfile.reload(id);
+    }
+  });
   const gameExe = createGameExecutableContext({
+    canMutate: () => !nvidia.busy && !nvidiaProfile.loading,
+    mutationRunner: nvapiMutationRunner,
     onChange: async (id) => {
       await Promise.all([
         hasNvidiaTab ? nvidia.reload(id) : Promise.resolve(),
@@ -481,13 +499,27 @@
       ]);
     },
   });
-  const nvidiaProfile = createNvapiProfileContext(async (id) => {
-    await Promise.all([
-      gameExe.reload(id),
-      hasNvidiaTab ? nvidia.reload(id) : Promise.resolve(),
-      onGameDetailsInvalidate(id),
-    ]);
-  });
+  const nvidia = createNvidiaDriverContext(
+    async (id) => {
+      if (gameId !== id || !isWindowsGame) {
+        return;
+      }
+      await nvidiaProfile.reload(id);
+    },
+    () => !gameExe.busy && !nvidiaProfile.loading,
+    nvapiMutationRunner,
+  );
+  const nvidiaProfile = createNvapiProfileContext(
+    async (id) => {
+      await Promise.all([
+        gameExe.reload(id),
+        hasNvidiaTab ? nvidia.reload(id) : Promise.resolve(),
+        onGameDetailsInvalidate(id),
+      ]);
+    },
+    () => !gameExe.busy && !nvidia.busy,
+    nvapiMutationRunner,
+  );
   const profileSelectionBlockReason = $derived.by(() => {
     if (!isWindowsGame) {
       return null;
@@ -510,16 +542,27 @@
   }
 
   $effect(() => {
+    if (deferInitialReadsUntilSharedIdle && !nvapiMutationRunner.busy) {
+      deferInitialReadsUntilSharedIdle = false;
+    }
+  });
+
+  $effect(() => {
     const id = gameId;
     const windowsGame = isWindowsGame;
 
-    untrack(() => {
-      if (!id) {
+    if (!id) {
+      untrack(() => {
         gameExe.clear();
         nvidiaProfile.clear();
-        return;
-      }
+      });
+      return;
+    }
+    if (deferInitialReadsUntilSharedIdle) {
+      return;
+    }
 
+    untrack(() => {
       if (!windowsGame) {
         nvidiaProfile.clear();
         void gameExe.reload(id);
@@ -538,13 +581,40 @@
     const shouldLoad = hasNvidiaTab;
     track(dlssFingerprint);
 
-    untrack(() => {
-      if (!id || !shouldLoad) {
+    if (!id || !shouldLoad) {
+      untrack(() => {
         nvidia.clear();
-        return;
-      }
+      });
+      return;
+    }
+    if (deferInitialReadsUntilSharedIdle) {
+      return;
+    }
 
+    untrack(() => {
       void nvidia.reload(id);
+    });
+  });
+
+  $effect(() => {
+    const id = gameId;
+    const tab = selectedTab;
+    if (id && hasNvidiaTab && !tab) {
+      return;
+    }
+    const viewKey = !id
+      ? null
+      : hasNvidiaTab
+        ? tab === 'nvidia'
+          ? 'nvidia-settings'
+          : null
+        : isWindowsGame
+          ? 'nvidia-profile'
+          : null;
+    const ready =
+      (!hasNvidiaTab || nvidia.loaded) && !nvidiaProfile.loading && !nvidia.busy && !gameExe.busy;
+    untrack(() => {
+      nvapiViewRefresh.sync(viewKey, ready, id);
     });
   });
 </script>
@@ -570,6 +640,7 @@
         hasAddonsTab={tabs.addonsTab !== null}
         {gameId}
         exe={gameExe}
+        driverMutationBusy={nvidia.busy || nvidiaProfile.loading}
         lockReason={executableLockReason}
         ownedBindingPath={nvidiaProfile.ownedBindingPath}
         {profileSelectionBlockReason}
@@ -596,11 +667,13 @@
           {gameId}
           installPath={details.game.install_path}
           profile={nvidiaProfile}
+          profileMutationBlocked={gameExe.busy || nvidia.busy}
           {onOpenGameDetails}
           onRecoveryDeleteComplete={focusPageHeading}
           {vendorTabs}
           hasAddonsTab={tabs.addonsTab !== null}
           {nvidia}
+          driverMutationBlocked={gameExe.busy || nvidiaProfile.loading}
           busy={busy || safetyGateActive}
           {exclusiveBusy}
           {launcher}

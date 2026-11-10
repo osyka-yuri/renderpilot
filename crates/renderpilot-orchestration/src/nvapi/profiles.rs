@@ -8,6 +8,7 @@ use renderpilot_nvapi::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use super::profile_composition::composition_value;
 use crate::{Context, ServiceError};
 
 /// Stable status for the profile card shown on every Windows game details page.
@@ -188,17 +189,14 @@ fn generated_profile_name(title: &str, game_id: &str) -> String {
 }
 
 fn composition_json(
-    mut applications: Vec<ApplicationIdentity>,
-    mut settings: Vec<SettingIdentity>,
+    applications: Vec<ApplicationIdentity>,
+    settings: Vec<SettingIdentity>,
 ) -> Result<String, ServiceError> {
-    applications.sort_by_cached_key(|application| application.app_name.to_lowercase());
-    settings.sort_by_key(|setting| setting.id);
-    serde_json::to_string(&serde_json::json!({"applications": applications, "settings": settings}))
-        .map_err(|error| {
-            ServiceError::command_failed(format!(
-                "could not encode NVIDIA profile composition: {error}"
-            ))
-        })
+    serde_json::to_string(&composition_value(applications, settings)).map_err(|error| {
+        ServiceError::command_failed(format!(
+            "could not encode NVIDIA profile composition: {error}"
+        ))
+    })
 }
 
 fn verify_owned_composition(

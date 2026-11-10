@@ -320,6 +320,44 @@ fn malformed_setting_receipt_preserves_pending_journal_and_claims() {
     );
 }
 
+#[test]
+fn malformed_owned_snapshot_in_cancel_receipt_is_not_treated_as_legacy() {
+    let (storage, _path, game_id) = fresh_storage();
+    for (op_id, snapshot) in [
+        ("op-null-owned-snapshot", "null"),
+        ("op-invalid-owned-snapshot", "\"not a composition\""),
+    ] {
+        let target = format!("NVIDIA Snapshot Receipt {op_id}");
+        let executable_path = format!("C:/Games/Test/{op_id}.exe");
+        let before = format!(
+            r#"{{"setting_id":7,"executable_path":"{executable_path}","reference_previous_path":null,"present":false,"value":null,"claim_was_new":false,"reference_was_new":true,"owned_before_composition":{snapshot}}}"#
+        );
+        storage
+            .begin_nvapi_operation(
+                op_id,
+                Some(game_id.as_str()),
+                Some(&target),
+                "setting",
+                &before,
+                r#"{"setting_id":7,"present":true,"value":3}"#,
+            )
+            .expect("persist malformed optional snapshot receipt");
+
+        assert!(
+            storage.cancel_nvapi_setting_operation(op_id).is_err(),
+            "present malformed snapshot must fail closed during direct cancellation"
+        );
+        let pending = storage
+            .list_pending_nvapi_operations()
+            .expect("read retained malformed intent")
+            .into_iter()
+            .find(|row| row.op_id == op_id)
+            .expect("malformed snapshot stays journaled");
+        assert_eq!(pending.before_json, before);
+        assert_eq!(pending.phase, "intent");
+    }
+}
+
 const GLOBAL_PROFILE: &str = "Base Profile";
 const TEST_SETTING_ID: u32 = 0x10B3_292C;
 
@@ -1943,6 +1981,384 @@ fn release_final_nvapi_setting_claim_removes_claim_and_target_records() {
             .expect("witness b")
             .is_some(),
         "unrelated witness B must remain"
+    );
+}
+
+#[test]
+fn original_setting_requires_its_recorded_executable_even_with_a_shared_profile_witness() {
+    let (storage, _, game_id) = fresh_storage();
+    let profile = "NVIDIA Shared Profile";
+    let profile_identity = r#"{"name":"NVIDIA Shared Profile","is_predefined":false,"application_count":2,"setting_count":2}"#;
+    let witness = r#"{"app_name":"game.exe","user_friendly_name":"","launcher":"","file_in_folder":"","flags":0,"command_line":"","is_predefined":false}"#;
+    let first_path = "C:/Games/Test/game.exe";
+    let other_path = "C:/Games/Other/game.exe";
+    let original = NvapiSettingState {
+        present: true,
+        value: Some(4),
+    };
+    let expected = NvapiSettingState {
+        present: true,
+        value: Some(7),
+    };
+    for (op_id, path, setting_id) in [("first", first_path, 10), ("other", other_path, 11)] {
+        storage
+            .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
+                op_id,
+                game_id: game_id.as_str(),
+                profile_name: profile,
+                target_kind: "external",
+                profile_is_predefined: false,
+                profile_identity_json: profile_identity,
+                executable_path: path,
+                application_witness_json: witness,
+                setting_id,
+                original,
+                before: original,
+                after: expected,
+            })
+            .expect("record game setting and executable binding");
+        storage
+            .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+                op_id,
+                scope: NvapiSettingOperationScope::Game {
+                    game_id: game_id.as_str(),
+                },
+                target_id: profile,
+                setting_id,
+                expected,
+                profile_identity_json: profile_identity,
+                composition_json: None,
+            })
+            .expect("confirm setting");
+    }
+
+    for path in [
+        first_path,
+        r"c:\games\test\GAME.exe",
+        r"\\?\C:\Games\Test\game.exe",
+    ] {
+        assert_eq!(
+            storage
+                .get_nvapi_bound_setting_original(
+                    game_id.as_str(),
+                    profile,
+                    10,
+                    path,
+                    false,
+                    witness
+                )
+                .expect("read original for the recorded executable"),
+            Some(original),
+            "equivalent path {path}"
+        );
+    }
+    assert_eq!(
+        storage
+            .get_nvapi_bound_setting_original(
+                game_id.as_str(),
+                profile,
+                10,
+                other_path,
+                false,
+                witness
+            )
+            .expect("inspect the setting from another executable"),
+        None
+    );
+
+    // Older records can use different spellings of one Windows path. An
+    // alias with a different application witness makes the binding ambiguous.
+    let mut conflicting_witness: serde_json::Value =
+        serde_json::from_str(witness).expect("application witness");
+    conflicting_witness["flags"] = serde_json::json!(1);
+    storage.with_connection(|connection| {
+        connection
+            .execute(
+                "INSERT INTO nvapi_drs_target_app_witnesses (target_id, executable_path, application_json)
+                 VALUES (?1, ?2, ?3)",
+                rusqlite::params![profile, "c:/games/test/game.exe", conflicting_witness.to_string()],
+            )
+            .map_err(crate::error::storage_error)?;
+        Ok(())
+    }).expect("record conflicting alias");
+    assert_eq!(
+        storage
+            .get_nvapi_bound_setting_original(
+                game_id.as_str(),
+                profile,
+                10,
+                first_path,
+                false,
+                witness
+            )
+            .expect("inspect ambiguous binding"),
+        None
+    );
+}
+
+#[test]
+fn authorized_game_reapply_survives_reopen_and_changes_expected_only_on_finish() {
+    let (storage, path, game_id) = fresh_storage();
+    let target = "NVIDIA Reapply Fixture";
+    let setting_id = TEST_SETTING_ID;
+    let initial_identity = serde_json::json!({
+        "name": target,
+        "is_predefined": false,
+        "application_count": 1,
+        "setting_count": 1,
+    })
+    .to_string();
+    let drifted_identity = format!(
+        r#"{{"setting_count":8,"name":"{target}","is_predefined":false,"application_count":5}}"#
+    );
+    let witness = serde_json::json!({
+        "app_name": "C:/Games/Test/Game.exe",
+        "user_friendly_name": "Test Game",
+        "launcher": "",
+        "file_in_folder": "",
+        "flags": 0,
+        "command_line": "",
+        "is_predefined": false,
+    })
+    .to_string();
+
+    storage
+        .prepare_nvapi_setting_operation(NvapiGameSettingPreparation {
+            op_id: "game-reapply-seed",
+            game_id: game_id.as_str(),
+            profile_name: target,
+            target_kind: "external",
+            profile_is_predefined: false,
+            profile_identity_json: &initial_identity,
+            executable_path: "C:/Games/Test/Game.exe",
+            application_witness_json: &witness,
+            setting_id,
+            original: NvapiSettingState {
+                present: true,
+                value: Some(9),
+            },
+            before: NvapiSettingState {
+                present: true,
+                value: Some(1),
+            },
+            after: NvapiSettingState {
+                present: true,
+                value: Some(1),
+            },
+        })
+        .expect("seed strict original and expected claim");
+    storage
+        .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+            op_id: "game-reapply-seed",
+            scope: NvapiSettingOperationScope::Game {
+                game_id: game_id.as_str(),
+            },
+            target_id: target,
+            setting_id,
+            expected: NvapiSettingState {
+                present: true,
+                value: Some(1),
+            },
+            profile_identity_json: &initial_identity,
+            composition_json: None,
+        })
+        .expect("finish seed claim");
+
+    storage
+        .prepare_nvapi_authorized_game_setting_operation(
+            NvapiGameSettingPreparation {
+                op_id: "game-reapply-after-reset",
+                game_id: game_id.as_str(),
+                profile_name: target,
+                target_kind: "external",
+                profile_is_predefined: false,
+                profile_identity_json: &drifted_identity,
+                executable_path: "C:/Games/Test/Game.exe",
+                application_witness_json: &witness,
+                setting_id,
+                original: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                before: NvapiSettingState {
+                    present: false,
+                    value: None,
+                },
+                after: NvapiSettingState {
+                    present: true,
+                    value: Some(2),
+                },
+            },
+            None,
+        )
+        .expect("explicit reapply accepts reset and count drift");
+
+    let pending_claim = storage
+        .get_nvapi_target_setting_claim(game_id.as_str(), target, setting_id)
+        .expect("read claim before verified finish")
+        .expect("claim remains recorded");
+    assert_eq!(pending_claim.original_value, Some(9));
+    assert_eq!(pending_claim.expected_value, Some(1));
+    let pending = storage
+        .list_pending_nvapi_operations()
+        .expect("read pending operation");
+    assert_eq!(pending.len(), 1);
+    assert!(pending[0].before_json.contains("\"present\":false"));
+
+    drop(storage);
+    let reopened = SqliteStorage::open(&path).expect("reopen persisted database");
+    let reopened_pending = reopened
+        .list_pending_nvapi_operations()
+        .expect("read reopened pending operation");
+    assert_eq!(reopened_pending.len(), 1);
+    assert_eq!(reopened_pending[0].op_id, "game-reapply-after-reset");
+    let reopened_claim = reopened
+        .get_nvapi_target_setting_claim(game_id.as_str(), target, setting_id)
+        .expect("read reopened claim")
+        .expect("claim survives reopen");
+    assert_eq!(reopened_claim.original_value, Some(9));
+    assert_eq!(reopened_claim.expected_value, Some(1));
+
+    reopened
+        .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+            op_id: "game-reapply-after-reset",
+            scope: NvapiSettingOperationScope::Game {
+                game_id: game_id.as_str(),
+            },
+            target_id: target,
+            setting_id,
+            expected: NvapiSettingState {
+                present: true,
+                value: Some(2),
+            },
+            profile_identity_json: &drifted_identity,
+            composition_json: None,
+        })
+        .expect("verified finish accepts count drift");
+    let finished_claim = reopened
+        .get_nvapi_target_setting_claim(game_id.as_str(), target, setting_id)
+        .expect("read finalized claim")
+        .expect("claim persists");
+    assert_eq!(finished_claim.original_value, Some(9));
+    assert_eq!(finished_claim.expected_value, Some(2));
+
+    reopened
+        .prepare_nvapi_authorized_game_setting_operation(
+            NvapiGameSettingPreparation {
+                op_id: "game-reapply-cancelled",
+                game_id: game_id.as_str(),
+                profile_name: target,
+                target_kind: "external",
+                profile_is_predefined: false,
+                profile_identity_json: &drifted_identity,
+                executable_path: "C:/Games/Test/Game.exe",
+                application_witness_json: &witness,
+                setting_id,
+                original: NvapiSettingState {
+                    present: true,
+                    value: Some(88),
+                },
+                before: NvapiSettingState {
+                    present: true,
+                    value: Some(88),
+                },
+                after: NvapiSettingState {
+                    present: true,
+                    value: Some(3),
+                },
+            },
+            None,
+        )
+        .expect("a later explicit value can be prepared");
+    reopened
+        .cancel_nvapi_setting_operation("game-reapply-cancelled")
+        .expect("cancel a write confirmed to remain at its before-state");
+    let cancelled_claim = reopened
+        .get_nvapi_target_setting_claim(game_id.as_str(), target, setting_id)
+        .expect("read claim after cancellation")
+        .expect("claim remains");
+    assert_eq!(cancelled_claim.original_value, Some(9));
+    assert_eq!(cancelled_claim.expected_value, Some(2));
+}
+
+#[test]
+fn authorized_global_delete_accepts_live_drift_and_preserves_first_original() {
+    let storage = SqliteStorage::in_memory().expect("in-memory storage");
+    let setting_id = TEST_SETTING_ID;
+    let initial_identity = initial_global_identity_json(50, 120);
+    storage
+        .prepare_nvapi_authorized_global_setting_set(NvapiAuthorizedGlobalSettingSetPreparation {
+            op_id: "global-delete-seed",
+            profile_name: GLOBAL_PROFILE,
+            profile_is_predefined: true,
+            profile_identity_json: &initial_identity,
+            setting_id,
+            before: NvapiSettingState {
+                present: false,
+                value: None,
+            },
+            value: 1,
+        })
+        .expect("create global setting claim");
+    storage
+        .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+            op_id: "global-delete-seed",
+            scope: NvapiSettingOperationScope::Global,
+            target_id: GLOBAL_PROFILE,
+            setting_id,
+            expected: NvapiSettingState {
+                present: true,
+                value: Some(1),
+            },
+            profile_identity_json: &initial_identity,
+            composition_json: None,
+        })
+        .expect("finish initial global write");
+
+    let drifted_identity = initial_global_identity_json(3, 4);
+    storage
+        .prepare_nvapi_authorized_global_setting_operation(NvapiGlobalSettingPreparation {
+            op_id: "global-delete-after-drift",
+            profile_name: GLOBAL_PROFILE,
+            profile_is_predefined: true,
+            profile_identity_json: &drifted_identity,
+            setting_id,
+            original: NvapiSettingState {
+                present: true,
+                value: Some(77),
+            },
+            before: NvapiSettingState {
+                present: true,
+                value: Some(77),
+            },
+            after: NvapiSettingState {
+                present: false,
+                value: None,
+            },
+        })
+        .expect("global Delete accepts externally changed value and identity counts");
+    let before_finish = get_target_setting_claim_row(&storage, GLOBAL_PROFILE, setting_id)
+        .expect("global claim before finish");
+    assert_eq!(before_finish, (false, None, true, Some(1)));
+
+    storage
+        .finish_nvapi_setting_operation(NvapiSettingOperationCompletion {
+            op_id: "global-delete-after-drift",
+            scope: NvapiSettingOperationScope::Global,
+            target_id: GLOBAL_PROFILE,
+            setting_id,
+            expected: NvapiSettingState {
+                present: false,
+                value: None,
+            },
+            profile_identity_json: &drifted_identity,
+            composition_json: None,
+        })
+        .expect("finish verified global Delete");
+    assert_eq!(
+        get_target_setting_claim_row(&storage, GLOBAL_PROFILE, setting_id),
+        Some((false, None, false, None)),
+        "Delete changes expected state but keeps the original value captured at first claim"
     );
 }
 

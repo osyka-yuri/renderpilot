@@ -144,7 +144,18 @@ fn begin_create(storage: &SqliteStorage, game_id: &str, path: &str, op_id: &str)
 }
 
 fn create_owned_fixture(storage: &SqliteStorage, game_id: &str, path: &str) {
-    let profile = observed_profile(PROFILE, vec![app(path)], None, false);
+    create_owned_fixture_with_settings(storage, game_id, path, Vec::new());
+}
+
+fn create_owned_fixture_with_settings(
+    storage: &SqliteStorage,
+    game_id: &str,
+    path: &str,
+    settings: Vec<SettingIdentity>,
+) {
+    let mut profile = observed_profile(PROFILE, vec![app(path)], None, false);
+    profile.identity.setting_count = settings.len() as u32;
+    profile.settings = settings;
     let witness = profile
         .matched_application
         .as_ref()
@@ -166,6 +177,75 @@ fn create_owned_fixture(storage: &SqliteStorage, game_id: &str, path: &str) {
             },
         })
         .expect("persist owned-profile fixture");
+}
+
+fn setting_identity(id: u32, value: u32) -> SettingIdentity {
+    SettingIdentity {
+        id,
+        setting_type: 0,
+        location: 0,
+        is_current_predefined: false,
+        is_predefined_valid: false,
+        current_value: value.to_string(),
+        predefined_value: None,
+    }
+}
+
+#[derive(Clone, Copy)]
+struct AuthorizedOwnedSettingFixture<'a> {
+    game_id: &'a str,
+    path: &'a str,
+    before_profile: &'a ObservedProfile,
+    setting_id: u32,
+    before: (bool, Option<u32>),
+    after: (bool, Option<u32>),
+    op_id: &'a str,
+}
+
+fn prepare_authorized_owned_setting(
+    storage: &SqliteStorage,
+    fixture: AuthorizedOwnedSettingFixture<'_>,
+) {
+    let AuthorizedOwnedSettingFixture {
+        game_id,
+        path,
+        before_profile,
+        setting_id,
+        before,
+        after,
+        op_id,
+    } = fixture;
+    let identity_json = serde_json::to_string(&before_profile.identity).expect("identity JSON");
+    let witness = serde_json::to_string(&app(path)).expect("witness JSON");
+    let before_composition = composition_json(before_profile).expect("before composition");
+    storage
+        .prepare_nvapi_authorized_game_setting_operation(
+            NvapiGameSettingPreparation {
+                op_id,
+                game_id,
+                profile_name: PROFILE,
+                target_kind: "renderpilot",
+                profile_is_predefined: false,
+                profile_identity_json: &identity_json,
+                executable_path: path,
+                application_witness_json: &witness,
+                setting_id,
+                original: NvapiSettingState {
+                    present: before.0,
+                    value: before.1,
+                },
+                before: NvapiSettingState {
+                    present: before.0,
+                    value: before.1,
+                },
+                after: NvapiSettingState {
+                    present: after.0,
+                    value: after.1,
+                },
+            },
+            Some(&before_composition),
+        )
+        .expect("persist authorized owned setting receipt");
 }
 
 #[test]

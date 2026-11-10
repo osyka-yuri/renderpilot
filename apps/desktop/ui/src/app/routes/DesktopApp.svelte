@@ -75,6 +75,7 @@
     selectGameInstallFolder,
   } from '@features/scan-libraries';
   import { presentError } from '@shared/error-presentation';
+  import { createExclusiveTaskRunner } from '@shared/concurrency';
   import { ClientError, getErrorCode, reportClientError } from '@shared/errors';
   import {
     publishCommandErrorNotification,
@@ -94,6 +95,7 @@
     },
   });
   const pages = createDesktopPageRegistry();
+  const nvapiMutationRunner = createExclusiveTaskRunner();
   const coverSyncQueue = createCoverSyncQueue();
   const leftovers = createCleanupFlow({
     list: listRetiredGameLeftovers,
@@ -561,6 +563,7 @@
           <GameDetailsScreen
             details={model.selectedDetails}
             busy={model.busy}
+            {nvapiMutationRunner}
             onSwap={gameDetailsModel.handleSwap}
             onRollback={gameDetailsModel.handleRollback}
             onBulkSwap={gameDetailsModel.handleBulkSwap}
@@ -601,6 +604,7 @@
         {#snippet children(SettingsScreen)}
           <SettingsScreen
             themeMode={model.themeMode}
+            {nvapiMutationRunner}
             languageMode={model.languageMode}
             languageBusy={model.languageBusy}
             appVersion={appUpdater.appVersion}
