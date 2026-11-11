@@ -140,7 +140,10 @@ pub fn verify_rpu(bytes: &[u8], encoded_signature: &str) -> Result<VerifiedRpu> 
         let mut entry = archive
             .by_index(index)
             .map_err(|error| PortableRuntimeError::new("portable_rpu_layout", error.to_string()))?;
-        let name = entry.name().to_owned();
+        let name = entry
+            .name()
+            .map_err(|error| PortableRuntimeError::new("portable_rpu_layout", error.to_string()))?
+            .into_owned();
         if name.contains("..")
             || name.starts_with('/')
             || name.contains('\\')

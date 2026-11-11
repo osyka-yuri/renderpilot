@@ -285,19 +285,23 @@ describe('GameExecutablePopover', () => {
       throw new Error('Radio item not found');
     }
 
-    // 1. Programmatic / non-keyboard focus does not trigger tooltip
+    // 1. Non-keyboard focus (without :focus-visible) does not trigger tooltip
+    // jsdom 31 evaluates `:focus-visible` as `hasFocus(el)` without tracking input modality,
+    // so stub `:focus-visible` explicitly for both branches of `ignoreNonKeyboardFocus`.
+    let focusVisible = false;
+    vi.spyOn(radioItem, 'matches').mockImplementation(function (this: Element, selector: string) {
+      if (selector === ':focus-visible') {
+        return focusVisible && document.activeElement === this;
+      }
+      return Element.prototype.matches.call(this, selector);
+    });
+
     radioItem.focus();
     flushSync();
     expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
 
     // 2. Keyboard focus (with :focus-visible) triggers tooltip
-    vi.spyOn(radioItem, 'matches').mockImplementation(function (this: Element, selector: string) {
-      if (selector === ':focus-visible') {
-        return document.activeElement === this;
-      }
-      return Element.prototype.matches.call(this, selector);
-    });
-
+    focusVisible = true;
     radioItem.blur();
     flushSync();
     radioItem.focus();

@@ -101,9 +101,11 @@ fn extract_reshade_dll(archive: &[u8], arch: Architecture) -> Result<Vec<u8>, Se
             .by_index(index)
             .map_err(|error| failed(format!("failed to read ReShade archive: {error}")))?;
         let Some(enclosed) = entry.enclosed_name() else {
+            let entry_name = entry
+                .name()
+                .unwrap_or_else(|_| String::from_utf8_lossy(entry.name_raw()));
             return Err(failed(format!(
-                "ReShade archive contains an unsafe path `{}`",
-                entry.name()
+                "ReShade archive contains an unsafe path `{entry_name}`"
             )));
         };
         let base = enclosed

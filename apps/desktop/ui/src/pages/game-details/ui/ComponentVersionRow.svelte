@@ -261,10 +261,7 @@
   const progressIds = $derived(pendingArtifactId ? [pendingArtifactId] : []);
 </script>
 
-<Item
-  size="sm"
-  class={isFileRow ? 'grid min-w-0 @min-[36rem]:grid-cols-[minmax(0,1fr)_auto]' : undefined}
->
+<Item size="sm" class={isFileRow ? 'grid min-w-0 @xl:grid-cols-[minmax(0,1fr)_auto]' : undefined}>
   <ItemContent class={isFileRow ? 'min-w-0' : undefined}>
     <ItemTitle>
       <span>{fileName}</span>

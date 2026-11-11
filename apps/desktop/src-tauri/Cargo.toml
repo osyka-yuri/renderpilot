@@ -34,8 +34,8 @@ rusqlite = { workspace = true, features = ["backup", "bundled"], optional = true
 reqwest = { workspace = true, features = ["blocking", "rustls"], optional = true }
 zip = { workspace = true, features = ["deflate"], optional = true }
 tauri = { version = "2.12.5", features = [] }
-tauri-plugin-dialog = "2.8.3"
-tauri-plugin-shell = "2.5.0"
+tauri-plugin-dialog = "2.8.4"
+tauri-plugin-shell = "2.6.0"
 tauri-plugin-process = "2.4.0"
 
 [target.'cfg(windows)'.dependencies]
@@ -60,7 +60,7 @@ windows-sys = { workspace = true, features = [
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
-tauri-plugin-single-instance = "=2.4.5"
+tauri-plugin-single-instance = "2.5.5"
 
 [features]
 # Enables portable mode: data is stored in <exe_dir>/data instead of %LOCALAPPDATA%.

@@ -74,7 +74,7 @@
   );
 </script>
 
-<Item size="sm" class="grid min-w-0 grid-cols-1 gap-3 @min-[36rem]:grid-cols-[minmax(0,1fr)_auto]">
+<Item size="sm" class="grid min-w-0 grid-cols-1 gap-3 @xl:grid-cols-[minmax(0,1fr)_auto]">
   <ItemContent class="min-w-0">
     <ItemTitle>{translateNvapi(`nvapi.${state.setting_key}.label`, state.setting_label)}</ItemTitle>
     {#if state.description !== null || state.min_driver !== null}
@@ -92,10 +92,10 @@
     {/if}
   </ItemContent>
   <ItemActions
-    class="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] @min-[36rem]:w-auto @min-[36rem]:shrink-0"
+    class="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] @xl:w-auto @xl:shrink-0"
   >
     <Select type="single" {disabled} bind:value={selected} onValueChange={handleChange}>
-      <SelectTrigger size="sm" class="w-full min-w-0 @min-[36rem]:w-60">
+      <SelectTrigger size="sm" class="w-full min-w-0 @xl:w-60">
         <span class="truncate"
           >{translateNvapi(
             `nvapi.${state.setting_key}.value.${state.current.wire}`,

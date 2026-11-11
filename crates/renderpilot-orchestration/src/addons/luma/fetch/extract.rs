@@ -93,18 +93,22 @@ pub(super) fn extract_luma_payload(
         if entry.is_dir() {
             continue;
         }
-        // `enclosed_name()` is the zip-slip safety gate (rejects `..`, absolute
-        // paths, and other unsafe forms); the raw `/`-separated name is used for
-        // the relative-path string once that gate has passed. A second,
-        // independent validation runs at install time via
-        // `engine::ensure_safe_relative_path` (see `FileOp::CreateNested`).
+        // `enclosed_name()` ensures the entry cannot escape the archive root
+        // (rejecting absolute paths, NUL bytes, and unbalanced `..` traversals,
+        // though balanced `foo/../bar` segments are permitted by `zip`). The
+        // `/`-normalized entry name is retained for allow-list classification,
+        // and `engine::ensure_safe_relative_path` (via `FileOp::CreateNested`)
+        // independently rejects any remaining `..`, `.`, empty, or reserved
+        // path components before any file is written.
+        let entry_name = entry.name().map_err(|error| {
+            errors::failed(format!("Luma archive contains an unreadable path: {error}"))
+        })?;
         if entry.enclosed_name().is_none() {
             return Err(errors::failed(format!(
-                "Luma archive contains an unsafe path `{}`",
-                entry.name()
+                "Luma archive contains an unsafe path `{entry_name}`"
             )));
         }
-        let relative = entry.name().replace('\\', "/");
+        let relative = entry_name.replace('\\', "/");
         let Some(classification) = classify_entry(&relative) else {
             tracing::debug!("Luma fetch: skipping entry `{relative}`");
             continue;
