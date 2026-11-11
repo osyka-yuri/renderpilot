@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.3] - 2026-11-11
+
+### Changed
+
+- **DLSS cards.** Files of each DLSS type now share one card, whether a game has one or several copies. Each file shows its own version and relative path, with separate replacement and restore controls. Shared **NVIDIA settings** appear below the files and start collapsed.
+- **Russian preset label.** Changed “Выкл. (как в игре)” to “Как в игре” to clarify that the game chooses the render preset.
+
+### Fixed
+
+- **NVIDIA settings after external changes.** Game and global settings can now be reapplied or reset after changes by a game, driver, or another tool, provided the profile binding is verified. Saved originals for game settings are preserved.
+- **NVIDIA settings refresh.** Driver values now refresh on entering the NVIDIA tab, returning to the app with that tab visible, or a failed write. Reopening a game during an executable, profile, or setting change waits for the operation before loading its state.
+
 ## [1.15.2] - 2026-10-24
 
 ### Fixed
