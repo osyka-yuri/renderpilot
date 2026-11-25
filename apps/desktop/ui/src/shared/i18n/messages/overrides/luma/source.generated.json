@@ -290,26 +290,8 @@
       "context": "guidance.compatibility"
     },
     {
-      "id": "luma.mass-effect-andromeda.compatibility",
-      "sourceText": "Only DLAA / FSR 3 Native AA modes are available; this is not DLSS or FSR super-resolution.",
-      "kind": "compatibility",
-      "context": "guidance.compatibility"
-    },
-    {
       "id": "luma.masterdetectivearchivesraincodeplus.game_setting",
       "sourceText": "In the game settings, use: AA quality \"High\" and maximum resolution scale.",
-      "kind": "game_setting",
-      "context": "guidance.game_setting"
-    },
-    {
-      "id": "luma.metro-2033-redux.warning",
-      "sourceText": "Requires windowed or borderless mode, configured via mods or by disabling fullscreen in the game config.",
-      "kind": "warning",
-      "context": "guidance.warning"
-    },
-    {
-      "id": "luma.metro-2033-redux.windowed_borderless_only",
-      "sourceText": "Use borderless windowed mode.",
       "kind": "game_setting",
       "context": "guidance.game_setting"
     },
@@ -588,6 +570,30 @@
       "sourceText": "Visible jittering may occur in foliage and very small details.",
       "kind": "warning",
       "context": "guidance.warning"
+    },
+    {
+      "id": "luma.mafia-definitive-edition.warning",
+      "sourceText": "This profile supports DLAA only (no HDR) and requires an NVIDIA RTX GPU. In the game settings, set Anti-Aliasing to Low.",
+      "kind": "warning",
+      "context": "guidance.warning"
+    },
+    {
+      "id": "luma.metal-gear-solid-v-the-phantom-pain.warning",
+      "sourceText": "This profile supports upscaling only (FSR 4, FSR 3, or DLSS); HDR is not supported. In the game settings, enable Motion Blur and set Post-Processing to High or above.",
+      "kind": "warning",
+      "context": "guidance.warning"
+    },
+    {
+      "id": "luma.saints-row-the-third-remastered.game_setting",
+      "sourceText": "In the game settings, set Anti-Aliasing to TAA for DLAA or FSR 3, or FXAA for SMAA. Enable Ambient Occlusion to use XeGTAO.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "luma.the-ascent.compatibility",
+      "sourceText": "This add-on is not necessary after the 2026 game patch.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
     }
   ]
 }

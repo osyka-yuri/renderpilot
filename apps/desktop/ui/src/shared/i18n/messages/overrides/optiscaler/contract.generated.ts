@@ -37,6 +37,8 @@ export const OPTISCALER_SOURCE_CATALOG = {
   'optiscaler-chip-n-clawz-fsr4-color-space':
     'When using FSR 4, select the Non-Linear sRGB input color space to fix flicker in cutscenes.',
   'optiscaler-cions-of-vega-dx12': 'DirectX 11 can shimmer.',
+  'optiscaler-clair-obscur-expedition-33-ultra-quality':
+    'Avoid the Ultra Quality preset; it can cause severe rendering issues.',
   'optiscaler-crash-bandicoot-4-antialiasing':
     'Set anti-aliasing quality to at least Medium (2×) in the game settings.',
   'optiscaler-crimson-oath-fsr4-color-space':
@@ -61,6 +63,8 @@ export const OPTISCALER_SOURCE_CATALOG = {
   'optiscaler-deadzone-rogue-frame-generation':
     'If frame generation stops working, re-enable DLSS-FG in the game settings.',
   'optiscaler-death-stranding-2-xess-input': 'Use XeSS input to avoid shimmer.',
+  'optiscaler-death-stranding-directors-cut-xess-input':
+    'Prefer XeSS input, as DLSS input may cause image shimmering or crashes.',
   'optiscaler-deconstruction-simulator-fsr4-color-space':
     'When using FSR 4, select the Non-Linear sRGB input color space to fix flashing graphics.',
   'optiscaler-deliver-us-mars-dx12': 'Run the game in DirectX 12 mode.',
@@ -99,6 +103,8 @@ export const OPTISCALER_SOURCE_CATALOG = {
   'optiscaler-frozenheim-dx12': "Use the game's DX12 mode.",
   'optiscaler-funko-fusion-fsr4-color-space':
     'Use FSR input. If FSR 4 flickers at the Balanced preset, select the Non-Linear sRGB input color space.',
+  'optiscaler-gears-of-war-e-day-offline-mode':
+    'OptiScaler can only be used in offline mode and requires an Easy Anti-Cheat (EAC) bypass.',
   'optiscaler-ghost-recon-wildlands-dlss-mod':
     'A third-party DLSS mod is required for this game to work with OptiScaler.',
   'optiscaler-ghostrunner-2-dx12-performance':
@@ -140,13 +146,21 @@ export const OPTISCALER_SOURCE_CATALOG = {
     'FSR frame generation can crash the game at launch. Use XeFG instead.',
   'optiscaler-lunar-eclipse-frame-generation':
     'Do not use FSR frame generation. With FSR 4 through DLSS input, select the Non-Linear input color space.',
+  'optiscaler-manor-lords-fsr4-color-space':
+    'For FSR 4, select Non-Linear sRGB as the input color space when using XeSS input or DLSS input with a preset other than Balanced.',
   'optiscaler-martha-is-dead-fsr4-color-space':
     'If angled windows look pixelated with FSR 4, try the Non-Linear PQ input color space.',
   'optiscaler-metal-gear-solid-delta-dlss-quality':
     'DLSS Quality uses a 75% internal resolution and Balanced uses 67%, which is higher than expected.',
   'optiscaler-morbid-metal-dlss-restart':
     'After selecting DLSS in the game settings for the first time, restart the game if it is not detected.',
+  'optiscaler-mortal-shell-ii-dlssg-streamline':
+    'When using DLSSG via Streamline, you may need to set r.Streamline.Load.DLSSG=1 in the [ConsoleVariables] section of the Unreal Engine configuration.',
   'optiscaler-mr-photographer-dx11': 'XeSS input is unavailable in DirectX 11 mode.',
+  'optiscaler-nier-automata-dlss-mod':
+    'A third-party DLSS mod is required for this game to work with OptiScaler.',
+  'optiscaler-nioh-3-boot-crash':
+    'Use XeSS input: DLSS input may revert to FSR and cause the game to crash on startup.',
   'optiscaler-oddroom-dx12': 'If the DLSS input does not work, launch the game with -dx12.',
   'optiscaler-oddsparks-fsr4-color-space':
     'When using FSR 4, select the Non-Linear sRGB input color space to fix flickering.',
@@ -156,6 +170,8 @@ export const OPTISCALER_SOURCE_CATALOG = {
     "After each launch, select TSR, then select DLSS again in the game's graphics settings.",
   'optiscaler-pax-autocratica-prologue-dlss-input': 'Use DLSS because FSR inputs are unavailable.',
   'optiscaler-payday-3-fsr-input': 'Avoid FSR 3 inputs because they can crash the game.',
+  'optiscaler-persona-3-reload-p3r-enhanced':
+    "huutaiii's P3R Enhanced mod is required for this game to work with OptiScaler.",
   'optiscaler-planet-coaster-2-dlss-input': 'Use DLSS because FSR 3 inputs are unavailable.',
   'optiscaler-polaris-demo-inputs':
     'DLSS and DLSS Frame Generation inputs are unavailable. FSR 3.1 Frame Generation can crash with OptiScaler 0.9.1.',
@@ -177,6 +193,8 @@ export const OPTISCALER_SOURCE_CATALOG = {
     'Disable NVIDIA Reflex in the game settings to reduce stuttering.',
   'optiscaler-redout-2-xess-artifacts':
     'The XeSS input can show black block artifacts in cutscenes and some levels.',
+  'optiscaler-remothered-red-nuns-legacy-reflex-fsr-fg':
+    'NVIDIA Reflex is available without spoofing. FSR Frame Generation can be forced through Unreal Engine configuration.',
   'optiscaler-resident-evil-2-remake-reframework-upscalerbase-plugin':
     "REFramework (pd-upscaler branch) and PureDark's UpscalerBasePlugin version 1.1.2 are required for this game to work.",
   'optiscaler-resident-evil-3-remake-reframework-upscalerbase-plugin':
@@ -198,13 +216,21 @@ export const OPTISCALER_SOURCE_CATALOG = {
   'optiscaler-saints-row-2022-dx12-fsr4':
     'Use DX12. With FSR 4, Non-Linear sRGB Input may be needed and can increase ghosting.',
   'optiscaler-scathe-dx12-fsr-input': 'FSR mode can crash the game.',
+  'optiscaler-scp-project-pneuma-demo-xefg-streamline-crash':
+    'NVIDIA Reflex is available without spoofing. XeFG Frame Generation output crashes when using DLSS input via Streamline.',
   'optiscaler-scp-secret-files-dx12':
     'Do not select an FSR 2 input; it can crash. DirectX 11 has lower performance and severe shimmer.',
   'optiscaler-sekiro-shadows-die-twice-sekirotsr-mod':
     'The SekiroTSR mod is required as a basis for DLSS inputs.',
+  'optiscaler-seven-seven-one-upscale-ratio':
+    'The game locks the upscaling preset to Balanced. Use Upscale Ratio Override in OptiScaler to adjust the internal rendering resolution. DX12 cannot be forced.',
   'optiscaler-shadow-warrior-3-dx12': 'DirectX 11 has lower performance and severe shimmer.',
   'optiscaler-shatterline-dx11-upscaler-quality':
     'In DX11, upscaler image quality can be worse than native.',
+  'optiscaler-silent-hill-f-balanced-flicker':
+    'DLSS input may cause flickering with presets such as Balanced; use FSR input instead.',
+  'optiscaler-silent-hill-townfall-display-settings':
+    'Disable Letterboxing and mouse smoothing in the game settings.',
   'optiscaler-smile-protocol-demo-xefg': 'FSR Frame Generation crashes. Use XeFG instead.',
   'optiscaler-sons-of-the-forest-inventory':
     'Opening or closing the inventory can cause issues while using OptiScaler.',
@@ -290,6 +316,7 @@ export const OPTISCALER_MESSAGE_CONTEXTS = {
   'optiscaler-chionophile-dx12': 'compatibility',
   'optiscaler-chip-n-clawz-fsr4-color-space': 'game_setting',
   'optiscaler-cions-of-vega-dx12': 'compatibility',
+  'optiscaler-clair-obscur-expedition-33-ultra-quality': 'compatibility',
   'optiscaler-crash-bandicoot-4-antialiasing': 'game_setting',
   'optiscaler-crimson-oath-fsr4-color-space': 'game_setting',
   'optiscaler-curse-of-the-abandoned-floor-upscale-ratio': 'game_setting',
@@ -303,6 +330,7 @@ export const OPTISCALER_MESSAGE_CONTEXTS = {
   'optiscaler-dead-take-fsr4-color-space': 'game_setting',
   'optiscaler-deadzone-rogue-frame-generation': 'game_setting',
   'optiscaler-death-stranding-2-xess-input': 'compatibility',
+  'optiscaler-death-stranding-directors-cut-xess-input': 'compatibility',
   'optiscaler-deconstruction-simulator-fsr4-color-space': 'game_setting',
   'optiscaler-deliver-us-mars-dx12': 'compatibility',
   'optiscaler-deliver-us-the-moon-dx12': 'compatibility',
@@ -325,6 +353,7 @@ export const OPTISCALER_MESSAGE_CONTEXTS = {
   'optiscaler-frostpunk-2-fsr4-color-space': 'game_setting',
   'optiscaler-frozenheim-dx12': 'compatibility',
   'optiscaler-funko-fusion-fsr4-color-space': 'game_setting',
+  'optiscaler-gears-of-war-e-day-offline-mode': 'compatibility',
   'optiscaler-ghost-recon-wildlands-dlss-mod': 'compatibility',
   'optiscaler-ghostrunner-2-dx12-performance': 'compatibility',
   'optiscaler-gothic-1-remake-sharpening': 'game_setting',
@@ -351,16 +380,21 @@ export const OPTISCALER_MESSAGE_CONTEXTS = {
   'optiscaler-lost-records-input': 'compatibility',
   'optiscaler-lumina-veil-frame-generation': 'compatibility',
   'optiscaler-lunar-eclipse-frame-generation': 'compatibility',
+  'optiscaler-manor-lords-fsr4-color-space': 'compatibility',
   'optiscaler-martha-is-dead-fsr4-color-space': 'game_setting',
   'optiscaler-metal-gear-solid-delta-dlss-quality': 'game_setting',
   'optiscaler-morbid-metal-dlss-restart': 'game_setting',
+  'optiscaler-mortal-shell-ii-dlssg-streamline': 'compatibility',
   'optiscaler-mr-photographer-dx11': 'compatibility',
+  'optiscaler-nier-automata-dlss-mod': 'compatibility',
+  'optiscaler-nioh-3-boot-crash': 'compatibility',
   'optiscaler-oddroom-dx12': 'compatibility',
   'optiscaler-oddsparks-fsr4-color-space': 'game_setting',
   'optiscaler-onimusha-way-of-the-sword-reframework': 'compatibility',
   'optiscaler-online-404-reselect-upscaler': 'game_setting',
   'optiscaler-pax-autocratica-prologue-dlss-input': 'compatibility',
   'optiscaler-payday-3-fsr-input': 'compatibility',
+  'optiscaler-persona-3-reload-p3r-enhanced': 'compatibility',
   'optiscaler-planet-coaster-2-dlss-input': 'compatibility',
   'optiscaler-polaris-demo-inputs': 'compatibility',
   'optiscaler-project-songbird-teaser-faceless-dynamic-resolution': 'game_setting',
@@ -373,6 +407,7 @@ export const OPTISCALER_MESSAGE_CONTEXTS = {
   'optiscaler-realmwalker-taa-dlss': 'game_setting',
   'optiscaler-red-dead-redemption-2-vulkan-reflex': 'game_setting',
   'optiscaler-redout-2-xess-artifacts': 'compatibility',
+  'optiscaler-remothered-red-nuns-legacy-reflex-fsr-fg': 'compatibility',
   'optiscaler-resident-evil-2-remake-reframework-upscalerbase-plugin': 'compatibility',
   'optiscaler-resident-evil-3-remake-reframework-upscalerbase-plugin': 'compatibility',
   'optiscaler-resident-evil-4-remake-reframework-upscalerbase-plugin': 'compatibility',
@@ -385,10 +420,14 @@ export const OPTISCALER_MESSAGE_CONTEXTS = {
   'optiscaler-romeo-is-a-dead-man-anti-aliasing': 'game_setting',
   'optiscaler-saints-row-2022-dx12-fsr4': 'compatibility',
   'optiscaler-scathe-dx12-fsr-input': 'compatibility',
+  'optiscaler-scp-project-pneuma-demo-xefg-streamline-crash': 'compatibility',
   'optiscaler-scp-secret-files-dx12': 'compatibility',
   'optiscaler-sekiro-shadows-die-twice-sekirotsr-mod': 'compatibility',
+  'optiscaler-seven-seven-one-upscale-ratio': 'game_setting',
   'optiscaler-shadow-warrior-3-dx12': 'compatibility',
   'optiscaler-shatterline-dx11-upscaler-quality': 'compatibility',
+  'optiscaler-silent-hill-f-balanced-flicker': 'compatibility',
+  'optiscaler-silent-hill-townfall-display-settings': 'game_setting',
   'optiscaler-smile-protocol-demo-xefg': 'compatibility',
   'optiscaler-sons-of-the-forest-inventory': 'compatibility',
   'optiscaler-soulslinger-envoy-of-death-fsr4-non-linear-srgb-input': 'compatibility',

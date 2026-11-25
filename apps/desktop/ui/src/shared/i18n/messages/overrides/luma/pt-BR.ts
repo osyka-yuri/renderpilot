@@ -77,13 +77,8 @@ export const lumaOverrides = defineLocalizedCatalog<'pt-BR', LumaSourceCatalog>(
   'luma.kingdom-hearts-3.game_setting': 'Nas configurações do jogo, selecione “TXAA”.',
   'luma.lara-croft-temple-of-osiris.compatibility': 'Não é compatível com a versão da Xbox Store.',
   'luma.littlenightmaresiii.compatibility': 'Não inicia no modo DirectX 11.',
-  'luma.mass-effect-andromeda.compatibility':
-    'Somente os modos DLAA / FSR 3 Native AA estão disponíveis; isso não é super-resolução DLSS nem FSR.',
   'luma.masterdetectivearchivesraincodeplus.game_setting':
     'Nas configurações do jogo, use a qualidade de AA “High” e coloque a escala de resolução no máximo.',
-  'luma.metro-2033-redux.warning':
-    'Exige o modo janela ou janela sem bordas, configurado por mods ou pela desativação da tela cheia no arquivo de configuração do jogo.',
-  'luma.metro-2033-redux.windowed_borderless_only': 'Use o modo janela sem bordas.',
   'luma.middle-earth-shadow-of-war.dlss-only':
     'Este perfil oferece suporte apenas a DLSS; HDR não é compatível no momento.',
   'luma.mothergunship.engine_ini': 'Aplique manualmente as seguintes configurações no Engine.ini.',
@@ -158,4 +153,12 @@ export const lumaOverrides = defineLocalizedCatalog<'pt-BR', LumaSourceCatalog>(
     'Para reduzir a instabilidade temporal, aplique a seguinte configuração no Engine.ini.',
   'luma.song-of-nunu.warning':
     'Pode ocorrer instabilidade visível na vegetação e em detalhes muito pequenos.',
+  'luma.mafia-definitive-edition.warning':
+    'Este perfil é compatível apenas com DLAA (sem HDR) e requer uma GPU NVIDIA RTX. Nas configurações do jogo, defina o suavizado (Anti-Aliasing) como Baixo.',
+  'luma.metal-gear-solid-v-the-phantom-pain.warning':
+    'Este perfil é compatível apenas com upscaling (FSR 4, FSR 3 ou DLSS); HDR não é compatível. Nas configurações do jogo, ative o Motion Blur e defina o Post-Processing como High ou superior.',
+  'luma.saints-row-the-third-remastered.game_setting':
+    'Nas configurações do jogo, defina Anti-Aliasing como TAA para DLAA ou FSR 3, ou FXAA para SMAA. Ative a Oclusão de Ambiente para usar XeGTAO.',
+  'luma.the-ascent.compatibility':
+    'Este complemento não é necessário após o patch de 2026 do jogo.',
 });

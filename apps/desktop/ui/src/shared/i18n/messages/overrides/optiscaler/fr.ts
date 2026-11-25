@@ -98,6 +98,8 @@ export const optiscalerOverrides = defineLocalizedCatalog<'fr', OptiScalerSource
   'optiscaler-deadzone-rogue-frame-generation':
     'Si la génération d’images cesse de fonctionner, réactivez DLSS-FG dans les options du jeu.',
   'optiscaler-death-stranding-2-xess-input': 'Utilisez l’entrée XeSS pour éviter le scintillement.',
+  'optiscaler-death-stranding-directors-cut-xess-input':
+    'Privilégiez l’entrée XeSS, car l’entrée DLSS peut provoquer des scintillements de l’image ou des plantages du jeu.',
   'optiscaler-deconstruction-simulator-fsr4-color-space':
     'Avec FSR 4, sélectionnez l’espace colorimétrique d’entrée Non-Linear sRGB pour corriger les graphismes clignotants.',
   'optiscaler-deliver-us-mars-dx12': 'Lancez le jeu en mode DirectX 12.',
@@ -283,6 +285,8 @@ export const optiscalerOverrides = defineLocalizedCatalog<'fr', OptiScalerSource
     'Un mod DLSS tiers est requis pour que ce jeu fonctionne avec OptiScaler.',
   'optiscaler-ghost-recon-wildlands-dlss-mod':
     'Un mod DLSS tiers est requis pour que ce jeu fonctionne avec OptiScaler.',
+  'optiscaler-nier-automata-dlss-mod':
+    'Un mod DLSS tiers est requis pour que ce jeu fonctionne avec OptiScaler.',
   'optiscaler-elden-ring-erss-fg-mod':
     'Le mod ERSS-FG est requis comme base pour la mise à l’échelle et la génération d’images.',
   'optiscaler-sekiro-shadows-die-twice-sekirotsr-mod':
@@ -291,4 +295,26 @@ export const optiscalerOverrides = defineLocalizedCatalog<'fr', OptiScalerSource
     'Ce jeu nécessite REFramework (pd-upscaler branch) et PDPerfPlugin.',
   'optiscaler-total-war-warhammer-3-warhammer3dlss-mod':
     'Le mod Warhammer3DLSS est requis pour que ce jeu fonctionne avec OptiScaler.',
+  'optiscaler-gears-of-war-e-day-offline-mode':
+    'OptiScaler est uniquement utilisable en mode hors ligne et nécessite de contourner Easy Anti-Cheat (EAC).',
+  'optiscaler-clair-obscur-expedition-33-ultra-quality':
+    'Évitez le préréglage Ultra Quality, qui peut provoquer d’importants problèmes de rendu.',
+  'optiscaler-manor-lords-fsr4-color-space':
+    'Avec FSR 4, sélectionnez « Non-Linear sRGB » comme espace colorimétrique d’entrée si vous utilisez l’entrée XeSS ou l’entrée DLSS avec un préréglage autre que Balanced.',
+  'optiscaler-nioh-3-boot-crash':
+    'Privilégiez l’entrée XeSS : l’entrée DLSS peut revenir à FSR et provoquer un plantage au démarrage.',
+  'optiscaler-silent-hill-f-balanced-flicker':
+    'L’entrée DLSS peut provoquer un scintillement avec certains préréglages, notamment Balanced ; utilisez plutôt l’entrée FSR.',
+  'optiscaler-silent-hill-townfall-display-settings':
+    'Désactivez le Letterboxing et le lissage de la souris dans les paramètres du jeu.',
+  'optiscaler-seven-seven-one-upscale-ratio':
+    'Le jeu impose le préréglage de mise à l’échelle Balanced. Utilisez Upscale Ratio Override dans OptiScaler pour ajuster la résolution de rendu interne. Il n’est pas possible de forcer DX12.',
+  'optiscaler-remothered-red-nuns-legacy-reflex-fsr-fg':
+    'NVIDIA Reflex est disponible sans spoofing. La génération d’images FSR peut être forcée via la configuration d’Unreal Engine.',
+  'optiscaler-scp-project-pneuma-demo-xefg-streamline-crash':
+    'NVIDIA Reflex est disponible sans spoofing. La génération d’images XeFG plante avec DLSS via Streamline.',
+  'optiscaler-persona-3-reload-p3r-enhanced':
+    'Le mod P3R Enhanced de huutaiii est requis pour que ce jeu fonctionne avec OptiScaler.',
+  'optiscaler-mortal-shell-ii-dlssg-streamline':
+    'Lors de l’utilisation de DLSSG via Streamline, il peut être nécessaire de définir r.Streamline.Load.DLSSG=1 dans la section [ConsoleVariables] de la configuration d’Unreal Engine.',
 });

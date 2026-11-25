@@ -59,13 +59,8 @@ export const lumaOverrides = defineLocalizedCatalog<'zh-Hans', LumaSourceCatalog
   'luma.kingdom-hearts-3.game_setting': '在游戏设置中选择：“TXAA”。',
   'luma.lara-croft-temple-of-osiris.compatibility': '与 Xbox Store 版本不兼容。',
   'luma.littlenightmaresiii.compatibility': '无法在 DirectX 11 模式下启动。',
-  'luma.mass-effect-andromeda.compatibility':
-    '仅提供 DLAA / FSR 3 原生抗锯齿 (Native AA) 模式；这不是 DLSS 或 FSR 超分辨率。',
   'luma.masterdetectivearchivesraincodeplus.game_setting':
     '在游戏设置中选择：AA 质量 “High” 并将分辨率滑块拉至最大。',
-  'luma.metro-2033-redux.warning':
-    '需要窗口化或无边框模式，可通过模组或在游戏配置文件中关闭全屏进行设置。',
-  'luma.metro-2033-redux.windowed_borderless_only': '请使用无边框窗口模式。',
   'luma.middle-earth-shadow-of-war.dlss-only': '此配置文件仅支持 DLSS，目前不支持 HDR。',
   'luma.mothergunship.engine_ini': '请在 Engine.ini 中手动应用以下设置。',
   'luma.mutant-year-zero-road-to-eden.game_setting': '在游戏设置中选择：AA “High”。',
@@ -116,4 +111,11 @@ export const lumaOverrides = defineLocalizedCatalog<'zh-Hans', LumaSourceCatalog
   'luma.song-of-nunu.game_setting': '在游戏设置中选择：AA “High”。',
   'luma.song-of-nunu.engine_ini': '为减少时间抖动，请在 Engine.ini 中应用以下设置。',
   'luma.song-of-nunu.warning': '植被和非常细小的细节可能出现明显抖动。',
+  'luma.mafia-definitive-edition.warning':
+    '此配置文件仅支持 DLAA（不支持 HDR），且需要 NVIDIA RTX 显卡。在游戏设置中将抗锯齿设为 Low。',
+  'luma.metal-gear-solid-v-the-phantom-pain.warning':
+    '此配置文件仅支持画面缩放（FSR 4、FSR 3 或 DLSS），不支持 HDR。在游戏设置中开启动态模糊（Motion Blur），并将后处理（Post-Processing）设为 High 或更高。',
+  'luma.saints-row-the-third-remastered.game_setting':
+    '在游戏设置中，若使用 DLAA 或 FSR 3 请将抗锯齿设为 TAA，使用 SMAA 请设为 FXAA。开启环境光遮蔽以启用 XeGTAO。',
+  'luma.the-ascent.compatibility': '安装 2026 年游戏补丁后不再需要此插件。',
 });

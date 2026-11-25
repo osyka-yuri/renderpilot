@@ -73,13 +73,8 @@ export const lumaOverrides = defineLocalizedCatalog<'es', LumaSourceCatalog>()({
   'luma.lara-croft-temple-of-osiris.compatibility':
     'No es compatible con la versión de Xbox Store.',
   'luma.littlenightmaresiii.compatibility': 'No se ejecuta en modo DirectX 11.',
-  'luma.mass-effect-andromeda.compatibility':
-    'Solo están disponibles los modos DLAA / FSR 3 Native AA; esto no es superresolución DLSS ni FSR.',
   'luma.masterdetectivearchivesraincodeplus.game_setting':
     'En los ajustes del juego, usa: calidad de AA «High» y escala de resolución al máximo.',
-  'luma.metro-2033-redux.warning':
-    'Requiere modo ventana o sin bordes, configurado mediante mods o desactivando la pantalla completa en la configuración del juego.',
-  'luma.metro-2033-redux.windowed_borderless_only': 'Usa el modo ventana sin bordes.',
   'luma.middle-earth-shadow-of-war.dlss-only':
     'Este perfil solo admite DLSS; HDR no es compatible actualmente.',
   'luma.mothergunship.engine_ini': 'Aplica los siguientes ajustes manualmente en Engine.ini.',
@@ -148,4 +143,12 @@ export const lumaOverrides = defineLocalizedCatalog<'es', LumaSourceCatalog>()({
     'Para reducir el temblor temporal, aplica este ajuste en Engine.ini.',
   'luma.song-of-nunu.warning':
     'Puede aparecer un temblor visible en la vegetación y en los detalles muy pequeños.',
+  'luma.mafia-definitive-edition.warning':
+    'Este perfil solo es compatible con DLAA (sin HDR) y requiere una GPU NVIDIA RTX. En los ajustes del juego, establece el suavizado de bordes (Anti-Aliasing) en Bajo.',
+  'luma.metal-gear-solid-v-the-phantom-pain.warning':
+    'Este perfil solo admite reescalado (FSR 4, FSR 3 o DLSS); HDR no es compatible. En los ajustes del juego, activa Motion Blur y establece Post-Processing en High o superior.',
+  'luma.saints-row-the-third-remastered.game_setting':
+    'En los ajustes del juego, selecciona Anti-Aliasing en TAA para DLAA o FSR 3, o FXAA para SMAA. Activa Ambient Occlusion para usar XeGTAO.',
+  'luma.the-ascent.compatibility':
+    'Este complemento no es necesario tras el parche del juego de 2026.',
 });

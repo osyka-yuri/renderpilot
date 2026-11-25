@@ -97,6 +97,8 @@ export const optiscalerOverrides = defineLocalizedCatalog<'ja', OptiScalerSource
   'optiscaler-deadzone-rogue-frame-generation':
     'フレーム生成が動作しなくなった場合は、ゲームオプションで DLSS-FG を再度有効にしてください。',
   'optiscaler-death-stranding-2-xess-input': 'ちらつきを避けるため、XeSS 入力を使用してください。',
+  'optiscaler-death-stranding-directors-cut-xess-input':
+    'DLSS 入力では画面のちらつきやゲームのクラッシュが発生する可能性があるため、XeSS 入力の使用を推奨します。',
   'optiscaler-deconstruction-simulator-fsr4-color-space':
     'FSR 4 使用時は、ちらつく表示を直すため入力カラースペースに Non-Linear sRGB を選択してください。',
   'optiscaler-deliver-us-mars-dx12': 'ゲームを DirectX 12 モードで起動してください。',
@@ -284,6 +286,8 @@ export const optiscalerOverrides = defineLocalizedCatalog<'ja', OptiScalerSource
     'このゲームで OptiScaler を動作させるには、サードパーティ製の DLSS MOD が必要です。',
   'optiscaler-ghost-recon-wildlands-dlss-mod':
     'このゲームで OptiScaler を動作させるには、サードパーティ製の DLSS MOD が必要です。',
+  'optiscaler-nier-automata-dlss-mod':
+    'このゲームで OptiScaler を動作させるには、サードパーティ製の DLSS MOD が必要です。',
   'optiscaler-elden-ring-erss-fg-mod':
     'アップスケーリングとフレーム生成のベースとして ERSS-FG MOD が必要です。',
   'optiscaler-sekiro-shadows-die-twice-sekirotsr-mod':
@@ -292,4 +296,26 @@ export const optiscalerOverrides = defineLocalizedCatalog<'ja', OptiScalerSource
     'このゲームを動作させるには REFramework（pd-upscaler branch）と PDPerfPlugin が必要です。',
   'optiscaler-total-war-warhammer-3-warhammer3dlss-mod':
     'このゲームで OptiScaler を動作させるには、Warhammer3DLSS MOD が必要です。',
+  'optiscaler-gears-of-war-e-day-offline-mode':
+    'OptiScaler はオフラインモードでのみ使用可能で、Easy Anti-Cheat (EAC) のバイパスが必要です。',
+  'optiscaler-clair-obscur-expedition-33-ultra-quality':
+    '「Ultra Quality」プリセットは描画が正常に行われなくなる可能性があるため、使用を避けてください。',
+  'optiscaler-manor-lords-fsr4-color-space':
+    'FSR 4 で XeSS 入力を使う場合、または DLSS 入力で「Balanced」以外のプリセットを使う場合は、入力色空間を「Non-Linear sRGB」に設定してください。',
+  'optiscaler-nioh-3-boot-crash':
+    'XeSS 入力の使用を推奨します。DLSS 入力では FSR に切り替わり、ゲームの起動時にクラッシュすることがあります。',
+  'optiscaler-silent-hill-f-balanced-flicker':
+    'DLSS 入力では、「Balanced」など一部のプリセットで画面がちらつくことがあります。代わりに FSR 入力を使用してください。',
+  'optiscaler-silent-hill-townfall-display-settings':
+    'ゲーム内の設定で、レターボックス表示（Letterboxing）とマウススムージングを無効にしてください。',
+  'optiscaler-seven-seven-one-upscale-ratio':
+    'ゲームではアップスケーリングのプリセットが「Balanced」に固定されています。内部レンダリング解像度を調整するには、OptiScaler の「Upscale Ratio Override」を使用してください。DX12 を強制的に有効にすることはできません。',
+  'optiscaler-remothered-red-nuns-legacy-reflex-fsr-fg':
+    'NVIDIA Reflex はスプーフィングなしで利用できます。Unreal Engine の設定により FSR フレーム生成を強制的に有効化できます。',
+  'optiscaler-scp-project-pneuma-demo-xefg-streamline-crash':
+    'NVIDIA Reflex はスプーフィングなしで利用できます。Streamline 経由で DLSS を使用すると、XeFG フレーム生成によりゲームがクラッシュします。',
+  'optiscaler-persona-3-reload-p3r-enhanced':
+    'このゲームで OptiScaler を動作させるには、huutaiii 氏製の MOD「P3R Enhanced」が必要です。',
+  'optiscaler-mortal-shell-ii-dlssg-streamline':
+    'Streamline 経由で DLSSG を使用する場合、Unreal Engine 設定の [ConsoleVariables] セクションに r.Streamline.Load.DLSSG=1 を指定する必要がある場合があります。',
 });

@@ -67,13 +67,8 @@ export const lumaOverrides = defineLocalizedCatalog<'ru', LumaSourceCatalog>()({
   'luma.kingdom-hearts-3.game_setting': 'В настройках игры выберите «TXAA».',
   'luma.lara-croft-temple-of-osiris.compatibility': 'Несовместимо с версией из Xbox Store.',
   'luma.littlenightmaresiii.compatibility': 'Не запускается в режиме DirectX 11.',
-  'luma.mass-effect-andromeda.compatibility':
-    'Доступны только режимы сглаживания DLAA / FSR 3 Native AA; суперразрешение DLSS или FSR не поддерживается.',
   'luma.masterdetectivearchivesraincodeplus.game_setting':
     'В настройках игры выберите качество AA «High» и установите ползунок разрешения на максимум.',
-  'luma.metro-2033-redux.warning':
-    'Требуется оконный или безрамочный режим: через моды либо отключением полноэкранного режима в конфиге игры.',
-  'luma.metro-2033-redux.windowed_borderless_only': 'Используйте безрамочный оконный режим.',
   'luma.middle-earth-shadow-of-war.dlss-only':
     'Этот профиль добавляет только поддержку DLSS; HDR сейчас не поддерживается.',
   'luma.mothergunship.engine_ini': 'Вручную добавьте в Engine.ini следующие настройки.',
@@ -135,4 +130,11 @@ export const lumaOverrides = defineLocalizedCatalog<'ru', LumaSourceCatalog>()({
     'Чтобы уменьшить временное дрожание изображения, добавьте в Engine.ini следующую настройку.',
   'luma.song-of-nunu.warning':
     'На растительности и очень мелких деталях может быть заметно дрожание изображения.',
+  'luma.mafia-definitive-edition.warning':
+    'Этот профиль поддерживает только DLAA (без HDR) и требует видеокарту NVIDIA RTX. В настройках игры установите сглаживание на Low.',
+  'luma.metal-gear-solid-v-the-phantom-pain.warning':
+    'Этот профиль поддерживает только масштабирование (FSR 4, FSR 3 или DLSS); HDR не поддерживается. В настройках игры включите Motion Blur и установите Post-Processing на High или выше.',
+  'luma.saints-row-the-third-remastered.game_setting':
+    'В настройках игры выберите сглаживание TAA для DLAA или FSR 3, либо FXAA для SMAA. Для использования XeGTAO включите Ambient Occlusion.',
+  'luma.the-ascent.compatibility': 'После игрового патча 2026 года этот аддон больше не требуется.',
 });

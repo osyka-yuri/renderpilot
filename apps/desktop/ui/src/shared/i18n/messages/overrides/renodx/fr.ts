@@ -4,10 +4,20 @@ import { defineLocalizedCatalog } from '../../contract';
 import type { RenoDxSourceCatalog } from './contract.generated';
 
 export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>()({
+  'renodx.batman-arkham-city-goty.directx11':
+    'Activez DirectX 11 dans les paramètres du lanceur du jeu.',
+  'renodx.batman-arkham-city-goty.dlaa_helper':
+    "RenderPilot installe uniquement l'extension HDR (renodx-batmanac.addon32). L'exécutable auxiliaire DLAA/FSR facultatif (renodx-batmanac-dlaa-host64.exe) et les DLL d'upscaling externes doivent être installés manuellement depuis la release GitHub.",
   'renodx.black_myth_wukong.hdr':
     'Dans Engine.ini, ajoutez ce paramètre pour le chemin Unreal Engine Extended HDR.',
+  'renodx.blocked.broken_mod': 'Le mod RenoDX ne fonctionne pas avec ce jeu.',
+  'renodx.blocked.custom_rendering': 'Un rendu personnalisé empêche le mod RenoDX de fonctionner.',
+  'renodx.blocked.output_limited':
+    "La sortie HDR est écrêtée, ce qui limite l'efficacité de RenoDX.",
   'renodx.external.discord':
     "Téléchargez l'extension sur Discord, puis installez le fichier téléchargé.",
+  'renodx.external.github':
+    "Téléchargez l'extension sur GitHub, puis installez le fichier téléchargé.",
   'renodx.external.nexus':
     "Téléchargez l'extension sur Nexus Mods, puis installez le fichier téléchargé.",
   'renodx.generic.ue_extended': 'Utilise le profil partagé Unreal Engine Extended.',
@@ -21,8 +31,16 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
     'Installez ReShade dans le répertoire Atlas Fallen\\bin du jeu.',
   'renodx.main.atlas.fallen.reign.of.sand.dx12.2':
     'FSR 2 peut provoquer des plantages avec ce mod.',
+  'renodx.main.call.of.duty.black.ops.cold.war.1':
+    "Évitez le mode multijoueur lorsque vous utilisez ce mod en raison d'un risque de bannissement de compte.",
+  'renodx.main.call.of.duty.black.ops.ii.1':
+    "Évitez le mode multijoueur lorsque vous utilisez ce mod en raison d'un risque de bannissement de compte.",
+  'renodx.main.call.of.duty.ghosts.1':
+    "Évitez le mode multijoueur lorsque vous utilisez ce mod en raison d'un risque de bannissement de compte.",
   'renodx.main.clive.barker.s.jericho.1':
     'La sortie ACES est actuellement défectueuse dans cette version.',
+  'renodx.main.counter.strike.source.1':
+    'Certains modèles présentent des bugs visuels et les cartes utilisant uniquement le LDR peuvent sembler surexposées.',
   'renodx.main.crimson.desert.enhanced.1':
     'Les mises à jour fréquentes du jeu peuvent empêcher le mod de fonctionner ; vérifiez la compatibilité après chaque mise à jour.',
   'renodx.main.days.gone.1':
@@ -33,9 +51,13 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
     'Après avoir installé le mod, supprimez shader.cache2 du répertoire du jeu pour éviter les saccades liées aux shaders.',
   'renodx.main.forza.horizon.6.1':
     "Le HDR natif du jeu fonctionne déjà bien ; ce mod offre un rendu alternatif plutôt qu'un correctif HDR.",
-  'renodx.main.ninja.gaiden.4.1': 'Ce mod nécessite le NinjaGaidenMCFix de Lyall.',
+  'renodx.main.garry.s.mod.1':
+    "RenderPilot installe automatiquement uniquement l'extension 32 bits. La branche x86-64 nécessite l'installation manuelle de renodx-sourceengine.addon64 et d'une DLL proxy DXVK.",
+  'renodx.main.left.4.dead.1':
+    'Certains modèles présentent des bugs visuels et les cartes utilisant uniquement le LDR peuvent sembler surexposées.',
   'renodx.main.ninja.gaiden.1': 'Ce mod nécessite le NinjaGaidenMCFix de Lyall.',
   'renodx.main.ninja.gaiden.2.1': 'Ce mod nécessite le NinjaGaidenMCFix de Lyall.',
+  'renodx.main.ninja.gaiden.4.1': 'Ce mod nécessite le NinjaGaidenMCFix de Lyall.',
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1':
     "Désactivez l'overlay Steam. Si les problèmes persistent, désactivez également les autres overlays.",
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1':
@@ -51,6 +73,8 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
     'Le mod est considéré comme jouable, mais nécessite encore des tests plus approfondis.',
   'renodx.main.trackmania.1':
     'Le HDR fonctionne bien, mais certains menus de personnalisation sont défectueux.',
+  'renodx.main.warframe.1':
+    "Certains utilisateurs ont signalé des bannissements de compte en utilisant ce mod, sans qu'il soit confirmé si RenoDX en est la cause.",
   'renodx.main.yakuza.kiwami.1.1':
     'Cette version a été principalement conçue pour Yakuza 0 ; la prise en charge de Yakuza Kiwami est secondaire.',
   'renodx.page.hdr.disable-double-tonemapping':
@@ -64,12 +88,17 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.ue.extended.a.way.out.1': "Cette configuration a fait l'objet de tests en jeu limités.",
   'renodx.ue.extended.abiotic.factor.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.assetto.corsa.competizione.1': 'Activez le HDR natif du jeu.',
+  'renodx.ue.extended.assetto.corsa.competizione.2':
+    "Chargez une partie pour que l'activation du HDR natif prenne effet.",
   'renodx.ue.extended.assetto.corsa.rally.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.astroneer.1':
     "Des anomalies d'étalonnage des couleurs et des scintillements peuvent encore survenir.",
   'renodx.ue.extended.bodycam.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.borderlands.4.1': 'Activez le HDR natif du jeu.',
+  'renodx.ue.extended.broken.pieces.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.chained.together.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.chained.together.2':
@@ -77,15 +106,21 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.ue.extended.choo.choo.charles.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.chromatic.conundrum.1':
-    "L'Upgrade Path est incompatible avec ce jeu et entraîne un affichage défectueux.",
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.conan.exiles.enhanced.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.crab.champions.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.cthulu.the.cosmin.abyss.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.dead.as.disco.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.deep.rock.galactic.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.deep.rock.galactic.rogue.core.2':
     'Laissez le HDR natif du jeu désactivé : son implémentation HDR native est défectueuse.',
+  'renodx.ue.extended.destroy.all.humans.2.reprobed.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.directive.8020.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.escape.the.backrooms.2':
     "Cette configuration a fait l'objet de tests en jeu limités.",
   'renodx.ue.extended.everwind.1':
@@ -93,8 +128,15 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.ue.extended.far.far.west.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.frostpunk.2.1':
     "Dans ce jeu, le curseur de luminosité de l'interface RenoDX contrôle le niveau de blanc de référence (paper white).",
+  'renodx.ue.extended.garfield.escape.from.monday.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.gears.of.war.e.day.1': 'Activez le HDR natif du jeu.',
+  'renodx.ue.extended.gears.of.war.e.day.2': "Désactivez Easy Anti-Cheat avant d'utiliser ce mod.",
   'renodx.ue.extended.grounded.2.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.half.sword.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.halo.campaign.evolved.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.hellblade.ii.senua.s.saga.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.hellblade.ii.senua.s.saga.2':
     "Les modifications de curseurs RenoDX ne s'appliquent pas en temps réel dans ce jeu.",
@@ -118,6 +160,11 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.ue.extended.lies.of.p.3': "Cette configuration a fait l'objet de tests en jeu limités.",
   'renodx.ue.extended.little.nightmares.ii.1':
     "Des problèmes d'étalonnage des couleurs subsistent.",
+  'renodx.ue.extended.lost.soul.aside.1': 'Activez le HDR natif du jeu.',
+  'renodx.ue.extended.luto.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.luto.2':
+    "L'interface et certains effets graphiques provoquent des problèmes de mappage des tons ; cette configuration n'a été testée que de manière limitée.",
   'renodx.ue.extended.mafia.the.old.country.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.marsupilami.2.salsa.palombia.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
@@ -145,20 +192,36 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.ue.extended.satisfactory.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.sifu.1': 'La luminosité maximale reste limitée dans certains contenus.',
+  'renodx.ue.extended.silent.hill.townfall.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.solarpunk.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.song.of.nunu.a.league.of.legends.story.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.star.wars.galactic.racertm.1': 'Activez le HDR natif du jeu.',
+  'renodx.ue.extended.star.wars.jedi.fallen.ordertm.1':
+    'Utilisez le mod dédié Luma Framework pour une correction complète.',
   'renodx.ue.extended.star.wars.zero.companytm.1': 'Activez le HDR natif du jeu.',
+  'renodx.ue.extended.stellar.blade.1': 'Désactivez le HDR natif du jeu.',
+  'renodx.ue.extended.still.wakes.the.deep.1': 'Activez le HDR natif du jeu.',
+  'renodx.ue.extended.still.wakes.the.deep.2':
+    "Les modifications de curseurs RenoDX ne s'appliquent pas en temps réel dans ce jeu.",
   'renodx.ue.extended.subnautica.2.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.system.shock.remake.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.the.blood.of.dawnwalker.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.the.chant.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
+  'renodx.ue.extended.the.chant.2': 'Lancez le jeu avec DirectX 11.',
   'renodx.ue.extended.the.enjenir.the.engineering.physics.building.simulator.1':
     'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.the.idolm.ster.starlit.season.2':
     'Certains éclairages de dialogues et de scènes restent écrêtés ou ne produisent pas de hautes lumières HDR.',
+  'renodx.ue.extended.the.midnight.walk.1':
+    'Ajoutez ces paramètres à Engine.ini pour le chemin Unreal Engine Extended HDR.',
   'renodx.ue.extended.tokyo.xtreme.racer.1': 'Activez le HDR natif du jeu.',
+  'renodx.ue.extended.tormented.souls.2.1': 'Désactivez le HDR natif du jeu.',
   'renodx.ue.extended.until.dawn.1': 'Activez le HDR natif du jeu.',
   'renodx.ue.extended.what.remains.of.edith.finch.1':
     "Si le HDR est restreint avec une mise à l'échelle DPI élevée, réglez temporairement la mise à l'échelle de Windows sur 100 %, lancez le jeu une fois, puis rétablissez l'échelle souhaitée.",
@@ -174,6 +237,7 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.unity.biped.1':
     "Chargez un point de sauvegarde pour actualiser le mappage tonal et l'étalonnage des couleurs après avoir modifié les curseurs.",
   'renodx.unity.cloverpit.1': "Lancez le jeu avec l'option DirectX 11.",
+  'renodx.unity.database.detective.minor.crimes.1': "Ce jeu n'exploite pas le HDR.",
   'renodx.unity.deadcore.redux.demo.2':
     "Les modifications de mappage tonal et d'étalonnage des couleurs n'apparaissent pas en temps réel.",
   'renodx.unity.dragon.quest.builders.1':
@@ -197,6 +261,9 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.unity.hollow.cocoon.2': 'Réglez la qualité de rendu du jeu sur 100 %.',
   'renodx.unity.house.flipper.2.2':
     "Modifiez le réglage de saturation du jeu pour actualiser le mappage tonal et l'étalonnage des couleurs.",
+  'renodx.unity.i.have.no.mouth.and.i.must.scream.2':
+    'La luminosité maximale reste limitée dans certains contenus.',
+  'renodx.unity.inside.1': 'Utilisez le mod dédié Luma Framework pour une correction complète.',
   'renodx.unity.jotunnslayer.hordes.of.hel.2':
     "Les modifications de mappage tonal et d'étalonnage des couleurs n'apparaissent pas en temps réel.",
   'renodx.unity.keywe.1':
@@ -204,6 +271,7 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.unity.mouthwashing.1': "Utilisez le mode d'affichage sans bordures.",
   'renodx.unity.my.friend.pedro.2':
     "Redémarrez le niveau pour actualiser le mappage tonal et l'étalonnage des couleurs.",
+  'renodx.unity.my.summer.car.2': 'Désactivez le HDR natif du jeu.',
   'renodx.unity.necropolis.brutal.edition.1':
     'Chargez ReShade via Ultimate ASI Loader pour ce jeu 32 bits.',
   'renodx.unity.oddworld.soulstorm.enhanced.edition.2':
@@ -213,6 +281,9 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.unity.outer.wilds.1':
     "Les modifications de mappage tonal et d'étalonnage des couleurs n'apparaissent pas en temps réel.",
   'renodx.unity.peak.1': 'Lancez le jeu avec DirectX 11.',
+  'renodx.unity.phasmophobia.1': "Cette configuration a fait l'objet de tests en jeu limités.",
+  'renodx.unity.phoenix.wright.ace.attorney.trilogy.2': "Ce jeu n'exploite pas le HDR.",
+  'renodx.unity.pony.island.2': 'La luminosité maximale reste limitée dans certains contenus.',
   'renodx.unity.prince.of.persia.the.lost.crown.1':
     "Dans ce jeu, RenoDX ne peut pas modifier l'étalonnage des couleurs au-delà de Peak et UI Brightness.",
   'renodx.unity.prince.of.persia.the.lost.crown.2':
@@ -225,24 +296,36 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
     "L'arrière-plan du menu pause est défectueux.",
   'renodx.unity.shadows.awakening.1':
     "Les modifications de mappage tonal et d'étalonnage des couleurs n'apparaissent pas en temps réel.",
+  'renodx.unity.silver.pines.1':
+    "Au premier lancement, le menu principal peut scintiller avant la création d'un fichier de sauvegarde.",
   'renodx.unity.skate.story.2': 'Désactivez le HDR natif du jeu.',
   'renodx.unity.sker.ritual.2':
     "Ouvrez les paramètres graphiques du jeu et sélectionnez Appliquer pour actualiser le mappage tonal et l'étalonnage des couleurs.",
   'renodx.unity.summoner.s.war.chronicles.1': 'Activez le bloom dans les paramètres du jeu.',
   'renodx.unity.tales.of.berseria.remastered.2':
     'La correction affecte également les cinématiques animées précalculées (FMVs).',
+  'renodx.unity.the.room.2': "Cette configuration a fait l'objet de tests en jeu limités.",
+  'renodx.unity.the.wandering.village.2': "L'image peut paraître relativement sombre.",
   'renodx.unity.towaga.among.shadows.2': 'Activez le post-traitement dans les paramètres du jeu.',
   'renodx.unity.trailmakers.1': "Activez le post-traitement à n'importe quel niveau de qualité.",
   'renodx.unity.trailmakers.2': 'Activez Internal HDR dans les paramètres du jeu.',
   'renodx.unity.turbo.golf.racing.1':
     'Activez le post-traitement dans les paramètres graphiques du jeu.',
+  'renodx.unity.ultimate.chicken.horse.2':
+    'La luminosité maximale reste limitée dans certains contenus.',
   'renodx.unity.ultros.1': "Activez l'étalonnage des couleurs dans les paramètres du jeu.",
+  'renodx.unity.untitled.goose.game.2':
+    'La luminosité maximale reste limitée dans certains contenus.',
   'renodx.unity.v.rising.1':
     'En solo, ouvrez puis fermez le menu Pause ou Options pour actualiser la LUT.',
   'renodx.unity.v.rising.2':
     'En multijoueur, placez-vous à la lumière du soleil ou ouvrez Graphismes > Étalonner la luminosité et confirmez la valeur par défaut de 50 pour actualiser la LUT.',
+  'renodx.unity.vampire.survivors.2':
+    'La luminosité maximale reste limitée dans certains contenus.',
   'renodx.unity.viewfinder.2': 'Activez le post-traitement dans les paramètres du jeu.',
   'renodx.unity.void.crew.2': "Le DLSS limite les couleurs à l'espace BT.709.",
+  'renodx.unity.wicked.seed.2': 'Utilisez le mode fenêtré sans bordures.',
+  'renodx.unity.wicked.seed.3': 'Réglez l’échelle de résolution du jeu sur 100 %.',
   'renodx.unity.windowed':
     'Évitez le plein écran exclusif ; utilisez le mode fenêtré sans bordures ou fenêtré.',
   'renodx.unity.wizard.with.a.gun.2':
@@ -292,7 +375,6 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
     'Le mod fonctionne sans mise à niveau des ressources, bien que les phares de certains véhicules puissent rester écrêtés.',
   'renodx.unreal.lords.of.the.fallen.2023.1': 'Désactivez le HDR natif du jeu.',
   'renodx.unreal.lords.of.the.fallen.2023.2': "Désactivez Easy Anti-Cheat avant d'utiliser ce mod.",
-  'renodx.unreal.lost.soul.aside.1': 'Désactivez le HDR natif du jeu.',
   'renodx.unreal.marvel.s.midnight.suns.1': 'Désactivez le HDR natif du jeu.',
   'renodx.unreal.metal.eden.1':
     "Le menu principal et l'écran de réapparition peuvent présenter des artefacts visuels.",
@@ -325,9 +407,6 @@ export const renodxOverrides = defineLocalizedCatalog<'fr', RenoDxSourceCatalog>
   'renodx.unreal.split.fiction.1': 'Désactivez le HDR natif du jeu.',
   'renodx.unreal.split.fiction.2':
     'Les modifications de curseurs peuvent nécessiter un changement de scène pour apparaître.',
-  'renodx.unreal.stellar.blade.1': 'Désactivez le HDR natif du jeu.',
-  'renodx.unreal.stellar.blade.2':
-    "Sur les écrans ultra-larges, utilisez le format d'image Auto du jeu pour éviter les problèmes dans le mini-jeu NIKKE.",
   'renodx.unreal.tales.of.arise.1': "Le bloom peut parfois s'afficher de manière incorrecte.",
   'renodx.unreal.tales.of.arise.2':
     "Le SMAA et le SMAA + TAA ne sont pas pris en charge ; utilisez le TAA ou désactivez l'anticrénelage.",

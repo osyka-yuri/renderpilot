@@ -68,13 +68,12 @@ export const LUMA_SOURCE_CATALOG = {
   'luma.kingdom-hearts-3.game_setting': 'In the game settings, use: "TXAA".',
   'luma.lara-croft-temple-of-osiris.compatibility': 'Not compatible with the Xbox Store version.',
   'luma.littlenightmaresiii.compatibility': 'Does not launch in DirectX 11 mode.',
-  'luma.mass-effect-andromeda.compatibility':
-    'Only DLAA / FSR 3 Native AA modes are available; this is not DLSS or FSR super-resolution.',
+  'luma.mafia-definitive-edition.warning':
+    'This profile supports DLAA only (no HDR) and requires an NVIDIA RTX GPU. In the game settings, set Anti-Aliasing to Low.',
   'luma.masterdetectivearchivesraincodeplus.game_setting':
     'In the game settings, use: AA quality "High" and maximum resolution scale.',
-  'luma.metro-2033-redux.warning':
-    'Requires windowed or borderless mode, configured via mods or by disabling fullscreen in the game config.',
-  'luma.metro-2033-redux.windowed_borderless_only': 'Use borderless windowed mode.',
+  'luma.metal-gear-solid-v-the-phantom-pain.warning':
+    'This profile supports upscaling only (FSR 4, FSR 3, or DLSS); HDR is not supported. In the game settings, enable Motion Blur and set Post-Processing to High or above.',
   'luma.middle-earth-shadow-of-war.dlss-only':
     'This profile supports DLSS only; HDR is not currently supported.',
   'luma.mothergunship.engine_ini': 'Apply the following settings manually in Engine.ini.',
@@ -94,6 +93,8 @@ export const LUMA_SOURCE_CATALOG = {
   'luma.rad.game_setting': 'In the game settings, use: AA "Ultra".',
   'luma.remnant-from-the-ashes.engine_ini': 'Apply the following settings manually in Engine.ini.',
   'luma.roboquest.game_setting': 'In the game settings, use: TAA, Quality "3".',
+  'luma.saints-row-the-third-remastered.game_setting':
+    'In the game settings, set Anti-Aliasing to TAA for DLAA or FSR 3, or FXAA for SMAA. Enable Ambient Occlusion to use XeGTAO.',
   'luma.scarlet-nexus.game_setting': 'In the game settings, use: AA "TXAA".',
   'luma.scorn.warning':
     'Has native support for FSR 2.1; DLSS or other upscalers can be added via OptiScaler.',
@@ -117,6 +118,7 @@ export const LUMA_SOURCE_CATALOG = {
   'luma.tetris-effect-connected.engine_ini': 'Apply the following settings manually in Engine.ini.',
   'luma.tetris-effect-connected.game_setting':
     'In the game settings, use: AA "FXAA:6" and Rendering Scale 100%.',
+  'luma.the-ascent.compatibility': 'This add-on is not necessary after the 2026 game patch.',
   'luma.the-sinking-city.warning':
     'Compatible with the original release; compatibility with the Remastered edition is unconfirmed.',
   'luma.theouterworldsspacerschoiceedition.compatibility': 'Does not launch in DirectX 11 mode.',
@@ -183,10 +185,9 @@ export const LUMA_MESSAGE_CONTEXTS = {
   'luma.kingdom-hearts-3.game_setting': 'guidance.game_setting',
   'luma.lara-croft-temple-of-osiris.compatibility': 'guidance.compatibility',
   'luma.littlenightmaresiii.compatibility': 'guidance.compatibility',
-  'luma.mass-effect-andromeda.compatibility': 'guidance.compatibility',
+  'luma.mafia-definitive-edition.warning': 'guidance.warning',
   'luma.masterdetectivearchivesraincodeplus.game_setting': 'guidance.game_setting',
-  'luma.metro-2033-redux.warning': 'guidance.warning',
-  'luma.metro-2033-redux.windowed_borderless_only': 'guidance.game_setting',
+  'luma.metal-gear-solid-v-the-phantom-pain.warning': 'guidance.warning',
   'luma.middle-earth-shadow-of-war.dlss-only': 'guidance.compatibility',
   'luma.mothergunship.engine_ini': 'guidance.engine_ini',
   'luma.mutant-year-zero-road-to-eden.engine_ini': 'guidance.engine_ini',
@@ -203,6 +204,7 @@ export const LUMA_MESSAGE_CONTEXTS = {
   'luma.rad.game_setting': 'guidance.game_setting',
   'luma.remnant-from-the-ashes.engine_ini': 'guidance.engine_ini',
   'luma.roboquest.game_setting': 'guidance.game_setting',
+  'luma.saints-row-the-third-remastered.game_setting': 'guidance.game_setting',
   'luma.scarlet-nexus.game_setting': 'guidance.game_setting',
   'luma.scorn.warning': 'guidance.warning',
   'luma.sherlock-holmes-chapter-one.warning': 'guidance.warning',
@@ -221,6 +223,7 @@ export const LUMA_MESSAGE_CONTEXTS = {
   'luma.tekken-7.engine_ini': 'guidance.engine_ini',
   'luma.tetris-effect-connected.engine_ini': 'guidance.engine_ini',
   'luma.tetris-effect-connected.game_setting': 'guidance.game_setting',
+  'luma.the-ascent.compatibility': 'guidance.compatibility',
   'luma.the-sinking-city.warning': 'guidance.warning',
   'luma.theouterworldsspacerschoiceedition.compatibility': 'guidance.compatibility',
   'luma.tribes-of-midgard.engine_ini': 'guidance.engine_ini',

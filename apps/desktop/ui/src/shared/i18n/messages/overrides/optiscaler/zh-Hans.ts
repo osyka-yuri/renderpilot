@@ -83,6 +83,8 @@ export const optiscalerOverrides = defineLocalizedCatalog<'zh-Hans', OptiScalerS
   'optiscaler-deadzone-rogue-frame-generation':
     '如果帧生成停止工作，请在游戏选项中重新启用 DLSS-FG。',
   'optiscaler-death-stranding-2-xess-input': '请使用 XeSS 输入模式以避免闪烁。',
+  'optiscaler-death-stranding-directors-cut-xess-input':
+    '建议优先使用 XeSS 输入，因为 DLSS 输入可能导致画面闪烁或游戏崩溃。',
   'optiscaler-deconstruction-simulator-fsr4-color-space':
     '使用 FSR 4 时，请选择 Non-Linear sRGB 输入色彩空间以修复图形闪烁。',
   'optiscaler-deliver-us-mars-dx12': '请以 DirectX 12 模式运行游戏。',
@@ -241,6 +243,7 @@ export const optiscalerOverrides = defineLocalizedCatalog<'zh-Hans', OptiScalerS
     '此游戏需要第三方 DLSS 模组才能与 OptiScaler 配合使用。',
   'optiscaler-ghost-recon-wildlands-dlss-mod':
     '此游戏需要第三方 DLSS 模组才能与 OptiScaler 配合使用。',
+  'optiscaler-nier-automata-dlss-mod': '此游戏需要第三方 DLSS 模组才能与 OptiScaler 配合使用。',
   'optiscaler-elden-ring-erss-fg-mod': '需要使用 ERSS-FG 模组作为缩放和帧生成的基础。',
   'optiscaler-sekiro-shadows-die-twice-sekirotsr-mod':
     '需要使用 SekiroTSR 模组作为 DLSS 输入的基础。',
@@ -248,4 +251,26 @@ export const optiscalerOverrides = defineLocalizedCatalog<'zh-Hans', OptiScalerS
     '此游戏需要 REFramework（pd-upscaler 分支）和 PDPerfPlugin 才能运行。',
   'optiscaler-total-war-warhammer-3-warhammer3dlss-mod':
     '此游戏需要 Warhammer3DLSS 模组才能与 OptiScaler 配合使用。',
+  'optiscaler-gears-of-war-e-day-offline-mode':
+    'OptiScaler 仅可在离线模式下使用，且需要绕过 Easy Anti-Cheat (EAC)。',
+  'optiscaler-clair-obscur-expedition-33-ultra-quality':
+    '请避免使用 Ultra Quality 预设，因为它可能导致严重的渲染异常。',
+  'optiscaler-manor-lords-fsr4-color-space':
+    '使用 FSR 4 时，如果采用 XeSS 输入，或在 DLSS 输入下选择 Balanced 以外的预设，请将输入色彩空间设为 Non-Linear sRGB。',
+  'optiscaler-nioh-3-boot-crash':
+    '建议使用 XeSS 输入：DLSS 输入可能会切换回 FSR，导致游戏启动时崩溃。',
+  'optiscaler-silent-hill-f-balanced-flicker':
+    '使用 DLSS 输入时，画面可能会在 Balanced 等部分预设下闪烁；建议改用 FSR 输入。',
+  'optiscaler-silent-hill-townfall-display-settings':
+    '请在游戏设置中关闭 Letterboxing（上下黑边）和鼠标平滑处理。',
+  'optiscaler-seven-seven-one-upscale-ratio':
+    '游戏将超分辨率预设锁定为 Balanced。可通过 OptiScaler 中的 Upscale Ratio Override 调整内部渲染分辨率。无法强制启用 DX12。',
+  'optiscaler-remothered-red-nuns-legacy-reflex-fsr-fg':
+    '无需伪装显卡即可使用 NVIDIA Reflex。可通过虚幻引擎配置强制启用 FSR 帧生成。',
+  'optiscaler-scp-project-pneuma-demo-xefg-streamline-crash':
+    '无需伪装显卡即可使用 NVIDIA Reflex。通过 Streamline 使用 DLSS 时，XeFG 帧生成会导致游戏崩溃。',
+  'optiscaler-persona-3-reload-p3r-enhanced':
+    '此游戏需要 huutaiii 的 P3R Enhanced 模组才能与 OptiScaler 配合使用。',
+  'optiscaler-mortal-shell-ii-dlssg-streamline':
+    '通过 Streamline 使用 DLSSG 时，可能需要在 Unreal Engine 配置的 [ConsoleVariables] 部分设置 r.Streamline.Load.DLSSG=1。',
 });

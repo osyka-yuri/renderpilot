@@ -68,14 +68,8 @@ export const lumaOverrides = defineLocalizedCatalog<'ja', LumaSourceCatalog>()({
   'luma.kingdom-hearts-3.game_setting': 'ゲーム設定:「TXAA」を選択してください。',
   'luma.lara-croft-temple-of-osiris.compatibility': 'Xbox Store 版とは互換性がありません。',
   'luma.littlenightmaresiii.compatibility': 'DirectX 11 モードでは起動しません。',
-  'luma.mass-effect-andromeda.compatibility':
-    '利用できるのは DLAA / FSR 3 Native AA モードのみで、DLSS または FSR の超解像ではありません。',
   'luma.masterdetectivearchivesraincodeplus.game_setting':
     'ゲーム設定: AA 品質「High」および最大解像度スライダーを設定してください。',
-  'luma.metro-2033-redux.warning':
-    'ウィンドウまたはボーダーレスモードが必要です。MOD を使用するか、ゲーム設定ファイルでフルスクリーンを無効化してください。',
-  'luma.metro-2033-redux.windowed_borderless_only':
-    'ボーダーレスウィンドウモードを使用してください。',
   'luma.middle-earth-shadow-of-war.dlss-only':
     'このプロファイルは DLSS のみをサポートしています（現在 HDR には非対応）。',
   'luma.mothergunship.engine_ini': '次の設定を Engine.ini に手動で適用してください。',
@@ -135,4 +129,11 @@ export const lumaOverrides = defineLocalizedCatalog<'ja', LumaSourceCatalog>()({
     '時間的なちらつきを減らすには、次の設定を Engine.ini に適用してください。',
   'luma.song-of-nunu.warning':
     '植生や非常に細かいディテールで目立つちらつきが発生する場合があります。',
+  'luma.mafia-definitive-edition.warning':
+    'このプロファイルは DLAA のみをサポートし（HDR 非対応）、NVIDIA RTX GPU が必要です。ゲーム内設定でアンチエイリアスを Low に設定してください。',
+  'luma.metal-gear-solid-v-the-phantom-pain.warning':
+    'このプロファイルはアップスケーリング（FSR 4、FSR 3 または DLSS）のみをサポートしています（HDR 非対応）。ゲーム内設定でモーションブラーを有効にし、ポストプロセッシングを High 以上に設定してください。',
+  'luma.saints-row-the-third-remastered.game_setting':
+    'ゲーム内設定で、DLAA または FSR 3 の場合はアンチエイリアスを TAA に、SMAA の場合は FXAA に設定してください。XeGTAO を使用するにはアンビエントオクルージョンを有効にしてください。',
+  'luma.the-ascent.compatibility': '2026 年のゲームパッチ適用後は、このアドオンは不要です。',
 });

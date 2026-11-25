@@ -4,9 +4,17 @@ import { defineLocalizedCatalog } from '../../contract';
 import type { RenoDxSourceCatalog } from './contract.generated';
 
 export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>()({
+  'renodx.batman-arkham-city-goty.directx11': 'Включите DirectX 11 в настройках лаунчера игры.',
+  'renodx.batman-arkham-city-goty.dlaa_helper':
+    'RenderPilot устанавливает только HDR-аддон (renodx-batmanac.addon32). Опциональный вспомогательный файл DLAA/FSR (renodx-batmanac-dlaa-host64.exe) и внешние DLL-библиотеки апскейлеров необходимо установить вручную из релиза на GitHub.',
   'renodx.black_myth_wukong.hdr':
     'В Engine.ini добавьте этот параметр для расширенного HDR-пути Unreal Engine.',
+  'renodx.blocked.broken_mod': 'Мод RenoDX не работает с этой игрой.',
+  'renodx.blocked.custom_rendering': 'Нестандартный рендеринг препятствует работе мода RenoDX.',
+  'renodx.blocked.output_limited':
+    'Выходные значения HDR ограничены, что снижает эффективность RenoDX.',
   'renodx.external.discord': 'Получите аддон из Discord, затем установите загруженный файл.',
+  'renodx.external.github': 'Скачайте аддон с GitHub, затем установите загруженный файл.',
   'renodx.external.nexus': 'Скачайте аддон с Nexus Mods, затем установите загруженный файл.',
   'renodx.generic.ue_extended': 'Использует общий профиль Unreal Engine Extended.',
   'renodx.generic.unity': 'Использует общий профиль движка Unity.',
@@ -20,7 +28,15 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
     'Установите ReShade в каталог игры Atlas Fallen\\bin.',
   'renodx.main.atlas.fallen.reign.of.sand.dx12.2':
     'FSR 2 может приводить к вылетам при использовании этого мода.',
+  'renodx.main.call.of.duty.black.ops.cold.war.1':
+    'Во время использования этого мода избегайте сетевого режима из-за риска блокировки аккаунта.',
+  'renodx.main.call.of.duty.black.ops.ii.1':
+    'Во время использования этого мода избегайте сетевого режима из-за риска блокировки аккаунта.',
+  'renodx.main.call.of.duty.ghosts.1':
+    'Во время использования этого мода избегайте сетевого режима из-за риска блокировки аккаунта.',
   'renodx.main.clive.barker.s.jericho.1': 'В этой сборке вывод ACES сейчас работает некорректно.',
+  'renodx.main.counter.strike.source.1':
+    'На некоторых моделях возможны визуальные артефакты, а карты, использующие только LDR, могут выглядеть пересвеченными.',
   'renodx.main.crimson.desert.enhanced.1':
     'Частые обновления игры могут нарушать работу мода; проверяйте совместимость после каждого обновления.',
   'renodx.main.days.gone.1':
@@ -31,9 +47,13 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
     'После установки мода удалите shader.cache2 из каталога игры, чтобы избежать подёргиваний из-за компиляции шейдеров.',
   'renodx.main.forza.horizon.6.1':
     'Нативный HDR игры уже работает хорошо; этот мод предлагает альтернативный вариант отображения, а не исправляет HDR.',
-  'renodx.main.ninja.gaiden.4.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
+  'renodx.main.garry.s.mod.1':
+    'RenderPilot автоматически устанавливает только 32-битный аддон. Для ветки x86-64 необходимо вручную установить renodx-sourceengine.addon64 и прокси-DLL DXVK.',
+  'renodx.main.left.4.dead.1':
+    'На некоторых моделях возможны визуальные артефакты, а карты, использующие только LDR, могут выглядеть пересвеченными.',
   'renodx.main.ninja.gaiden.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
   'renodx.main.ninja.gaiden.2.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
+  'renodx.main.ninja.gaiden.4.1': 'Для этого мода требуется NinjaGaidenMCFix от Lyall.',
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1':
     'Отключите оверлей Steam. Если проблемы сохраняются, отключите и другие оверлеи.',
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1':
@@ -49,6 +69,8 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
     'Мод считается пригодным для игры, но требует более тщательного игрового тестирования.',
   'renodx.main.trackmania.1':
     'HDR работает хорошо, но некоторые меню кастомизации отображаются с ошибками.',
+  'renodx.main.warframe.1':
+    'Некоторые пользователи сообщали о блокировке аккаунта при использовании этого мода, однако связь с RenoDX не подтверждена.',
   'renodx.main.yakuza.kiwami.1.1':
     'Эта сборка разрабатывалась преимущественно для Yakuza 0; поддержка Yakuza Kiwami является вторичной.',
   'renodx.page.hdr.disable-double-tonemapping':
@@ -62,11 +84,16 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
     'Эта конфигурация прошла лишь ограниченное игровое тестирование.',
   'renodx.ue.extended.abiotic.factor.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.assetto.corsa.competizione.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.assetto.corsa.competizione.2':
+    'Загрузитесь непосредственно в игровой процесс, чтобы переключение нативного HDR вступило в силу.',
   'renodx.ue.extended.assetto.corsa.rally.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.astroneer.1': 'Ошибки цветокоррекции и мерцание всё ещё могут возникать.',
   'renodx.ue.extended.bodycam.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.borderlands.4.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.broken.pieces.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.chained.together.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.chained.together.2':
@@ -74,15 +101,21 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.ue.extended.choo.choo.charles.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.chromatic.conundrum.1':
-    'Upgrade Path несовместим с этой игрой и вызывает ошибки рендеринга.',
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.conan.exiles.enhanced.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.crab.champions.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.cthulu.the.cosmin.abyss.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.dead.as.disco.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.deep.rock.galactic.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.deep.rock.galactic.rogue.core.2':
     'Оставьте нативный HDR игры выключенным: нативный HDR-путь работает некорректно.',
+  'renodx.ue.extended.destroy.all.humans.2.reprobed.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.directive.8020.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.escape.the.backrooms.2':
     'Эта конфигурация прошла лишь ограниченное игровое тестирование.',
   'renodx.ue.extended.everwind.1':
@@ -90,8 +123,15 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.ue.extended.far.far.west.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.frostpunk.2.1':
     'В этой игре ползунок яркости интерфейса RenoDX регулирует уровень эталонного белого (Paper White).',
+  'renodx.ue.extended.garfield.escape.from.monday.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.gears.of.war.e.day.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.gears.of.war.e.day.2': 'Отключите Easy Anti-Cheat перед использованием мода.',
   'renodx.ue.extended.grounded.2.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.half.sword.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.halo.campaign.evolved.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.hellblade.ii.senua.s.saga.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.hellblade.ii.senua.s.saga.2':
     'В этой игре изменения ползунков RenoDX применяются не в реальном времени.',
@@ -115,6 +155,11 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.ue.extended.lies.of.p.3':
     'Эта конфигурация прошла лишь ограниченное игровое тестирование.',
   'renodx.ue.extended.little.nightmares.ii.1': 'Проблемы с цветокоррекцией сохраняются.',
+  'renodx.ue.extended.lost.soul.aside.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.luto.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.luto.2':
+    'Интерфейс и некоторые графические эффекты вызывают ошибки тонального отображения; данная конфигурация прошла ограниченное тестирование.',
   'renodx.ue.extended.mafia.the.old.country.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.marsupilami.2.salsa.palombia.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
@@ -142,20 +187,36 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.ue.extended.satisfactory.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.sifu.1': 'В части контента пиковая яркость остаётся ограниченной.',
+  'renodx.ue.extended.silent.hill.townfall.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.solarpunk.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.song.of.nunu.a.league.of.legends.story.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.star.wars.galactic.racertm.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.star.wars.jedi.fallen.ordertm.1':
+    'Используйте специальный мод Luma Framework для полной коррекции.',
   'renodx.ue.extended.star.wars.zero.companytm.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.stellar.blade.1': 'Отключите нативный HDR в игре.',
+  'renodx.ue.extended.still.wakes.the.deep.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.still.wakes.the.deep.2':
+    'В этой игре изменения ползунков RenoDX применяются не в реальном времени.',
   'renodx.ue.extended.subnautica.2.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.system.shock.remake.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.the.blood.of.dawnwalker.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.the.chant.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
+  'renodx.ue.extended.the.chant.2': 'Запустите игру с параметром DirectX 11.',
   'renodx.ue.extended.the.enjenir.the.engineering.physics.building.simulator.1':
     'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.the.idolm.ster.starlit.season.2':
     'Освещение в некоторых сценах общения и на сцене остаётся ограниченным по яркости или не создаёт HDR-хайлайтов.',
+  'renodx.ue.extended.the.midnight.walk.1':
+    'Добавьте эти настройки в Engine.ini для расширенного HDR-пути Unreal Engine.',
   'renodx.ue.extended.tokyo.xtreme.racer.1': 'Включите нативный HDR в игре.',
+  'renodx.ue.extended.tormented.souls.2.1': 'Отключите нативный HDR в игре.',
   'renodx.ue.extended.until.dawn.1': 'Включите нативный HDR в игре.',
   'renodx.ue.extended.what.remains.of.edith.finch.1':
     'Если HDR обрезается при высоком масштабировании DPI, временно установите масштаб Windows на 100%, запустите игру один раз, затем верните прежний масштаб.',
@@ -170,6 +231,7 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.unity.biped.1':
     'Загрузите сохранение, чтобы обновить тонмаппинг и цветокоррекцию после изменения ползунков.',
   'renodx.unity.cloverpit.1': 'Запустите игру в режиме DirectX 11.',
+  'renodx.unity.database.detective.minor.crimes.1': 'Эта игра не задействует возможности HDR.',
   'renodx.unity.deadcore.redux.demo.2':
     'Изменения тонмаппинга и цветокоррекции отображаются не в реальном времени.',
   'renodx.unity.dragon.quest.builders.1':
@@ -194,6 +256,9 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.unity.hollow.cocoon.2': 'Установите качество рендеринга в игре на 100%.',
   'renodx.unity.house.flipper.2.2':
     'Измените настройку насыщенности в игре, чтобы обновить тонмаппинг и цветокоррекцию.',
+  'renodx.unity.i.have.no.mouth.and.i.must.scream.2':
+    'В части контента пиковая яркость остаётся ограниченной.',
+  'renodx.unity.inside.1': 'Используйте специальный мод Luma Framework для полной коррекции.',
   'renodx.unity.jotunnslayer.hordes.of.hel.2':
     'Изменения тонмаппинга и цветокоррекции отображаются не в реальном времени.',
   'renodx.unity.keywe.1':
@@ -201,6 +266,7 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.unity.mouthwashing.1': 'Используйте режим экрана Borderless.',
   'renodx.unity.my.friend.pedro.2':
     'Перезапустите уровень, чтобы обновить тонмаппинг и цветокоррекцию.',
+  'renodx.unity.my.summer.car.2': 'Отключите нативный HDR в игре.',
   'renodx.unity.necropolis.brutal.edition.1':
     'Загружайте ReShade через Ultimate ASI Loader для этой 32-битной игры.',
   'renodx.unity.oddworld.soulstorm.enhanced.edition.2':
@@ -210,6 +276,9 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.unity.outer.wilds.1':
     'Изменения тонмаппинга и цветокоррекции отображаются не в реальном времени.',
   'renodx.unity.peak.1': 'Запустите игру с параметром DirectX 11.',
+  'renodx.unity.phasmophobia.1': 'Эта конфигурация прошла лишь ограниченное игровое тестирование.',
+  'renodx.unity.phoenix.wright.ace.attorney.trilogy.2': 'Эта игра не задействует возможности HDR.',
+  'renodx.unity.pony.island.2': 'В части контента пиковая яркость остаётся ограниченной.',
   'renodx.unity.prince.of.persia.the.lost.crown.1':
     'В этой игре RenoDX не может влиять на цветокоррекцию помимо параметров Peak и UI Brightness.',
   'renodx.unity.prince.of.persia.the.lost.crown.2':
@@ -222,23 +291,33 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
     'Фон меню паузы отображается с ошибками.',
   'renodx.unity.shadows.awakening.1':
     'Изменения тонмаппинга и цветокоррекции отображаются не в реальном времени.',
+  'renodx.unity.silver.pines.1':
+    'При первом запуске главное меню может мерцать до создания файла сохранения.',
   'renodx.unity.skate.story.2': 'Отключите нативный HDR в игре.',
   'renodx.unity.sker.ritual.2':
     'Откройте настройки графики игры и нажмите «Применить», чтобы обновить тонмаппинг и цветокоррекцию.',
   'renodx.unity.summoner.s.war.chronicles.1': 'Включите свечение (bloom) в настройках игры.',
   'renodx.unity.tales.of.berseria.remastered.2':
     'Коррекция также затрагивает анимационные видеовставки (FMV).',
+  'renodx.unity.the.room.2': 'Эта конфигурация прошла лишь ограниченное игровое тестирование.',
+  'renodx.unity.the.wandering.village.2': 'Изображение может выглядеть довольно тусклым.',
   'renodx.unity.towaga.among.shadows.2': 'Включите постобработку в настройках игры.',
   'renodx.unity.trailmakers.1': 'Включите постобработку на любом уровне качества.',
   'renodx.unity.trailmakers.2': 'Включите опцию Internal HDR в настройках игры.',
   'renodx.unity.turbo.golf.racing.1': 'Включите постобработку в настройках графики игры.',
+  'renodx.unity.ultimate.chicken.horse.2':
+    'В части контента пиковая яркость остаётся ограниченной.',
   'renodx.unity.ultros.1': 'Включите цветокоррекцию в настройках игры.',
+  'renodx.unity.untitled.goose.game.2': 'В части контента пиковая яркость остаётся ограниченной.',
   'renodx.unity.v.rising.1':
     'В одиночной игре откройте и закройте меню паузы или настроек, чтобы обновить LUT.',
   'renodx.unity.v.rising.2':
     'В сетевой игре встаньте на солнце или откройте Графика > Калибровка яркости и подтвердите значение по умолчанию 50, чтобы обновить LUT.',
+  'renodx.unity.vampire.survivors.2': 'В части контента пиковая яркость остаётся ограниченной.',
   'renodx.unity.viewfinder.2': 'Включите постобработку в настройках игры.',
   'renodx.unity.void.crew.2': 'DLSS ограничивает цветовое пространство до BT.709.',
+  'renodx.unity.wicked.seed.2': 'Используйте режим «В окне без рамки» (Borderless Windowed).',
+  'renodx.unity.wicked.seed.3': 'Установите масштаб разрешения в игре на 100 %.',
   'renodx.unity.windowed':
     'Избегайте эксклюзивного полноэкранного режима; используйте режим «В окне без рамки» или оконный.',
   'renodx.unity.wizard.with.a.gun.2':
@@ -288,7 +367,6 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.unreal.lords.of.the.fallen.2023.1': 'Отключите нативный HDR в игре.',
   'renodx.unreal.lords.of.the.fallen.2023.2':
     'Отключите Easy Anti-Cheat перед использованием мода.',
-  'renodx.unreal.lost.soul.aside.1': 'Отключите нативный HDR в игре.',
   'renodx.unreal.marvel.s.midnight.suns.1': 'Отключите нативный HDR в игре.',
   'renodx.unreal.metal.eden.1':
     'В главном меню и на экране возрождения могут возникать графические артефакты.',
@@ -323,9 +401,6 @@ export const renodxOverrides = defineLocalizedCatalog<'ru', RenoDxSourceCatalog>
   'renodx.unreal.split.fiction.1': 'Отключите нативный HDR в игре.',
   'renodx.unreal.split.fiction.2':
     'Для применения изменений ползунков может потребоваться смена сцены.',
-  'renodx.unreal.stellar.blade.1': 'Отключите нативный HDR в игре.',
-  'renodx.unreal.stellar.blade.2':
-    'На ультрашироких мониторах используйте соотношение сторон «Авто», чтобы избежать проблем в мини-игре NIKKE.',
   'renodx.unreal.tales.of.arise.1': 'Свечение (bloom) иногда может отображаться некорректно.',
   'renodx.unreal.tales.of.arise.2':
     'Режимы SMAA и SMAA + TAA не поддерживаются; используйте TAA или отключите сглаживание.',

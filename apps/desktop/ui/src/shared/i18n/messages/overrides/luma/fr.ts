@@ -80,13 +80,8 @@ export const lumaOverrides = defineLocalizedCatalog<'fr', LumaSourceCatalog>()({
   'luma.kingdom-hearts-3.game_setting': 'Dans les paramètres du jeu, utilisez : « TXAA ».',
   'luma.lara-croft-temple-of-osiris.compatibility': 'Incompatible avec la version Xbox Store.',
   'luma.littlenightmaresiii.compatibility': 'Ne se lance pas en mode DirectX 11.',
-  'luma.mass-effect-andromeda.compatibility':
-    'Seuls les modes DLAA / FSR 3 Native AA sont disponibles ; il ne s’agit pas de super-résolution DLSS ou FSR.',
   'luma.masterdetectivearchivesraincodeplus.game_setting':
     'Dans les paramètres du jeu, utilisez : qualité d’AA « High » et curseur de résolution au maximum.',
-  'luma.metro-2033-redux.warning':
-    'Nécessite le mode fenêtré ou sans bordures, configuré via des mods ou en désactivant le plein écran dans la configuration du jeu.',
-  'luma.metro-2033-redux.windowed_borderless_only': 'Utilisez le mode fenêtré sans bordures.',
   'luma.middle-earth-shadow-of-war.dlss-only':
     'Ce profil prend en charge uniquement le DLSS ; le HDR n’est pas pris en charge actuellement.',
   'luma.mothergunship.engine_ini':
@@ -165,4 +160,12 @@ export const lumaOverrides = defineLocalizedCatalog<'fr', LumaSourceCatalog>()({
     'Pour réduire le scintillement temporel, appliquez le paramètre suivant dans Engine.ini.',
   'luma.song-of-nunu.warning':
     'Un scintillement visible peut apparaître dans la végétation et les très petits détails.',
+  'luma.mafia-definitive-edition.warning':
+    'Ce profil prend en charge uniquement le DLAA (sans HDR) et nécessite un GPU NVIDIA RTX. Dans les paramètres du jeu, réglez l’anticrénelage sur Faible.',
+  'luma.metal-gear-solid-v-the-phantom-pain.warning':
+    'Ce profil prend en charge uniquement la mise à l’échelle (FSR 4, FSR 3 ou DLSS) ; le HDR n’est pas pris en charge. Dans les paramètres du jeu, activez le Motion Blur et réglez le Post-Processing sur High ou supérieur.',
+  'luma.saints-row-the-third-remastered.game_setting':
+    'Dans les paramètres du jeu, réglez l’anticrénelage sur TAA pour le DLAA ou le FSR 3, ou sur FXAA pour le SMAA. Activez l’Ambient Occlusion pour utiliser XeGTAO.',
+  'luma.the-ascent.compatibility':
+    'Cette extension n’est plus nécessaire après le patch du jeu de 2026.',
 });

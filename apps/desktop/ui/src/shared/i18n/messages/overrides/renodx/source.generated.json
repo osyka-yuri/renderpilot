@@ -2,14 +2,50 @@
   "schemaVersion": 1,
   "messages": [
     {
+      "id": "renodx.batman-arkham-city-goty.directx11",
+      "sourceText": "Enable DirectX 11 in the game's launcher settings.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.batman-arkham-city-goty.dlaa_helper",
+      "sourceText": "RenderPilot installs only the HDR add-on (renodx-batmanac.addon32). The optional DLAA/FSR helper executable (renodx-batmanac-dlaa-host64.exe) and external upscaler DLLs must be installed manually from the GitHub release.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
       "id": "renodx.black_myth_wukong.hdr",
       "sourceText": "In Engine.ini, add this setting for the UE Extended HDR path.",
       "kind": "engine_ini",
       "context": "guidance.engine_ini"
     },
     {
+      "id": "renodx.blocked.broken_mod",
+      "sourceText": "The RenoDX mod does not work with this game.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.blocked.custom_rendering",
+      "sourceText": "Custom rendering prevents the RenoDX mod from working.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.blocked.output_limited",
+      "sourceText": "HDR output is clamped, limiting the effectiveness of RenoDX.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
       "id": "renodx.external.discord",
       "sourceText": "Get the add-on from Discord, then install the downloaded file.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.external.github",
+      "sourceText": "Get the add-on from GitHub, then install the downloaded file.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
     },
@@ -62,10 +98,34 @@
       "context": "guidance.warning"
     },
     {
+      "id": "renodx.main.call.of.duty.black.ops.cold.war.1",
+      "sourceText": "Avoid multiplayer while using this mod due to a potential account ban.",
+      "kind": "warning",
+      "context": "guidance.warning"
+    },
+    {
+      "id": "renodx.main.call.of.duty.black.ops.ii.1",
+      "sourceText": "Avoid multiplayer while using this mod due to a potential account ban.",
+      "kind": "warning",
+      "context": "guidance.warning"
+    },
+    {
+      "id": "renodx.main.call.of.duty.ghosts.1",
+      "sourceText": "Avoid multiplayer while using this mod due to a potential account ban.",
+      "kind": "warning",
+      "context": "guidance.warning"
+    },
+    {
       "id": "renodx.main.clive.barker.s.jericho.1",
       "sourceText": "ACES output is currently broken in this build.",
       "kind": "warning",
       "context": "guidance.warning"
+    },
+    {
+      "id": "renodx.main.counter.strike.source.1",
+      "sourceText": "Some models have visual glitches, and maps using only LDR can appear overexposed.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
     },
     {
       "id": "renodx.main.crimson.desert.enhanced.1",
@@ -98,10 +158,16 @@
       "context": "guidance.compatibility"
     },
     {
-      "id": "renodx.main.ninja.gaiden.4.1",
-      "sourceText": "This mod requires Lyall's NinjaGaidenMCFix.",
-      "kind": "external_tool",
-      "context": "guidance.external_tool"
+      "id": "renodx.main.garry.s.mod.1",
+      "sourceText": "RenderPilot only installs the 32-bit add-on automatically. The x86-64 branch requires manual installation of renodx-sourceengine.addon64 and a DXVK proxy DLL.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.main.left.4.dead.1",
+      "sourceText": "Some models have visual glitches, and maps using only LDR can appear overexposed.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
     },
     {
       "id": "renodx.main.ninja.gaiden.1",
@@ -111,6 +177,12 @@
     },
     {
       "id": "renodx.main.ninja.gaiden.2.1",
+      "sourceText": "This mod requires Lyall's NinjaGaidenMCFix.",
+      "kind": "external_tool",
+      "context": "guidance.external_tool"
+    },
+    {
+      "id": "renodx.main.ninja.gaiden.4.1",
       "sourceText": "This mod requires Lyall's NinjaGaidenMCFix.",
       "kind": "external_tool",
       "context": "guidance.external_tool"
@@ -164,6 +236,12 @@
       "context": "guidance.compatibility"
     },
     {
+      "id": "renodx.main.warframe.1",
+      "sourceText": "Some users have reported account bans while using this mod, though whether RenoDX caused them is unconfirmed.",
+      "kind": "warning",
+      "context": "guidance.warning"
+    },
+    {
       "id": "renodx.main.yakuza.kiwami.1.1",
       "sourceText": "This build was primarily designed for Yakuza 0; Yakuza Kiwami support is secondary.",
       "kind": "compatibility",
@@ -206,6 +284,18 @@
       "context": "guidance.engine_ini"
     },
     {
+      "id": "renodx.ue.extended.assetto.corsa.competizione.1",
+      "sourceText": "Enable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.assetto.corsa.competizione.2",
+      "sourceText": "Load into gameplay for the native HDR toggle to take effect.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
       "id": "renodx.ue.extended.assetto.corsa.rally.1",
       "sourceText": "Enable the game's native HDR.",
       "kind": "game_setting",
@@ -230,6 +320,12 @@
       "context": "guidance.game_setting"
     },
     {
+      "id": "renodx.ue.extended.broken.pieces.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
       "id": "renodx.ue.extended.chained.together.1",
       "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
       "kind": "engine_ini",
@@ -249,9 +345,9 @@
     },
     {
       "id": "renodx.ue.extended.chromatic.conundrum.1",
-      "sourceText": "Upgrade Path is incompatible with this title and causes broken rendering.",
-      "kind": "warning",
-      "context": "guidance.warning"
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
     },
     {
       "id": "renodx.ue.extended.conan.exiles.enhanced.1",
@@ -261,6 +357,12 @@
     },
     {
       "id": "renodx.ue.extended.crab.champions.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.cthulu.the.cosmin.abyss.1",
       "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
       "kind": "engine_ini",
       "context": "guidance.engine_ini"
@@ -282,6 +384,18 @@
       "sourceText": "Keep the game's native HDR disabled; its native HDR path is broken.",
       "kind": "game_setting",
       "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.destroy.all.humans.2.reprobed.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.directive.8020.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
     },
     {
       "id": "renodx.ue.extended.escape.the.backrooms.2",
@@ -308,10 +422,40 @@
       "context": "guidance.compatibility"
     },
     {
+      "id": "renodx.ue.extended.garfield.escape.from.monday.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.gears.of.war.e.day.1",
+      "sourceText": "Enable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.gears.of.war.e.day.2",
+      "sourceText": "Disable Easy Anti-Cheat before using the mod.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
       "id": "renodx.ue.extended.grounded.2.1",
       "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
       "kind": "engine_ini",
       "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.half.sword.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.halo.campaign.evolved.1",
+      "sourceText": "Enable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
     },
     {
       "id": "renodx.ue.extended.hellblade.ii.senua.s.saga.1",
@@ -394,6 +538,24 @@
     {
       "id": "renodx.ue.extended.little.nightmares.ii.1",
       "sourceText": "Color-grading issues remain.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.ue.extended.lost.soul.aside.1",
+      "sourceText": "Enable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.luto.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.luto.2",
+      "sourceText": "UI and some graphical effects cause tonemapping issues; this configuration has limited playtesting.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
     },
@@ -488,16 +650,58 @@
       "context": "guidance.compatibility"
     },
     {
+      "id": "renodx.ue.extended.silent.hill.townfall.1",
+      "sourceText": "Enable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
       "id": "renodx.ue.extended.solarpunk.1",
       "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
       "kind": "engine_ini",
       "context": "guidance.engine_ini"
     },
     {
+      "id": "renodx.ue.extended.song.of.nunu.a.league.of.legends.story.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.star.wars.galactic.racertm.1",
+      "sourceText": "Enable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.star.wars.jedi.fallen.ordertm.1",
+      "sourceText": "Use the dedicated Luma Framework mod for full correction.",
+      "kind": "external_tool",
+      "context": "guidance.external_tool"
+    },
+    {
       "id": "renodx.ue.extended.star.wars.zero.companytm.1",
       "sourceText": "Enable the game's native HDR.",
       "kind": "game_setting",
       "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.stellar.blade.1",
+      "sourceText": "Disable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.still.wakes.the.deep.1",
+      "sourceText": "Enable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.still.wakes.the.deep.2",
+      "sourceText": "RenoDX slider changes do not apply in real time in this game.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
     },
     {
       "id": "renodx.ue.extended.subnautica.2.1",
@@ -518,6 +722,18 @@
       "context": "guidance.engine_ini"
     },
     {
+      "id": "renodx.ue.extended.the.chant.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
+      "id": "renodx.ue.extended.the.chant.2",
+      "sourceText": "Launch the game with DirectX 11.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
       "id": "renodx.ue.extended.the.enjenir.the.engineering.physics.building.simulator.1",
       "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
       "kind": "engine_ini",
@@ -530,8 +746,20 @@
       "context": "guidance.compatibility"
     },
     {
+      "id": "renodx.ue.extended.the.midnight.walk.1",
+      "sourceText": "Add these settings to Engine.ini for the UE Extended HDR path.",
+      "kind": "engine_ini",
+      "context": "guidance.engine_ini"
+    },
+    {
       "id": "renodx.ue.extended.tokyo.xtreme.racer.1",
       "sourceText": "Enable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.ue.extended.tormented.souls.2.1",
+      "sourceText": "Disable the game's native HDR.",
       "kind": "game_setting",
       "context": "guidance.game_setting"
     },
@@ -586,6 +814,12 @@
     {
       "id": "renodx.unity.cloverpit.1",
       "sourceText": "Launch the game's DirectX 11 option.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.database.detective.minor.crimes.1",
+      "sourceText": "This game does not make use of HDR.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
     },
@@ -668,6 +902,18 @@
       "context": "guidance.compatibility"
     },
     {
+      "id": "renodx.unity.i.have.no.mouth.and.i.must.scream.2",
+      "sourceText": "Peak brightness remains limited in some content.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.inside.1",
+      "sourceText": "Use the dedicated Luma Framework mod for full correction.",
+      "kind": "external_tool",
+      "context": "guidance.external_tool"
+    },
+    {
       "id": "renodx.unity.jotunnslayer.hordes.of.hel.2",
       "sourceText": "Tonemapping and color-grading changes do not appear in real time.",
       "kind": "compatibility",
@@ -690,6 +936,12 @@
       "sourceText": "Restart the level to refresh tonemapping and color grading.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.my.summer.car.2",
+      "sourceText": "Disable the game's native HDR.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
     },
     {
       "id": "renodx.unity.necropolis.brutal.edition.1",
@@ -718,6 +970,24 @@
     {
       "id": "renodx.unity.peak.1",
       "sourceText": "Launch the game with DirectX 11.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.phasmophobia.1",
+      "sourceText": "This configuration has limited playtesting.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.phoenix.wright.ace.attorney.trilogy.2",
+      "sourceText": "This game does not make use of HDR.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.pony.island.2",
+      "sourceText": "Peak brightness remains limited in some content.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
     },
@@ -758,6 +1028,12 @@
       "context": "guidance.compatibility"
     },
     {
+      "id": "renodx.unity.silver.pines.1",
+      "sourceText": "On first launch, the main menu may flicker before a save file is created.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
       "id": "renodx.unity.skate.story.2",
       "sourceText": "Disable the game's native HDR.",
       "kind": "game_setting",
@@ -778,6 +1054,18 @@
     {
       "id": "renodx.unity.tales.of.berseria.remastered.2",
       "sourceText": "The correction also affects animated FMV cutscenes.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.the.room.2",
+      "sourceText": "This configuration has limited playtesting.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.the.wandering.village.2",
+      "sourceText": "The image may appear relatively dim.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
     },
@@ -806,10 +1094,22 @@
       "context": "guidance.game_setting"
     },
     {
+      "id": "renodx.unity.ultimate.chicken.horse.2",
+      "sourceText": "Peak brightness remains limited in some content.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
       "id": "renodx.unity.ultros.1",
       "sourceText": "Enable color grading in the game settings.",
       "kind": "game_setting",
       "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.unity.untitled.goose.game.2",
+      "sourceText": "Peak brightness remains limited in some content.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
     },
     {
       "id": "renodx.unity.v.rising.1",
@@ -824,6 +1124,12 @@
       "context": "guidance.compatibility"
     },
     {
+      "id": "renodx.unity.vampire.survivors.2",
+      "sourceText": "Peak brightness remains limited in some content.",
+      "kind": "compatibility",
+      "context": "guidance.compatibility"
+    },
+    {
       "id": "renodx.unity.viewfinder.2",
       "sourceText": "Enable post-processing in the game settings.",
       "kind": "game_setting",
@@ -834,6 +1140,18 @@
       "sourceText": "DLSS clamps colors to BT.709.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
+    },
+    {
+      "id": "renodx.unity.wicked.seed.2",
+      "sourceText": "Use Borderless Windowed mode.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
+    },
+    {
+      "id": "renodx.unity.wicked.seed.3",
+      "sourceText": "Set the game's resolution scale to 100%.",
+      "kind": "game_setting",
+      "context": "guidance.game_setting"
     },
     {
       "id": "renodx.unity.windowed",
@@ -1028,12 +1346,6 @@
       "context": "guidance.game_setting"
     },
     {
-      "id": "renodx.unreal.lost.soul.aside.1",
-      "sourceText": "Disable the game's native HDR.",
-      "kind": "game_setting",
-      "context": "guidance.game_setting"
-    },
-    {
       "id": "renodx.unreal.marvel.s.midnight.suns.1",
       "sourceText": "Disable the game's native HDR.",
       "kind": "game_setting",
@@ -1158,18 +1470,6 @@
       "sourceText": "Slider changes may require a scene change before they appear.",
       "kind": "compatibility",
       "context": "guidance.compatibility"
-    },
-    {
-      "id": "renodx.unreal.stellar.blade.1",
-      "sourceText": "Disable the game's native HDR.",
-      "kind": "game_setting",
-      "context": "guidance.game_setting"
-    },
-    {
-      "id": "renodx.unreal.stellar.blade.2",
-      "sourceText": "On ultrawide displays, use the in-game Auto aspect ratio to avoid NIKKE minigame problems.",
-      "kind": "game_setting",
-      "context": "guidance.game_setting"
     },
     {
       "id": "renodx.unreal.tales.of.arise.1",

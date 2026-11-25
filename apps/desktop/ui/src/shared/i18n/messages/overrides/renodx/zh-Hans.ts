@@ -4,8 +4,15 @@ import { defineLocalizedCatalog } from '../../contract';
 import type { RenoDxSourceCatalog } from './contract.generated';
 
 export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCatalog>()({
+  'renodx.batman-arkham-city-goty.directx11': '在游戏的启动器设置中启用 DirectX 11。',
+  'renodx.batman-arkham-city-goty.dlaa_helper':
+    'RenderPilot 仅安装 HDR 插件（renodx-batmanac.addon32）。可选的 DLAA/FSR 辅助可执行文件（renodx-batmanac-dlaa-host64.exe）及外部超分 DLL 需从 GitHub 发布页手动安装。',
   'renodx.black_myth_wukong.hdr': '在 Engine.ini 中，添加此设置以使用 UE Extended HDR 路径。',
+  'renodx.blocked.broken_mod': 'RenoDX Mod 无法在此游戏中运行。',
+  'renodx.blocked.custom_rendering': '非标准自定义渲染导致 RenoDX Mod 无法正常运行。',
+  'renodx.blocked.output_limited': 'HDR 输出受限，从而削弱了 RenoDX 的效果。',
   'renodx.external.discord': '请从 Discord 获取该插件，然后安装下载的文件。',
+  'renodx.external.github': '请从 GitHub 获取该插件，然后安装下载的文件。',
   'renodx.external.nexus': '请从 Nexus Mods 获取该插件，然后安装下载的文件。',
   'renodx.generic.ue_extended': '使用共享的 Unreal Engine Extended 配置文件。',
   'renodx.generic.unity': '使用共享的 Unity 引擎配置文件。',
@@ -16,7 +23,15 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.main.atlas.fallen.reign.of.sand.dx12.1':
     '请将 ReShade 安装到游戏的 Atlas Fallen\\bin 目录中。',
   'renodx.main.atlas.fallen.reign.of.sand.dx12.2': '搭配此 Mod 时 FSR 2 可能会导致崩溃。',
+  'renodx.main.call.of.duty.black.ops.cold.war.1':
+    '由于存在账号被封禁的风险，使用此 Mod 时请避免进入多人模式。',
+  'renodx.main.call.of.duty.black.ops.ii.1':
+    '由于存在账号被封禁的风险，使用此 Mod 时请避免进入多人模式。',
+  'renodx.main.call.of.duty.ghosts.1':
+    '由于存在账号被封禁的风险，使用此 Mod 时请避免进入多人模式。',
   'renodx.main.clive.barker.s.jericho.1': '当前版本中的 ACES 输出存在故障。',
+  'renodx.main.counter.strike.source.1':
+    '部分模型存在画面瑕疵，且仅使用 LDR 的地图可能会显得过曝。',
   'renodx.main.crimson.desert.enhanced.1':
     '游戏频繁更新可能导致 Mod 失效；每次更新后请重新检查兼容性。',
   'renodx.main.days.gone.1': '此专用版本可用，但其 HDR 效果可能仍需优化。',
@@ -25,9 +40,12 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
     '安装 Mod 后，请从游戏目录中删除 shader.cache2 以避免着色器卡顿。',
   'renodx.main.forza.horizon.6.1':
     '游戏的原生 HDR 运行良好；此 Mod 提供的是另一种画面风格而非 HDR 修复。',
-  'renodx.main.ninja.gaiden.4.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
+  'renodx.main.garry.s.mod.1':
+    'RenderPilot 仅会自动安装 32 位插件。x86-64 分支需要手动安装 renodx-sourceengine.addon64 和 DXVK 代理 DLL。',
+  'renodx.main.left.4.dead.1': '部分模型存在画面瑕疵，且仅使用 LDR 的地图可能会显得过曝。',
   'renodx.main.ninja.gaiden.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
   'renodx.main.ninja.gaiden.2.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
+  'renodx.main.ninja.gaiden.4.1': '此 Mod 需要 Lyall 的 NinjaGaidenMCFix。',
   'renodx.main.opus.echo.of.starsong.full.bloom.edition.1':
     '请禁用 Steam 叠加层。如果问题依然存在，请同时禁用其他叠加层。',
   'renodx.main.raidou.remastered.the.mystery.of.the.soulless.army.1':
@@ -38,6 +56,8 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.main.steelrising.1': '当前专用的 Mod 版本存在故障。',
   'renodx.main.the.evil.within.2.1': 'Mod 被视为可游玩，但仍需更广泛的实际测试。',
   'renodx.main.trackmania.1': 'HDR 表现良好，但部分自定义菜单显示异常。',
+  'renodx.main.warframe.1':
+    '部分用户报告在使用此 Mod 期间账号遭到封禁，但是否由 RenoDX 引起尚未证实。',
   'renodx.main.yakuza.kiwami.1.1':
     '此版本主要针对《人中之龙 0》设计；对《人中之龙 极》的支持为次要目标。',
   'renodx.page.hdr.disable-double-tonemapping':
@@ -48,30 +68,47 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.ue.extended.a.way.out.1': '此配置的实际游玩测试较为有限。',
   'renodx.ue.extended.abiotic.factor.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.assetto.corsa.competizione.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.assetto.corsa.competizione.2': '请载入游戏画面，以使原生 HDR 开关生效。',
   'renodx.ue.extended.assetto.corsa.rally.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.astroneer.1': '色彩分级错误和画面闪烁仍可能发生。',
   'renodx.ue.extended.bodycam.1': '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.borderlands.4.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.broken.pieces.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.chained.together.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.chained.together.2': '在此游戏中，RenoDX 滑块更改不会实时生效。',
   'renodx.ue.extended.choo.choo.charles.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
-  'renodx.ue.extended.chromatic.conundrum.1': 'Upgrade Path 与此游戏不兼容，会导致渲染损坏。',
+  'renodx.ue.extended.chromatic.conundrum.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.conan.exiles.enhanced.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.crab.champions.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.cthulu.the.cosmin.abyss.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.dead.as.disco.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.deep.rock.galactic.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.deep.rock.galactic.rogue.core.2':
     '请保持游戏的原生 HDR 处于禁用状态；其原生 HDR 路径存在缺陷。',
+  'renodx.ue.extended.destroy.all.humans.2.reprobed.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.directive.8020.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.escape.the.backrooms.2': '此配置的实际游玩测试较为有限。',
   'renodx.ue.extended.everwind.1': '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.far.far.west.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.frostpunk.2.1':
     '在此游戏中，RenoDX UI 亮度滑块用于控制参考白（Paper White）。',
+  'renodx.ue.extended.garfield.escape.from.monday.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.gears.of.war.e.day.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.gears.of.war.e.day.2': '使用此 Mod 前请禁用 Easy Anti-Cheat。',
   'renodx.ue.extended.grounded.2.1': '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.half.sword.1': '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.halo.campaign.evolved.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.hellblade.ii.senua.s.saga.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.hellblade.ii.senua.s.saga.2': '在此游戏中，RenoDX 滑块更改不会实时生效。',
   'renodx.ue.extended.hellblade.ii.senua.s.saga.3': '此配置的实际游玩测试较为有限。',
@@ -88,6 +125,9 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.ue.extended.lies.of.p.2': '在此游戏中，RenoDX 滑块更改不会实时生效。',
   'renodx.ue.extended.lies.of.p.3': '此配置的实际游玩测试较为有限。',
   'renodx.ue.extended.little.nightmares.ii.1': '色彩分级问题依然存在。',
+  'renodx.ue.extended.lost.soul.aside.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.luto.1': '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.luto.2': 'UI 界面和部分画面特效会导致色调映射问题；此配置仅经过有限测试。',
   'renodx.ue.extended.mafia.the.old.country.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.marsupilami.2.salsa.palombia.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
@@ -112,19 +152,33 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.ue.extended.satisfactory.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.sifu.1': '部分内容中的峰值亮度仍受限制。',
+  'renodx.ue.extended.silent.hill.townfall.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.solarpunk.1': '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.song.of.nunu.a.league.of.legends.story.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.star.wars.galactic.racertm.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.star.wars.jedi.fallen.ordertm.1':
+    '请使用专用的 Luma Framework Mod 以获得完全修正。',
   'renodx.ue.extended.star.wars.zero.companytm.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.stellar.blade.1': '请禁用游戏的原生 HDR。',
+  'renodx.ue.extended.still.wakes.the.deep.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.still.wakes.the.deep.2': '在此游戏中，RenoDX 滑块更改不会实时生效。',
   'renodx.ue.extended.subnautica.2.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.system.shock.remake.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.the.blood.of.dawnwalker.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.the.chant.1': '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
+  'renodx.ue.extended.the.chant.2': '请使用 DirectX 11 启动游戏。',
   'renodx.ue.extended.the.enjenir.the.engineering.physics.building.simulator.1':
     '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.the.idolm.ster.starlit.season.2':
     '部分交流剧情与舞台光照仍受限制，或无法产生 HDR 高光。',
+  'renodx.ue.extended.the.midnight.walk.1':
+    '请将这些设置添加到 Engine.ini 以使用 UE Extended HDR 路径。',
   'renodx.ue.extended.tokyo.xtreme.racer.1': '请启用游戏的原生 HDR。',
+  'renodx.ue.extended.tormented.souls.2.1': '请禁用游戏的原生 HDR。',
   'renodx.ue.extended.until.dawn.1': '请启用游戏的原生 HDR。',
   'renodx.ue.extended.what.remains.of.edith.finch.1':
     '若在高 DPI 缩放下 HDR 受限，请暂时将 Windows 缩放设为 100%，启动一次游戏后再恢复首选缩放。',
@@ -135,6 +189,7 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.unity.bionic.bay.1': '使用此配置文件时，游戏尚无法完全正常游玩。',
   'renodx.unity.biped.1': '更改滑块后，请加载存档点以刷新色调映射和色彩分级。',
   'renodx.unity.cloverpit.1': '请使用 DirectX 11 选项启动游戏。',
+  'renodx.unity.database.detective.minor.crimes.1': '此游戏并未真正利用 HDR 效果。',
   'renodx.unity.deadcore.redux.demo.2': '色调映射和色彩分级的更改不会实时生效。',
   'renodx.unity.dragon.quest.builders.1': '请在游戏内启用泛光；稍后可在 RenoDX 中将其禁用。',
   'renodx.unity.dread.templar.1': '应用或保存 RenoDX 设置会导致游戏崩溃，但设置仍会被保存。',
@@ -148,10 +203,13 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.unity.herdling.1': '请在配置文件中禁用游戏的原生 HDR。',
   'renodx.unity.hollow.cocoon.2': '请将游戏的渲染质量设为 100%。',
   'renodx.unity.house.flipper.2.2': '更改游戏的饱和度设置以刷新色调映射和色彩分级。',
+  'renodx.unity.i.have.no.mouth.and.i.must.scream.2': '部分内容中的峰值亮度仍受限制。',
+  'renodx.unity.inside.1': '请使用专用的 Luma Framework Mod 以获得完全修正。',
   'renodx.unity.jotunnslayer.hordes.of.hel.2': '色调映射和色彩分级的更改不会实时生效。',
   'renodx.unity.keywe.1': '色调映射和色彩分级的更改不会实时生效。',
   'renodx.unity.mouthwashing.1': '请使用无边框显示模式。',
   'renodx.unity.my.friend.pedro.2': '重新开始关卡以刷新色调映射和色彩分级。',
+  'renodx.unity.my.summer.car.2': '请禁用游戏的原生 HDR。',
   'renodx.unity.necropolis.brutal.edition.1':
     '对于此 32 位游戏，请通过 Ultimate ASI Loader 加载 ReShade。',
   'renodx.unity.oddworld.soulstorm.enhanced.edition.2':
@@ -159,6 +217,9 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.unity.order.13.2': '更改游戏内的亮度设置以刷新色调映射和色彩分级。',
   'renodx.unity.outer.wilds.1': '色调映射和色彩分级的更改不会实时生效。',
   'renodx.unity.peak.1': '请使用 DirectX 11 启动游戏。',
+  'renodx.unity.phasmophobia.1': '此配置的实际游玩测试较为有限。',
+  'renodx.unity.phoenix.wright.ace.attorney.trilogy.2': '此游戏并未真正利用 HDR 效果。',
+  'renodx.unity.pony.island.2': '部分内容中的峰值亮度仍受限制。',
   'renodx.unity.prince.of.persia.the.lost.crown.1':
     '在此游戏中，RenoDX 无法在 Peak 和 UI Brightness 之外影响色彩分级。',
   'renodx.unity.prince.of.persia.the.lost.crown.2':
@@ -168,20 +229,28 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
   'renodx.unity.road.redemption.1': '色调映射和色彩分级的更改不会实时生效。',
   'renodx.unity.ruined.king.a.league.of.legends.storytm.1': '暂停菜单背景显示异常。',
   'renodx.unity.shadows.awakening.1': '色调映射和色彩分级的更改不会实时生效。',
+  'renodx.unity.silver.pines.1': '首次启动时，创建存档前主菜单可能会闪烁。',
   'renodx.unity.skate.story.2': '请禁用游戏的原生 HDR。',
   'renodx.unity.sker.ritual.2': '打开游戏的图形设置并选择“应用”，以刷新色调映射和色彩分级。',
   'renodx.unity.summoner.s.war.chronicles.1': '请在游戏设置中启用泛光（Bloom）。',
   'renodx.unity.tales.of.berseria.remastered.2': '此修正也会影响动画形式的 FMV 过场。',
+  'renodx.unity.the.room.2': '此配置的实际游玩测试较为有限。',
+  'renodx.unity.the.wandering.village.2': '画面整体可能会显得偏暗。',
   'renodx.unity.towaga.among.shadows.2': '请在游戏设置中启用后处理。',
   'renodx.unity.trailmakers.1': '请在任意质量级别下启用后处理。',
   'renodx.unity.trailmakers.2': '请在游戏设置中启用 Internal HDR。',
   'renodx.unity.turbo.golf.racing.1': '请在游戏的图形设置中启用后处理。',
+  'renodx.unity.ultimate.chicken.horse.2': '部分内容中的峰值亮度仍受限制。',
   'renodx.unity.ultros.1': '请在游戏设置中启用色彩分级。',
+  'renodx.unity.untitled.goose.game.2': '部分内容中的峰值亮度仍受限制。',
   'renodx.unity.v.rising.1': '单人游戏时，切换暂停或选项菜单以刷新 LUT。',
   'renodx.unity.v.rising.2':
     '多人游戏时，站在阳光下或打开“图形”>“校准亮度”并确认默认值 50 以刷新 LUT。',
+  'renodx.unity.vampire.survivors.2': '部分内容中的峰值亮度仍受限制。',
   'renodx.unity.viewfinder.2': '请在游戏设置中启用后处理。',
   'renodx.unity.void.crew.2': 'DLSS 会将颜色限制在 BT.709 范围内。',
+  'renodx.unity.wicked.seed.2': '请使用无边框窗口模式。',
+  'renodx.unity.wicked.seed.3': '将游戏内的分辨率缩放比例设为 100%。',
   'renodx.unity.windowed': '请避免使用独占全屏；请使用无边框窗口或窗口模式。',
   'renodx.unity.wizard.with.a.gun.2': '请大幅调高 Highlights 滑块，因为默认高光较暗。',
   'renodx.unreal.bright.memory.infinite.2': '请使用 DirectX 12。',
@@ -217,7 +286,6 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
     '此 Mod 无需资源升级即可运行，不过部分车辆前大灯可能仍会被限制。',
   'renodx.unreal.lords.of.the.fallen.2023.1': '请禁用游戏的原生 HDR。',
   'renodx.unreal.lords.of.the.fallen.2023.2': '使用此 Mod 前请禁用 Easy Anti-Cheat。',
-  'renodx.unreal.lost.soul.aside.1': '请禁用游戏的原生 HDR。',
   'renodx.unreal.marvel.s.midnight.suns.1': '请禁用游戏的原生 HDR。',
   'renodx.unreal.metal.eden.1': '主菜单和重生画面可能会出现画面破损。',
   'renodx.unreal.metal.eden.2': '此配置文件仅在试玩版（Demo）上测试过。',
@@ -241,9 +309,6 @@ export const renodxOverrides = defineLocalizedCatalog<'zh-Hans', RenoDxSourceCat
     '高亮元素受限于 UI 亮度，且 Water Palace 的天空依然过亮。',
   'renodx.unreal.split.fiction.1': '请禁用游戏的原生 HDR。',
   'renodx.unreal.split.fiction.2': '滑块更改可能需要切换场景才能生效。',
-  'renodx.unreal.stellar.blade.1': '请禁用游戏的原生 HDR。',
-  'renodx.unreal.stellar.blade.2':
-    '在超宽屏显示器上，请使用游戏内的“自动”宽高比以避免 NIKKE 小游戏出现问题。',
   'renodx.unreal.tales.of.arise.1': '泛光偶尔可能渲染不正确。',
   'renodx.unreal.tales.of.arise.2': '不支持 SMAA 和 SMAA + TAA；请使用 TAA 或禁用抗锯齿。',
   'renodx.unreal.tales.of.kenzera.zau.1': '使用 XeSS 前请更新 libxess.dll 以避免崩溃。',

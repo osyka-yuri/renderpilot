@@ -302,6 +302,12 @@
       "context": "compatibility"
     },
     {
+      "id": "optiscaler-death-stranding-directors-cut-xess-input",
+      "sourceText": "Prefer XeSS input, as DLSS input may cause image shimmering or crashes.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
       "id": "optiscaler-deconstruction-simulator-fsr4-color-space",
       "sourceText": "When using FSR 4, select the Non-Linear sRGB input color space to fix flashing graphics.",
       "kind": "game_setting",
@@ -914,6 +920,12 @@
       "context": "compatibility"
     },
     {
+      "id": "optiscaler-nier-automata-dlss-mod",
+      "sourceText": "A third-party DLSS mod is required for this game to work with OptiScaler.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
       "id": "optiscaler-elden-ring-erss-fg-mod",
       "sourceText": "The ERSS-FG mod is required as a basis for upscaling and Frame Generation.",
       "kind": "compatibility",
@@ -934,6 +946,72 @@
     {
       "id": "optiscaler-total-war-warhammer-3-warhammer3dlss-mod",
       "sourceText": "The Warhammer3DLSS mod is required for this game to work with OptiScaler.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-gears-of-war-e-day-offline-mode",
+      "sourceText": "OptiScaler can only be used in offline mode and requires an Easy Anti-Cheat (EAC) bypass.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-clair-obscur-expedition-33-ultra-quality",
+      "sourceText": "Avoid the Ultra Quality preset; it can cause severe rendering issues.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-manor-lords-fsr4-color-space",
+      "sourceText": "For FSR 4, select Non-Linear sRGB as the input color space when using XeSS input or DLSS input with a preset other than Balanced.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-nioh-3-boot-crash",
+      "sourceText": "Use XeSS input: DLSS input may revert to FSR and cause the game to crash on startup.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-silent-hill-f-balanced-flicker",
+      "sourceText": "DLSS input may cause flickering with presets such as Balanced; use FSR input instead.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-silent-hill-townfall-display-settings",
+      "sourceText": "Disable Letterboxing and mouse smoothing in the game settings.",
+      "kind": "game_setting",
+      "context": "game_setting"
+    },
+    {
+      "id": "optiscaler-seven-seven-one-upscale-ratio",
+      "sourceText": "The game locks the upscaling preset to Balanced. Use Upscale Ratio Override in OptiScaler to adjust the internal rendering resolution. DX12 cannot be forced.",
+      "kind": "game_setting",
+      "context": "game_setting"
+    },
+    {
+      "id": "optiscaler-remothered-red-nuns-legacy-reflex-fsr-fg",
+      "sourceText": "NVIDIA Reflex is available without spoofing. FSR Frame Generation can be forced through Unreal Engine configuration.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-scp-project-pneuma-demo-xefg-streamline-crash",
+      "sourceText": "NVIDIA Reflex is available without spoofing. XeFG Frame Generation output crashes when using DLSS input via Streamline.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-persona-3-reload-p3r-enhanced",
+      "sourceText": "huutaiii's P3R Enhanced mod is required for this game to work with OptiScaler.",
+      "kind": "compatibility",
+      "context": "compatibility"
+    },
+    {
+      "id": "optiscaler-mortal-shell-ii-dlssg-streamline",
+      "sourceText": "When using DLSSG via Streamline, you may need to set r.Streamline.Load.DLSSG=1 in the [ConsoleVariables] section of the Unreal Engine configuration.",
       "kind": "compatibility",
       "context": "compatibility"
     }
