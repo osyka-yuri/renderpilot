@@ -14,9 +14,10 @@
     store: RenoDxStore;
     /** Global busy flag: any exclusive page-level operation is in flight. */
     busy: boolean;
+    launcher: string;
   };
 
-  const { gameId, store, busy }: Props = $props();
+  const { gameId, store, busy, launcher }: Props = $props();
 
   const externalUrl = $derived(store.externalUrl);
 
@@ -45,7 +46,7 @@
 </script>
 
 {#if store.externalFileInstallable}
-  <RenoDxExternalInstall {gameId} {store} {busy} />
+  <RenoDxExternalInstall {gameId} {store} {busy} {launcher} />
 {:else}
   <AddonStateMessage icon="info" message={t('gameDetails.renodx.external')}>
     {#snippet actions()}

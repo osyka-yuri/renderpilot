@@ -11,7 +11,7 @@
     publishErrorNotification,
     publishPresentedErrorNotification,
   } from '@shared/notifications';
-  import { Button } from '@shared/ui';
+  import { Button, LaunchArgumentsCallout } from '@shared/ui';
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import { RENODX_ATTRIBUTION } from '../model/attribution';
@@ -19,15 +19,17 @@
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
   import { ADDON_EXTENSIONS, isAddonFile } from '../model/validate-addon';
   import RenoDxChannelControl from './RenoDxChannelControl.svelte';
+  import RenoDxGuidanceCallouts from './RenoDxGuidanceCallouts.svelte';
 
   type Props = {
     gameId: string;
     store: RenoDxStore;
     /** Global busy flag: some exclusive operation is already in flight. */
     busy: boolean;
+    launcher: string;
   };
 
-  const { gameId, store, busy }: Props = $props();
+  const { gameId, store, busy, launcher }: Props = $props();
 
   const CONFIDENCE_LABEL_KEY = createConfidenceLabelKeys('gameDetails.renodx');
 
@@ -153,6 +155,9 @@
       valueLabel={t(CONFIDENCE_LABEL_KEY[store.externalConfidence])}
     />
   {/if}
+
+  <RenoDxGuidanceCallouts guidance={store.guidance} />
+  <LaunchArgumentsCallout launch={store.launch} {launcher} />
 
   <p class="text-sm text-muted-foreground">{dropHint}</p>
 

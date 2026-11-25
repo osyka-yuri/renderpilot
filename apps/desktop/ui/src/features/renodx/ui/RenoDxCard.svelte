@@ -168,7 +168,7 @@
       installLabel={t('gameDetails.renodx.actionInstall')}
     />
   {:else if view === 'external'}
-    <RenoDxExternalView {gameId} {store} busy={combinedBusy} />
+    <RenoDxExternalView {gameId} {store} busy={combinedBusy} {launcher} />
   {:else if view === 'native-hdr'}
     <AddonStateMessage icon="hdr" message={t('gameDetails.renodx.nativeHdr')} />
   {:else if view === 'unsupported-settings'}

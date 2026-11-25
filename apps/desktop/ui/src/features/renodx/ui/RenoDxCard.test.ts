@@ -502,6 +502,114 @@ describe('RenoDxCard', () => {
     expect(installButton?.disabled).toBe(true);
     expect(installButton?.querySelector('svg')).not.toBeNull();
   });
+
+  it('renders reviewed guidance callouts for Batman: Arkham City GOTY without synthetic launch flags', async () => {
+    const report = availability({
+      state: { status: 'not_installed' },
+      outcome: {
+        kind: 'external',
+        url: 'https://github.com/ldavid1994/renodx/releases/tag/batmanac-snapshot',
+        message: {
+          id: 'renodx.external.github',
+          fallback_text: 'Get the add-on from GitHub, then install the downloaded file.',
+        },
+        file_install: {
+          confidence: 'verified',
+          host_kind: 'proxy',
+          generic_profile: null,
+          profile_id: 'batman-arkham-city-goty',
+          guidance: [
+            {
+              id: 'renodx.batman-arkham-city-goty.directx11',
+              kind: 'game_setting',
+              message_id: 'renodx.batman-arkham-city-goty.directx11',
+              fallback_text: "Enable DirectX 11 in the game's launcher settings.",
+              settings: [{ name: 'DirectX 11', value: 'On' }],
+              code: null,
+              url: null,
+            },
+            {
+              id: 'renodx.batman-arkham-city-goty.dlaa_helper',
+              kind: 'compatibility',
+              message_id: 'renodx.batman-arkham-city-goty.dlaa_helper',
+              fallback_text:
+                'RenderPilot installs only the HDR add-on (renodx-batmanac.addon32). The optional DLAA/FSR helper executable (renodx-batmanac-dlaa-host64.exe) and external upscaler DLLs must be installed manually from the GitHub release.',
+              settings: [],
+              code: null,
+              url: null,
+            },
+          ],
+          launch: null,
+        },
+      },
+      manual_install: null,
+    });
+    const store = createRenoDxStore({
+      api: fakeApi({ getAvailability: vi.fn(() => Promise.resolve(report)) }),
+    });
+    await store.load('steam:200260');
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'steam:200260',
+        launcher: 'Steam',
+        store,
+        onOpenRenoDxSettings: vi.fn(),
+      },
+    });
+    flushSync();
+
+    expect(target.textContent).toContain('DirectX 11');
+    expect(target.textContent).toContain('On');
+    expect(target.textContent).toContain('renodx-batmanac.addon32');
+    expect(target.textContent).toContain('renodx-batmanac-dlaa-host64.exe');
+    expect(target.textContent).not.toContain('-dx11');
+  });
+
+  it('forwards launcher context to launch instructions on file-installable external views', async () => {
+    const report = availability({
+      state: { status: 'not_installed' },
+      outcome: {
+        kind: 'external',
+        url: 'https://github.com/example/renodx/releases/tag/example',
+        message: {
+          id: 'renodx.external.github',
+          fallback_text: 'Get the add-on from GitHub, then install the downloaded file.',
+        },
+        file_install: {
+          confidence: 'verified',
+          host_kind: 'proxy',
+          generic_profile: null,
+          profile_id: 'external-launch-game',
+          guidance: [],
+          launch: {
+            arguments: ['-dx11'],
+            requirement: 'required',
+          },
+        },
+      },
+      manual_install: null,
+    });
+    const store = createRenoDxStore({
+      api: fakeApi({ getAvailability: vi.fn(() => Promise.resolve(report)) }),
+    });
+    await store.load('steam:123456');
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'steam:123456',
+        launcher: 'Steam',
+        store,
+        onOpenRenoDxSettings: vi.fn(),
+      },
+    });
+    flushSync();
+
+    expect(target.textContent).toContain('-dx11');
+    expect(target.textContent).toContain('If you start the game through Steam');
+  });
 });
 
 function loadErrorStore(retry: RenoDxStore['retry']): RenoDxStore {

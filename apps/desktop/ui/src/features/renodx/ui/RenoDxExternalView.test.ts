@@ -68,6 +68,7 @@ describe('RenoDxExternalView', () => {
         gameId: 'steam:1091500',
         store,
         busy: false,
+        launcher: 'Steam',
       },
     });
     flushSync();
