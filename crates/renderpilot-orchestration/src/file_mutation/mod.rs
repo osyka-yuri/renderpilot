@@ -221,7 +221,7 @@ pub(crate) fn apply_snapshot_overrides(
             if crate::paths::normalized_key(path) == crate::paths::normalized_key(selected_root) {
                 break;
             }
-            if path.as_os_str().is_empty() {
+            if path.is_empty() {
                 return Err(crate::failed(format!(
                     "OptiScaler publication target escaped its declared root: {}",
                     publication_path.display()

@@ -457,8 +457,7 @@ pub(crate) fn read_addon_config_state(ini: &Ini) -> AddonConfigState {
         has_addon_section: ini.has_section(ADDON_SECTION),
         disabled_addons: ini
             .get(ADDON_SECTION, DISABLED_ADDONS_KEY)
-            .map(split_ini_list)
-            .unwrap_or_default(),
+            .map_or_default(split_ini_list),
         load_from_dll_main: ini
             .get(ADDON_SECTION, LOAD_FROM_DLL_MAIN_KEY)
             .map(str::to_owned),

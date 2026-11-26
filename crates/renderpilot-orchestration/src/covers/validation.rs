@@ -100,7 +100,7 @@ fn looks_like_markup(bytes: &[u8]) -> bool {
 }
 
 fn strip_utf8_bom(bytes: &[u8]) -> &[u8] {
-    bytes.strip_prefix(UTF8_BOM).unwrap_or(bytes)
+    bytes.trim_prefix(UTF8_BOM)
 }
 
 fn trim_ascii_start(mut bytes: &[u8]) -> &[u8] {

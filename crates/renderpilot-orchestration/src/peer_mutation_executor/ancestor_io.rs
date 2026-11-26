@@ -45,7 +45,7 @@ impl PeerAncestorAuthorities {
     ) -> Result<Option<PeerPathObservation>, ServiceError> {
         let parent_path = endpoint
             .parent()
-            .filter(|path| !path.as_os_str().is_empty())
+            .filter(|path| !path.is_empty())
             .ok_or_else(|| {
                 failed(format!(
                     "peer endpoint has no parent: {}",
@@ -133,7 +133,7 @@ pub(crate) fn create(
         let leaf = crate::fs::LeafName::from_path(path)?;
         let parent_path = path
             .parent()
-            .filter(|path| !path.as_os_str().is_empty())
+            .filter(|path| !path.is_empty())
             .ok_or_else(|| failed(format!("peer ancestor has no parent: {}", path.display())))?;
         let created = if let Some(parent) = authorities.directory_for(parent_path) {
             create_directory(parent, &leaf, path)?

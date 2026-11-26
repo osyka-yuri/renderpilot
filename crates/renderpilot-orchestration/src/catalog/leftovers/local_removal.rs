@@ -248,7 +248,7 @@ pub(super) fn prune_empty_directories(root: &VerifiedResidueRoot) -> Result<(), 
 
     if let Some(parent_path) = root_path
         .parent()
-        .filter(|parent_path| !parent_path.as_os_str().is_empty())
+        .filter(|parent_path| !parent_path.is_empty())
     {
         let parent = VerifiedDir::open_absolute_components(parent_path, None)?;
         let leaf = LeafName::from_path(root_path)?;

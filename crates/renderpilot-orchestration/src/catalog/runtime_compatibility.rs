@@ -592,10 +592,7 @@ pub(super) fn assess_d3d12_executable(
                 true,
             )
         } else {
-            let sdk = live_export
-                .as_ref()
-                .map(|value| value.value)
-                .unwrap_or_default();
+            let sdk = live_export.as_ref().map_or_default(|value| value.value);
             (
                 live_bytes.clone(),
                 current_sha256.clone(),

@@ -289,7 +289,7 @@ impl VerifiedDir {
 pub(crate) fn verified_parent(path: &Path) -> Result<(VerifiedDir, LeafName), ServiceError> {
     let parent = path
         .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
+        .filter(|parent| !parent.is_empty())
         .ok_or_else(|| {
             crate::failed(format!("path `{}` has no parent directory", path.display()))
         })?;

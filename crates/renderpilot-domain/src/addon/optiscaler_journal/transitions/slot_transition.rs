@@ -213,5 +213,5 @@ fn validate_action_slot_transition(
         }
         _ => false,
     };
-    if valid { Ok(()) } else { Err(invalid()) }
+    valid.ok_or_else(invalid)
 }

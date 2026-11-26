@@ -242,7 +242,7 @@ fn check_update(
                     .map(|offer| offer.version.clone())
                     .unwrap_or_else(|| current_version.to_owned()),
                 offer.and_then(|offer| offer.date.clone()),
-                offer.map(|offer| offer.body.clone()).unwrap_or_default(),
+                offer.map_or_default(|offer| offer.body.clone()),
             )
         }
         Err(error) => PortableUpdateResponse::rejected(error.code()),

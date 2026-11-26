@@ -89,8 +89,7 @@ pub(super) fn plan_removed_paths(
         }
         let expected = expected_hashes.get(&key);
         if relocated_config && expected != Some(&actual) {
-            let preservation =
-                ConfigPreservationPlan::for_game(game_id, old_path, actual.clone(), true)?;
+            let preservation = ConfigPreservationPlan::for_game(game_id, old_path, actual, true)?;
             quarantine.push(preservation.source_target());
             preservations.push(preservation);
             continue;

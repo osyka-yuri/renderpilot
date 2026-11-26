@@ -45,8 +45,7 @@ pub(crate) fn rollback_component_locked(
     let game_root = std::path::Path::new(game.install_path().as_str());
     let restored_path = baseline
         .first()
-        .map(|file| file.path().as_str().to_owned())
-        .unwrap_or_default();
+        .map_or_default(|file| file.path().as_str().to_owned());
 
     let mut restored_files = baseline.clone();
     fsr::sort_representative_first(&mut restored_files);

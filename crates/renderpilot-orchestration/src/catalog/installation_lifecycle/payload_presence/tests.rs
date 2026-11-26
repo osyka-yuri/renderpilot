@@ -377,7 +377,12 @@ fn a_later_directory_junction_keeps_the_game_probe_indeterminate() {
     fs::write(&target_payload, b"external target bytes").expect("target payload");
     let junction = root.join("ZGame");
     create_directory_junction(&junction, &target);
-    let _junction_guard = JunctionGuard(junction.clone());
+    let _junction_guard = std::mem::DropGuard::new(&junction, |path| {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "rmdir"])
+            .arg(path)
+            .status();
+    });
 
     let context = Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
     let game = game(&root);
@@ -484,19 +489,6 @@ fn unknown_payload_under_advisory_excluded_directories_keeps_the_game_present() 
             "{directory}/{name}"
         );
         assert_eq!(fs::read(&payload).expect("payload retained"), before);
-    }
-}
-
-#[cfg(windows)]
-struct JunctionGuard(std::path::PathBuf);
-
-#[cfg(windows)]
-impl Drop for JunctionGuard {
-    fn drop(&mut self) {
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "rmdir"])
-            .arg(&self.0)
-            .status();
     }
 }
 

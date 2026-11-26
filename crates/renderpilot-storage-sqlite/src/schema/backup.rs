@@ -157,7 +157,7 @@ fn backup_path_for(db_path: &Path, qualifier: &str) -> PathBuf {
         .unwrap_or("catalog.db");
     let backup_name = format!("{file_name}.{qualifier}.{millis}.bak");
     match db_path.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent.join(backup_name),
+        Some(parent) if !parent.is_empty() => parent.join(backup_name),
         _ => PathBuf::from(backup_name),
     }
 }

@@ -16,7 +16,7 @@ pub(crate) fn covers_directory(catalog_db_path: &Path) -> PathBuf {
 fn catalog_directory(catalog_db_path: &Path) -> &Path {
     catalog_db_path
         .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
+        .filter(|parent| !parent.is_empty())
         .unwrap_or_else(|| Path::new("."))
 }
 

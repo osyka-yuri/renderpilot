@@ -69,9 +69,8 @@ pub(super) fn project(request: &ProjectionRequest<'_>) -> Result<ModuleEvaluatio
     if auto_optipatcher {
         selected_modules.insert("optipatcher".to_owned());
     }
-    let restricted_modules = rule
-        .map(|rule| rule.restricted_modules.iter().collect::<HashSet<_>>())
-        .unwrap_or_default();
+    let restricted_modules =
+        rule.map_or_default(|rule| rule.restricted_modules.iter().collect::<HashSet<_>>());
     let nvidia_runtime_available = renderpilot_nvapi::Nvapi::get().is_some();
     let native_artifacts = native_artifact_universe(context)?;
     let downloadable_native_modules = manifest

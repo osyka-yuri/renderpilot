@@ -31,7 +31,7 @@ pub(crate) fn remove_file_if_exists(path: &Path) -> Result<(), ServiceError> {
 /// which `serde_json` rejects; stripping it at the read boundary keeps parsing
 /// independent of how the publisher encoded the file.
 pub(crate) fn strip_utf8_bom(bytes: &[u8]) -> &[u8] {
-    bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes)
+    bytes.trim_prefix(b"\xEF\xBB\xBF")
 }
 
 #[cfg(test)]

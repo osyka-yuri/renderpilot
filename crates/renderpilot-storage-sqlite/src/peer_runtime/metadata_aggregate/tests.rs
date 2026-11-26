@@ -613,7 +613,7 @@ fn wrong_final_guard_and_participant_drift_leave_prepared_state_unchanged() {
         )
         .expect("fixture");
         if drift_peer {
-            let changed = before.clone().with_addon_version("drift");
+            let changed = before.with_addon_version("drift");
             runtime
                 .repositories()
                 .with_transaction(|transaction| {
@@ -625,7 +625,7 @@ fn wrong_final_guard_and_participant_drift_leave_prepared_state_unchanged() {
                 .expect("peer drift");
         }
         if drift_topology {
-            let mut changed = topology.clone();
+            let mut changed = topology;
             changed.id.push_str(":drift");
             runtime
                 .repositories()

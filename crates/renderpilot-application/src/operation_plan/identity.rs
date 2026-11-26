@@ -66,6 +66,5 @@ fn random_hex<const N: usize>() -> String {
 fn current_epoch_nanos() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default()
+        .map_or_default(|duration| duration.as_nanos())
 }

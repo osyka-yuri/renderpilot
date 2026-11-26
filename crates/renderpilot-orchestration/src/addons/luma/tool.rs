@@ -36,7 +36,7 @@ pub(crate) fn is_luma_addon_backup_file_name(lower: &str) -> bool {
     Path::new(lower)
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("bak"))
-        && is_luma_addon_file_name(lower.strip_suffix(".bak").unwrap_or(lower))
+        && is_luma_addon_file_name(lower.trim_suffix(".bak"))
 }
 
 /// Whether this Luma receipt identifies `path` as one of its dgVoodoo support

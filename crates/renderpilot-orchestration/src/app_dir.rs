@@ -36,7 +36,7 @@ pub(crate) fn resolve_app_dir(
     mut get_env: impl FnMut(&str) -> Option<OsString>,
 ) -> Result<PathBuf, ServiceError> {
     if let Some(value) = get_env(crate::portable::APP_DIR_ENV)
-        && !value.as_os_str().is_empty()
+        && !value.is_empty()
     {
         return Ok(PathBuf::from(value));
     }
@@ -45,7 +45,7 @@ pub(crate) fn resolve_app_dir(
         let Some(value) = get_env(candidate) else {
             continue;
         };
-        if value.as_os_str().is_empty() {
+        if value.is_empty() {
             continue;
         }
         return Ok(PathBuf::from(value).join(APP_DIR_NAME));
@@ -53,12 +53,12 @@ pub(crate) fn resolve_app_dir(
 
     // Linux CI / WSL / portable CLI without Windows AppData vars.
     if let Some(value) = get_env("XDG_DATA_HOME")
-        && !value.as_os_str().is_empty()
+        && !value.is_empty()
     {
         return Ok(PathBuf::from(value).join(APP_DIR_NAME));
     }
     if let Some(value) = get_env("HOME")
-        && !value.as_os_str().is_empty()
+        && !value.is_empty()
     {
         return Ok(PathBuf::from(value)
             .join(".local")

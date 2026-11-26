@@ -96,12 +96,10 @@ impl LibraryComponent {
     /// directory. Missing/root parents conservatively use the empty key.
     #[must_use]
     pub fn spans_multiple_parent_directories(&self) -> bool {
-        let mut parents = self.files.iter().map(|file| {
-            file.path()
-                .parent()
-                .map(normalized_path_key)
-                .unwrap_or_default()
-        });
+        let mut parents = self
+            .files
+            .iter()
+            .map(|file| file.path().parent().map_or_default(normalized_path_key));
         let Some(first_parent) = parents.next() else {
             return false;
         };

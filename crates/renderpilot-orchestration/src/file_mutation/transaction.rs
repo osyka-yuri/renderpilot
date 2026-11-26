@@ -615,9 +615,7 @@ fn build_manifest(
             roots: manifest_roots(scope, peer_preflight.is_some())?,
             transaction_dir: transaction_dir.to_string_lossy().into_owned(),
             snapshots,
-            peer_ancestors: peer_ancestor_plan
-                .map(PeerAncestorPlan::manifest_entries)
-                .unwrap_or_default(),
+            peer_ancestors: peer_ancestor_plan.map_or_default(PeerAncestorPlan::manifest_entries),
         },
         before_identities,
     ))

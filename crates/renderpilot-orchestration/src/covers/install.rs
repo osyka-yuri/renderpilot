@@ -163,7 +163,9 @@ impl CoverInstallPaths {
 }
 
 fn install_cover_file(bytes: &[u8], paths: &CoverInstallPaths) -> Result<(), ServiceError> {
-    let mut temp_cleanup = RemoveFileOnDrop::new(paths.temp_path.clone());
+    let temp_cleanup = std::mem::DropGuard::new(&paths.temp_path, |path| {
+        remove_file_and_sync_parent_best_effort(path);
+    });
 
     write_temp_file_durably(&paths.temp_path, bytes)?;
 
@@ -171,7 +173,7 @@ fn install_cover_file(bytes: &[u8], paths: &CoverInstallPaths) -> Result<(), Ser
         cover_io_error("could not finalize cover file", &paths.final_path, &error)
     })?;
 
-    temp_cleanup.disarm();
+    std::mem::DropGuard::dismiss(temp_cleanup);
 
     crate::fs::sync_parent_directory_best_effort(&paths.final_path);
 
@@ -273,33 +275,6 @@ fn remove_file_best_effort(path: &Path) {
 
 fn cover_io_error(action: &str, path: &Path, error: &std::io::Error) -> ServiceError {
     ServiceError::CoverIo(format!("{action} '{}': {error}", path.display()))
-}
-
-/// Best-effort cleanup guard: if the contained path is still set when the
-/// guard is dropped, the file is removed and the parent directory is synced.
-/// Calling [`Self::disarm`] before drop signals success and suppresses the
-/// cleanup. The state lives in the `Option` itself, so "armed" and
-/// "disarmed" cannot drift apart from the path.
-struct RemoveFileOnDrop {
-    path: Option<PathBuf>,
-}
-
-impl RemoveFileOnDrop {
-    fn new(path: PathBuf) -> Self {
-        Self { path: Some(path) }
-    }
-
-    fn disarm(&mut self) {
-        self.path = None;
-    }
-}
-
-impl Drop for RemoveFileOnDrop {
-    fn drop(&mut self) {
-        if let Some(path) = self.path.take() {
-            remove_file_and_sync_parent_best_effort(&path);
-        }
-    }
 }
 
 #[cfg(test)]

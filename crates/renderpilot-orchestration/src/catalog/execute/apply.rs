@@ -160,8 +160,7 @@ pub fn apply_swap(request: ApplySwapRequest<'_>) -> Result<SwapResult, ServiceEr
                         let expected_active_files = next_components
                             .iter()
                             .find(|component| component.id() == &prepared.component_id)
-                            .map(|component| component.files().to_vec())
-                            .unwrap_or_default();
+                            .map_or_default(|component| component.files().to_vec());
                         let rollback_baseline = match executable_baseline.clone() {
                             Some(executable) => {
                                 ComponentRollbackBaseline::new(prepared.baseline.clone())

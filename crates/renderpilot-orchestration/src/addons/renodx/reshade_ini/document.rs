@@ -451,10 +451,7 @@ fn replace_key_value(body: &str, value: &str) -> Result<String, RenoDxConfigErro
 
 fn section_header(body: &str) -> Option<&str> {
     let trimmed = body.trim();
-    trimmed
-        .strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-        .map(str::trim)
+    trimmed.strip_circumfix('[', ']').map(str::trim)
 }
 
 fn malformed_target_header(body: &str) -> bool {

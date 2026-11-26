@@ -420,7 +420,7 @@ fn checked_leaf(name: &str) -> Result<Vec<u16>> {
 }
 
 fn wide_nul(path: &Path) -> Result<Vec<u16>> {
-    if path.as_os_str().is_empty() {
+    if path.is_empty() {
         return Err(PortableRuntimeError::new(
             "portable_root",
             "portable root path was empty",

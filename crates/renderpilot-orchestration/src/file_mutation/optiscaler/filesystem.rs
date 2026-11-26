@@ -4,7 +4,7 @@ fn open_or_create_control_parent(path: &Path) -> Result<crate::fs::VerifiedDir, 
         Err(open_error) => {
             let parent = path
                 .parent()
-                .filter(|value| !value.as_os_str().is_empty())
+                .filter(|value| !value.is_empty())
                 .ok_or_else(|| {
                     crate::failed(format!(
                         "control parent cannot be created after {open_error}"

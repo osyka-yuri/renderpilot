@@ -186,8 +186,7 @@ impl PreparedApplySwap {
 
         self.writes
             .first()
-            .map(|plan| plan.file.path().as_str().to_owned())
-            .unwrap_or_default()
+            .map_or_default(|plan| plan.file.path().as_str().to_owned())
     }
 
     pub(super) fn replacement_path(&self) -> String {

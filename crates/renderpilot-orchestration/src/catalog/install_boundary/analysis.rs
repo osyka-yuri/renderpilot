@@ -320,14 +320,14 @@ fn assess_candidate_uncached(
     let candidate_roots =
         executable_installation_anchors(candidate, &executables, report.structural_files());
     let component_context = report.structural_files().iter().any(|path| {
-        let relative = path.strip_prefix(candidate).unwrap_or(path);
+        let relative = path.trim_prefix(candidate);
         relative.components().count() == 1
             || !candidate_roots
                 .iter()
                 .any(|installation| path_within(path, installation))
     });
     let distribution_context = report.structural_files().iter().any(|path| {
-        let relative = path.strip_prefix(candidate).unwrap_or(path);
+        let relative = path.trim_prefix(candidate);
         is_distribution_payload(path)
             && (relative.components().count() == 1
                 || !candidate_roots

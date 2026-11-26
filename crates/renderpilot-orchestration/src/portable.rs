@@ -62,7 +62,7 @@ impl RuntimePathsV1 {
         selected_generation_root: &Path,
         selected_app_executable: &Path,
     ) -> Result<Self, String> {
-        if portable_root.as_os_str().is_empty()
+        if portable_root.is_empty()
             || !selected_generation_root.starts_with(&portable_root)
             || !selected_app_executable.starts_with(selected_generation_root)
         {
@@ -98,7 +98,7 @@ impl RuntimePathsV1 {
             &self.covers_root,
             &self.webview2_root,
         ];
-        if self.portable_root.as_os_str().is_empty()
+        if self.portable_root.is_empty()
             || self.data_root != self.portable_root.join("data")
             || under_data
                 .iter()

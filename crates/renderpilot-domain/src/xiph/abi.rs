@@ -13,7 +13,7 @@ use super::XiphMember;
 /// the caller.
 #[must_use]
 pub fn is_public_api_export(member: XiphMember, export: &str) -> bool {
-    let c_name = export.strip_prefix('_').unwrap_or(export);
+    let c_name = export.trim_prefix('_');
     match member {
         XiphMember::VorbisFile => c_name.starts_with("ov_"),
         XiphMember::VorbisEnc => c_name.starts_with("vorbis_encode_"),

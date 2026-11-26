@@ -115,8 +115,7 @@ impl EngineConfigJournal {
             if !is_safe_operation_id(&pending.operation_id)
                 || pending
                     .stage_name
-                    .strip_prefix(".renderpilot-engine-")
-                    .and_then(|name| name.strip_suffix(".stage"))
+                    .strip_circumfix(".renderpilot-engine-", ".stage")
                     != Some(pending.operation_id.as_str())
             {
                 return Err(EngineConfigJournalError::InvalidTransition);

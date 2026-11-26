@@ -206,16 +206,16 @@ pub(in crate::addons::optiscaler) fn build_operations<P: AsRef<Path>>(
                 // A managed endpoint can be absent after repair drift. Its
                 // terminal release proof is Verify(Absent), never an invalid
                 // Delete(Absent); the executor consumes that same ordinal.
-                Operation::Verify(participant(target.clone(), false, true)?)
+                Operation::Verify(participant(target, false, true)?)
             } else {
-                Operation::Delete(participant(target.clone(), true, post_relocation_absent)?)
+                Operation::Delete(participant(target, true, post_relocation_absent)?)
             }
         } else if write_paths.contains(&key) {
-            Operation::Write(participant(target.clone(), true, post_relocation_absent)?)
+            Operation::Write(participant(target, true, post_relocation_absent)?)
         } else if target.is_absent_directory() {
-            Operation::CreateDirectory(participant(target.clone(), false, true)?)
+            Operation::CreateDirectory(participant(target, false, true)?)
         } else {
-            Operation::Verify(participant(target.clone(), false, false)?)
+            Operation::Verify(participant(target, false, false)?)
         };
         operations.push(operation);
     }

@@ -151,7 +151,7 @@ fn derive_planned_workspace_program(
                 root_index,
                 path,
             });
-            physical_groups.insert(key.clone(), workspace_id);
+            physical_groups.insert(key, workspace_id);
             workspace_id
         };
         operation_workspaces.push(Some(workspace_id));

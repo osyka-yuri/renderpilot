@@ -234,10 +234,7 @@ impl ExternalSettingClaimDrs for LiveExternalSettingClaimDrs {
                 live: None,
             }),
             (Err(NvapiError::ProfileNotFound), Ok(profile_by_exe)) => {
-                let exe_id = profile_by_exe
-                    .identity()
-                    .map(|id| id.name)
-                    .unwrap_or_default();
+                let exe_id = profile_by_exe.identity().map_or_default(|id| id.name);
                 Ok(ObservedClaimDrs::WitnessMismatch {
                     detail: format!(
                         "profile {} missing by name, but executable bound to profile {}",

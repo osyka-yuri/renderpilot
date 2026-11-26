@@ -74,8 +74,7 @@ fn detect_report_inner(
     if candidates.len() > 1 {
         let mut facts = candidates
             .first()
-            .map(|candidate| candidate.facts.clone())
-            .unwrap_or_default();
+            .map_or_default(|candidate| candidate.facts.clone());
         facts.loader_visibility = VulkanLoaderVisibility::Ambiguous;
         return VulkanLayerReport {
             state: VulkanLayerState::Conflict,

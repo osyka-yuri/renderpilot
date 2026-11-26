@@ -52,7 +52,7 @@ pub(super) fn move_windows_no_replace(
 ) -> Result<(), ServiceError> {
     let source_parent = source
         .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
+        .filter(|parent| !parent.is_empty())
         .ok_or_else(|| {
             crate::failed(format!(
                 "source `{}` has no parent directory",
@@ -61,7 +61,7 @@ pub(super) fn move_windows_no_replace(
         })?;
     let destination_parent = destination
         .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
+        .filter(|parent| !parent.is_empty())
         .ok_or_else(|| {
             crate::failed(format!(
                 "destination `{}` has no parent directory",

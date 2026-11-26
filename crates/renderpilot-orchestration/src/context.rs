@@ -311,7 +311,7 @@ impl Context {
 fn mutation_root_for_catalog(path: &Path) -> PathBuf {
     let parent = path
         .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
+        .filter(|parent| !parent.is_empty())
         .unwrap_or_else(|| Path::new("."));
     let catalog_name = path
         .file_name()

@@ -298,8 +298,7 @@ pub(super) fn cleanup_preparing_artifacts(root: &Path) -> Result<(), MutationErr
 }
 
 fn is_preparing_snapshot_name(name: &str) -> bool {
-    name.strip_prefix("file-")
-        .and_then(|value| value.strip_suffix(".bin"))
+    name.strip_circumfix("file-", ".bin")
         .is_some_and(|index| !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit()))
 }
 

@@ -237,7 +237,7 @@ fn parse(text: &str) -> Vec<IniLine> {
     text.lines()
         .map(|raw| {
             let trimmed = raw.trim();
-            if let Some(name) = trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            if let Some(name) = trimmed.strip_circumfix('[', ']') {
                 name.trim().clone_into(&mut section);
                 return IniLine {
                     raw: raw.to_owned(),

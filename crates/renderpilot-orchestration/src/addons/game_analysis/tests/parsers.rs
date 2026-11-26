@@ -1558,16 +1558,12 @@ fn test_probe_iostore_rejects_windows_directory_junction() {
         .status();
 
     if status.is_ok_and(|st| st.success()) {
-        struct JunctionGuard(std::path::PathBuf);
-        impl Drop for JunctionGuard {
-            fn drop(&mut self) {
-                let _ = std::process::Command::new("cmd")
-                    .args(["/C", "rmdir"])
-                    .arg(&self.0)
-                    .status();
-            }
-        }
-        let _guard = JunctionGuard(junction_paks.clone());
+        let _guard = std::mem::DropGuard::new(&junction_paks, |path| {
+            let _ = std::process::Command::new("cmd")
+                .args(["/C", "rmdir"])
+                .arg(path)
+                .status();
+        });
 
         // 1. Prove symlink_metadata().file_type().is_symlink() evaluates to true on Windows junctions:
         let meta =

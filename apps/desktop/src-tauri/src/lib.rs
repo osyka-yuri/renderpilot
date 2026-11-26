@@ -216,6 +216,10 @@ fn configure_plugins(builder: DesktopBuilder) -> DesktopBuilder {
         activate_existing_main_window,
     ));
 
+    // Satisfy Cargo's unused-dependency lint without registering the plugin.
+    #[cfg(all(windows, feature = "portable"))]
+    use tauri_plugin_single_instance as _;
+
     let builder = builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())

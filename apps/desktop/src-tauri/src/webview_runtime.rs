@@ -74,13 +74,13 @@ fn resolve_installed_data_root(
 ) -> PathBuf {
     if let Some(app_dir) = app_dir_env {
         let path = PathBuf::from(app_dir);
-        if !path.as_os_str().is_empty() {
+        if !path.is_empty() {
             return path;
         }
     }
     if let Some(local) = local_appdata {
         let path = PathBuf::from(local);
-        if !path.as_os_str().is_empty() {
+        if !path.is_empty() {
             return path.join("RenderPilot");
         }
     }

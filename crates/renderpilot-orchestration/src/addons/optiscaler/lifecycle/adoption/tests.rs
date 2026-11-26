@@ -680,7 +680,7 @@ fn luma_reverse_transition_projects_each_managed_custody_case_to_native_receipt(
         )
         .try_with_managed_files(vec![ManagedAddonFile::owned(
             fixture.to.clone(),
-            baseline.clone(),
+            baseline,
             installed.clone(),
         )])
         .expect("Luma peer");
@@ -692,7 +692,7 @@ fn luma_reverse_transition_projects_each_managed_custody_case_to_native_receipt(
             )
             .try_with_managed_files(vec![ManagedAddonFile::reused(
                 fixture.to.clone(),
-                installed.clone(),
+                installed,
             )])
             .expect("Reused Luma peer")
         } else {

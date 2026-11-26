@@ -176,8 +176,7 @@ fn inspect_executable_candidates_with_walker_and_cancel(
     let install_dir_name = install_dir
         .file_name()
         .and_then(|n| n.to_str())
-        .map(str::to_owned)
-        .unwrap_or_default();
+        .map_or_default(str::to_owned);
 
     let (raw_candidates, structural_files, completeness, diagnostics, visited_entries) =
         collect_raw_candidates(&install_dir_canonical, walker, is_cancelled);

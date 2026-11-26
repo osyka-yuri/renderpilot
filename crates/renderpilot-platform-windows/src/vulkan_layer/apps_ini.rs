@@ -371,7 +371,7 @@ fn parse_line(
     apps_line: &mut Option<AppsLine>,
     entries: &mut Vec<AppEntry>,
 ) -> Result<(), AppListPlanError> {
-    let key_body = body.strip_prefix('\u{feff}').unwrap_or(body);
+    let key_body = body.trim_prefix('\u{feff}');
     let key_body_offset = body.len() - key_body.len();
     let trimmed = key_body.trim();
     let Some(equal_offset) = key_body.find('=') else {

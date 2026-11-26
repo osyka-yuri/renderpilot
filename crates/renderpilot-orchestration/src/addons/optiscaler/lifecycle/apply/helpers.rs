@@ -29,7 +29,7 @@ pub(in crate::addons::optiscaler) fn module_library_path(
 }
 
 pub(in crate::addons::optiscaler) fn ini_library_path(target_dir: &Path, path: &Path) -> String {
-    let display_path = path.strip_prefix(target_dir).unwrap_or(path);
+    let display_path = path.trim_prefix(target_dir);
     let normalized = display_path.to_string_lossy().replace('\\', "/");
     if normalized == "." || normalized.is_empty() {
         ".\\".to_owned()

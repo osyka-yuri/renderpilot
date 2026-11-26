@@ -138,8 +138,7 @@ pub(super) fn parse_bootstrap_filters(value: Option<&str>) -> EffectiveGamesFilt
             search_query: fields
                 .get("searchQuery")
                 .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .unwrap_or_default()
+                .map_or_default(str::trim)
                 .to_owned(),
             show_hidden: fields
                 .get("showHidden")
@@ -167,7 +166,7 @@ fn read_object_string_list(
     fields: &serde_json::Map<String, serde_json::Value>,
     field: &str,
 ) -> Vec<String> {
-    fields.get(field).map(read_string_list).unwrap_or_default()
+    fields.get(field).map_or_default(read_string_list)
 }
 
 fn read_string_list(value: &serde_json::Value) -> Vec<String> {

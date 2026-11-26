@@ -608,7 +608,7 @@ fn specialized_projection_rejects_path_claim_and_preimage_mismatch() {
         let before_for_case = if suffix == "preimage" {
             after.clone()
         } else {
-            before.clone()
+            before
         };
         let after_for_case = after;
         assert!(
@@ -681,7 +681,7 @@ fn specialized_commit_rejects_peer_and_topology_drift() {
         if drift == "peer" {
             runtime
                 .repositories()
-                .upsert_installed_addon(&before.clone().with_addon_version("drift"))
+                .upsert_installed_addon(&before.with_addon_version("drift"))
                 .expect("drift peer");
         } else {
             runtime

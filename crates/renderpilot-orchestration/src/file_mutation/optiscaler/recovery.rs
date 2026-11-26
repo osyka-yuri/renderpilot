@@ -19,8 +19,7 @@ pub(in crate::file_mutation) fn recover_pending_optiscaler(
     let game_id = proof.game_id().clone();
     let journal_json = proof.current_journal_json().to_owned();
     let managed_endpoint_roots = crate::addons::optiscaler::stored_status(context, &game_id)?
-        .map(|state| crate::addons::optiscaler::managed_state_endpoint_roots(&state))
-        .unwrap_or_default()
+        .map_or_default(|state| crate::addons::optiscaler::managed_state_endpoint_roots(&state))
         .into_iter()
         .map(|(root, endpoint)| (crate::paths::normalized_key(&endpoint), root))
         .collect();

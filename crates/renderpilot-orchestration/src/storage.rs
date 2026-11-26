@@ -68,7 +68,7 @@ fn catalog_db_path_from_env(
     // twist — a missing base directory degrades to a relative file rather than the
     // hard error `resolve_app_dir` returns.
     if let Some(value) = get_env(CATALOG_DB_PATH_ENV) {
-        if value.as_os_str().is_empty() {
+        if value.is_empty() {
             return Err(ServiceError::command_failed(format!(
                 "{CATALOG_DB_PATH_ENV} is set but empty"
             )));
@@ -84,7 +84,7 @@ fn catalog_db_path_from_env(
 }
 
 fn validate_catalog_db_path(path: &Path) -> Result<(), ServiceError> {
-    if path.as_os_str().is_empty() {
+    if path.is_empty() {
         return Err(ServiceError::command_failed(
             "catalog database path is empty",
         ));
@@ -131,8 +131,7 @@ fn ensure_catalog_directory(path: &Path) -> Result<(), ServiceError> {
 }
 
 fn non_empty_parent(path: &Path) -> Option<&Path> {
-    path.parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
+    path.parent().filter(|parent| !parent.is_empty())
 }
 
 #[cfg(test)]

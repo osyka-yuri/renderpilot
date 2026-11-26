@@ -118,8 +118,7 @@ pub(super) fn build_snapshot(
         let optiscaler_installed = optiscaler_installed_game_ids.contains(game.id());
         let (operation_count, last_operation_status) = operations_by_game
             .remove(game.id())
-            .map(|(count, latest)| (count, latest.map(|(_, status)| status)))
-            .unwrap_or_default();
+            .map_or_default(|(count, latest)| (count, latest.map(|(_, status)| status)));
 
         cards.push(Arc::new(GameCardData {
             cover_updated_at_ms: covers_by_game

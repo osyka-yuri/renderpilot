@@ -153,7 +153,7 @@ fn walk_directory(
             entries.insert(
                 relative,
                 TreeEntry::Directory {
-                    native_identity: child_identity.clone(),
+                    native_identity: child_identity,
                 },
             );
             if !walk_directory(root, &path, root_authority, claims, entries)? {

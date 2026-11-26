@@ -147,7 +147,7 @@ fn ensure_asset(title: &LumaTitle) -> Result<(), ServiceError> {
     }
 
     let is_x32 = stem.ends_with(ASSET_X32_SUFFIX);
-    let name_part = stem.strip_suffix(ASSET_X32_SUFFIX).unwrap_or(stem);
+    let name_part = stem.trim_suffix(ASSET_X32_SUFFIX);
     if name_part.is_empty()
         || !name_part
             .chars()

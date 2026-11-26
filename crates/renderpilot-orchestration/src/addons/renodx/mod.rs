@@ -63,7 +63,7 @@ use super::UTF8_BOM;
 /// Strips a leading UTF-8 BOM, deserializes, then runs schema + structural
 /// validation, so a returned manifest can be acted on without further checks.
 pub fn parse_manifest(bytes: &[u8]) -> Result<RenoDxManifest, ServiceError> {
-    let bytes = bytes.strip_prefix(UTF8_BOM).unwrap_or(bytes);
+    let bytes = bytes.trim_prefix(UTF8_BOM);
     let wire: WireManifestV1 = serde_json::from_slice(bytes)
         .map_err(|error| errors::failed(format!("failed to parse RenoDX manifest: {error}")))?;
     let manifest = RenoDxManifest::from_wire_v1(wire);
@@ -75,7 +75,7 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<RenoDxManifest, ServiceError> {
 /// Parses the strict v2 RenoDX document. v2 is deliberately a separate entry
 /// point so malformed v2 data is never silently interpreted as v1.
 pub fn parse_manifest_v2(bytes: &[u8]) -> Result<RenoDxManifest, ServiceError> {
-    let bytes = bytes.strip_prefix(UTF8_BOM).unwrap_or(bytes);
+    let bytes = bytes.trim_prefix(UTF8_BOM);
     let wire: WireManifestV2 = serde_json::from_slice(bytes).map_err(|error| {
         ServiceError::manifest_contract_rejected(
             crate::ManifestContract::RenoDxV2,

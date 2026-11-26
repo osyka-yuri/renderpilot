@@ -41,9 +41,7 @@ pub(super) fn plan(
     let configured_slot_name = explicit_rule_slot
         .clone()
         .unwrap_or_else(|| "dxgi.dll".to_owned());
-    let known_slots = target_dir
-        .map(|dir| known_optiscaler_proxy_slots(manifest, dir))
-        .unwrap_or_default();
+    let known_slots = target_dir.map_or_default(|dir| known_optiscaler_proxy_slots(manifest, dir));
     let (mut slot_name, mut conflict) = match known_slots.as_slice() {
         [] => (configured_slot_name, None),
         [known] => (

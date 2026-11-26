@@ -182,8 +182,7 @@ fn runtime_metadata(
 fn order_with_primary_first<'a>(group: &[&'a DetectedLibraryFile]) -> Vec<&'a DetectedLibraryFile> {
     let family = group
         .first()
-        .map(|file| file.technology().family())
-        .unwrap_or_default();
+        .map_or_default(|file| file.technology().family());
 
     // FSR sets arbitrate the representative by release-build cohesion: a leftover
     // upscaler next to a real unified FSR 3.1 must not hijack the version display.

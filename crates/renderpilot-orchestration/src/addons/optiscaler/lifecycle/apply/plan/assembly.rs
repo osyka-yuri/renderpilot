@@ -119,8 +119,7 @@ pub(super) fn assemble<'a>(
     let peer_transition_targets = topology
         .peer_host_transition
         .as_ref()
-        .map(adoption::PeerHostTransitionPlan::mutation_targets)
-        .unwrap_or_default();
+        .map_or_default(adoption::PeerHostTransitionPlan::mutation_targets);
     let publication_paths = targets
         .new_paths
         .values()

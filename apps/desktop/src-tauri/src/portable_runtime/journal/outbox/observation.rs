@@ -109,8 +109,7 @@ pub(in crate::portable_runtime::journal) fn observation_key(
             image.last_sequence.unwrap_or_default(),
             image
                 .last_phase
-                .map(|phase| format!("{phase:?}"))
-                .unwrap_or_default(),
+                .map_or_default(|phase| format!("{phase:?}")),
         )
         .as_bytes(),
     )

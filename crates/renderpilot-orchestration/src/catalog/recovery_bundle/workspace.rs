@@ -56,7 +56,7 @@ impl BundleWorkspace {
             .ok_or_else(|| ServiceError::command_failed(kind.in_memory_error()))?;
         let catalog_dir = catalog_path
             .parent()
-            .filter(|path| !path.as_os_str().is_empty())
+            .filter(|path| !path.is_empty())
             .unwrap_or_else(|| Path::new("."));
         let recovery_root = catalog_dir.join("recovery");
         fs::create_dir_all(&recovery_root).map_err(|error| {

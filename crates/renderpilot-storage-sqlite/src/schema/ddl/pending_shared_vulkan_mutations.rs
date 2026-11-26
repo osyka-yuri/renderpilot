@@ -526,10 +526,7 @@ pub(in crate::schema) fn validates_observational(connection: &Connection) -> App
         .unwrap_or(0);
     let columns = columns_match(connection)?;
     let unique = has_single_column_id_unique(connection)?;
-    if strict != 1 || !columns || !unique {
-        return Ok(false);
-    }
-    Ok(true)
+    Ok(strict == 1 && columns && unique)
 }
 
 fn columns_match(connection: &Connection) -> AppResult<bool> {

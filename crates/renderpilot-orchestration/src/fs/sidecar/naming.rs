@@ -108,7 +108,7 @@ pub(crate) fn original_path_from_backup(backup: &Path) -> Option<PathBuf> {
         return None;
     }
     Some(match backup.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent.join(stem),
+        Some(parent) if !parent.is_empty() => parent.join(stem),
         _ => PathBuf::from(stem),
     })
 }

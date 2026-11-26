@@ -248,7 +248,7 @@ pub(super) fn absolute_path_parts(root: &Path) -> Result<(PathBuf, Vec<PathBuf>)
             }
         }
     }
-    if anchor.as_os_str().is_empty() {
+    if anchor.is_empty() {
         return Err(format!(
             "installation root has no volume/share anchor: {}",
             root.display()

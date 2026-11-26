@@ -59,7 +59,7 @@ where
 fn normalized_cache_path(path: &Path) -> Result<PathBuf, ServiceError> {
     let parent = path
         .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
+        .filter(|parent| !parent.is_empty())
         .ok_or_else(|| {
             crate::failed(format!(
                 "cannot lock cache path `{}` because it has no parent directory",

@@ -80,7 +80,7 @@ impl ReshadeManifest {
 /// so a returned manifest can be converted to [`ReshadeSourceCatalog`] without
 /// further checks.
 pub(crate) fn parse_reshade_manifest(bytes: &[u8]) -> Result<ReshadeManifest, ServiceError> {
-    let bytes = bytes.strip_prefix(UTF8_BOM).unwrap_or(bytes);
+    let bytes = bytes.trim_prefix(UTF8_BOM);
     let wire: WireManifestV1 = serde_json::from_slice(bytes)
         .map_err(|error| failed(format!("failed to parse ReShade manifest: {error}")))?;
     let manifest = ReshadeManifest {

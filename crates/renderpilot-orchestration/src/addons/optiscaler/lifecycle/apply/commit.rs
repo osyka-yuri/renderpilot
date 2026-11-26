@@ -103,8 +103,7 @@ pub(in crate::addons::optiscaler) fn apply_release(
     let mut relocations = plan
         .peer_host_transition
         .as_ref()
-        .map(adoption::PeerHostTransitionPlan::relocations)
-        .unwrap_or_default();
+        .map_or_default(adoption::PeerHostTransitionPlan::relocations);
     relocations.extend(
         plan.retained_fsr
             .iter()

@@ -66,7 +66,7 @@ pub(crate) const LUMA_PHASE_FINALIZING: &str = "luma.phase.finalizing";
 /// Strips a leading UTF-8 BOM, deserializes, then runs schema + structural
 /// validation, so a returned manifest can be acted on without further checks.
 pub fn parse_manifest(bytes: &[u8]) -> Result<LumaManifest, ServiceError> {
-    let bytes = bytes.strip_prefix(UTF8_BOM).unwrap_or(bytes);
+    let bytes = bytes.trim_prefix(UTF8_BOM);
     let wire: WireManifestV2 = serde_json::from_slice(bytes)
         .map_err(|error| errors::failed(format!("failed to parse Luma manifest: {error}")))?;
     let manifest = LumaManifest::from_wire_v2(wire)?;

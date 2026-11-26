@@ -305,7 +305,7 @@ fn path_string_under_root(root: &Path, root_ref: &PathRef, value: &str) -> bool 
 }
 
 fn normal_relative_path(path: &Path) -> bool {
-    !path.as_os_str().is_empty()
+    !path.is_empty()
         && path
             .components()
             .all(|component| matches!(component, Component::Normal(_)))

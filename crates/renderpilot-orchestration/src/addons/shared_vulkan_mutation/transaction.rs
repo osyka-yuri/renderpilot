@@ -614,7 +614,7 @@ fn execute_prepared(request: PreparedRequest<'_>) -> Result<(), MutationError> {
         peer_permit,
     } = request;
     io::verify_all_before(transaction_root, &plan.manifest, &plan.roots, registry)?;
-    let excluded_downstream = peer.map(excluded_downstream_paths).unwrap_or_default();
+    let excluded_downstream = peer.map_or_default(excluded_downstream_paths);
     let before_peer_endpoints = peer
         .map(|value| {
             capture_shared_endpoint_snapshots(plan, &excluded_downstream, value.renodx_reshade_ini)

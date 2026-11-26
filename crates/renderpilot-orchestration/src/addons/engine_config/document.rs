@@ -418,9 +418,8 @@ pub(super) fn encode_document(document: &IniDocument) -> Vec<u8> {
 fn section_name(line: &str) -> Option<&str> {
     let trimmed = line.trim();
     trimmed
-        .strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-        .map(|value| value.trim())
+        .strip_circumfix('[', ']')
+        .map(str::trim)
         .filter(|value| !value.is_empty())
 }
 

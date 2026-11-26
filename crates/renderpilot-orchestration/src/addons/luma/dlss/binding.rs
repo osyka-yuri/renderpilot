@@ -58,8 +58,7 @@ fn disappearing_owned_dlss_paths(
     }
     find_managed_dlss_binding(record)
         .filter(|managed| managed.mode() == ManagedFileMode::Owned)
-        .map(|managed| vec![PathBuf::from(managed.path().as_str())])
-        .unwrap_or_default()
+        .map_or_default(|managed| vec![PathBuf::from(managed.path().as_str())])
 }
 
 /// Catalog cascade plan for an owned DLSS binding that the update payload no
