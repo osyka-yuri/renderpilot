@@ -16,9 +16,9 @@ renderpilot-domain = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-quick-xml = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
+quick-xml = { workspace = true }
 winreg = { workspace = true }
 windows = { workspace = true, features = ["ApplicationModel", "Management_Deployment", "Storage_Search"] }
 

@@ -225,14 +225,15 @@ fn windows_cache_contention(error: &io::Error) -> bool {
 }
 
 fn cache_metadata_is_regular(metadata: &fs::Metadata) -> bool {
-    if !metadata.is_file() {
-        return false;
-    }
     #[cfg(windows)]
-    if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-        return false;
+    {
+        metadata.is_file() && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0
     }
-    true
+
+    #[cfg(not(windows))]
+    {
+        metadata.is_file()
+    }
 }
 
 #[cfg(target_os = "linux")]

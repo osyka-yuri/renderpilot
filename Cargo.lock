@@ -3536,7 +3536,6 @@ dependencies = [
  "renderpilot-detection",
  "renderpilot-domain",
  "rusqlite",
- "rustix",
  "serde",
  "serde_json",
  "sha2 0.11.2",

@@ -933,19 +933,19 @@ pub fn inspect_availability(
 }
 
 fn is_plain_file(metadata: &std::fs::Metadata) -> bool {
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
-        return false;
-    }
+    let regular_file = metadata.is_file() && !metadata.file_type().is_symlink();
 
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
         const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0
+        regular_file && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0
     }
 
     #[cfg(not(windows))]
-    true
+    {
+        regular_file
+    }
 }
 
 /// Resolves the bounded target from the authoritative game analysis proof.
