@@ -164,7 +164,7 @@ describe('GameCardActionsMenu catalog removal', () => {
       expect(document.querySelector('[data-retry-assessment]')).not.toBeNull();
     });
 
-    const retryBtn = document.querySelector('[data-retry-assessment]') as HTMLButtonElement;
+    const retryBtn = requireButton('[data-retry-assessment]');
     retryBtn.click();
 
     await vi.waitFor(() => {
@@ -286,8 +286,7 @@ describe('GameCardActionsMenu catalog removal', () => {
       expect(document.querySelector('[data-diverged-settings-list]')?.textContent).toContain('2');
     });
 
-    const confirmBtn = document.querySelector('[data-removal-confirm]') as HTMLButtonElement;
-    expect(confirmBtn).not.toBeNull();
+    const confirmBtn = requireButton('[data-removal-confirm]');
     expect(confirmBtn.textContent).toContain(t('game.card.removeConfirm.abandonAction'));
 
     confirmBtn.click();
@@ -345,7 +344,7 @@ describe('GameCardActionsMenu catalog removal', () => {
       );
     });
 
-    const confirmBtn = document.querySelector('[data-removal-confirm]') as HTMLButtonElement;
+    const confirmBtn = requireButton('[data-removal-confirm]');
     expect(confirmBtn.disabled).toBe(true);
     expect(onRemoveFromCatalog).not.toHaveBeenCalled();
   });
@@ -385,12 +384,11 @@ describe('GameCardActionsMenu catalog removal', () => {
       );
     });
 
-    const confirmBtn = document.querySelector('[data-removal-confirm]') as HTMLButtonElement;
+    const confirmBtn = requireButton('[data-removal-confirm]');
     expect(confirmBtn.disabled).toBe(true);
     expect(onRemoveFromCatalog).not.toHaveBeenCalled();
 
-    const retryBtn = document.querySelector('[data-retry-assessment]') as HTMLButtonElement;
-    expect(retryBtn).not.toBeNull();
+    const retryBtn = requireButton('[data-retry-assessment]');
     retryBtn.click();
 
     await vi.waitFor(() => {
@@ -477,7 +475,7 @@ describe('GameCardActionsMenu catalog removal', () => {
       expect(document.querySelector('[data-diverged-settings-list]')?.textContent).toContain('2');
     });
 
-    const confirmBtn = document.querySelector('[data-removal-confirm]') as HTMLButtonElement;
+    const confirmBtn = requireButton('[data-removal-confirm]');
     confirmBtn.click();
 
     await vi.waitFor(() => {
@@ -529,4 +527,12 @@ function buttons(label: string): HTMLButtonElement[] {
   return [...document.body.querySelectorAll<HTMLButtonElement>('button')].filter(
     (candidate) => candidate.textContent.trim() === label,
   );
+}
+
+function requireButton(selector: string): HTMLButtonElement {
+  const button = document.querySelector(selector);
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Expected a button matching: ${selector}`);
+  }
+  return button;
 }

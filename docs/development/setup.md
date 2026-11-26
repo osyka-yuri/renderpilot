@@ -1,10 +1,10 @@
 # Development setup
 
-RenderPilot is a Rust workspace with a Tauri desktop application, a Svelte frontend, and a source-only CLI. The minimum supported Rust version is 1.100 and `rust-toolchain.toml` pins 1.100.0; the desktop package requires Node.js 24 or later and declares pnpm 12.18.0 as the package-manager source of truth.
+RenderPilot is a Rust workspace with a Tauri desktop application, a Svelte frontend, and a source-only CLI. The minimum supported Rust version is 1.100 and `rust-toolchain.toml` pins 1.100.0; the desktop package requires Node.js 26 or later and declares pnpm 12.23.0 as the package-manager source of truth.
 
 ## Toolchain
 
-On Windows, install the Rust prerequisites for MSVC development, Node.js 24, and the Microsoft Edge WebView2 Runtime. Let Corepack or the pinned pnpm setup resolve the package-manager version from `apps/desktop/package.json`.
+On Windows, install the Rust prerequisites for MSVC development, Node.js 26, and the Microsoft Edge WebView2 Runtime. Let Corepack or the pinned pnpm setup resolve the package-manager version from `apps/desktop/package.json`.
 
 ```powershell
 rustup show
