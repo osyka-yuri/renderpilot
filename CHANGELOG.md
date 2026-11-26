@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.4] - 2026-11-26
+
+### Changed
+
+- **Add-on guidance.** Updated translations and compatibility information for RenoDX, Luma, and OptiScaler.
+- **Maintenance.** Updated application and build dependencies.
+
+### Fixed
+
+- **RenoDX external add-ons.** Restored installation guidance and ensured only launcher-specific launch arguments are displayed.
+
 ## [1.15.3] - 2026-11-11
 
 ### Changed
