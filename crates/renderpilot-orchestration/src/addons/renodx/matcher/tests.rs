@@ -887,6 +887,47 @@ fn blacklist_category_yields_unsupported() {
 }
 
 #[test]
+fn blacklist_category_withholds_config_and_guidance() {
+    use crate::addons::renodx::types::{RenoDxConfig, RenoDxConfigKey, RenoDxConfigSetting};
+
+    let mut blocked = categorized(
+        "blk",
+        RenoDxCategory::Blacklist {
+            message: message("renodx.reason.broken"),
+        },
+    );
+    blocked.profile_id = Some("unity".to_owned());
+    blocked.inherit_page_guidance = true;
+    blocked.renodx_config = Some(RenoDxConfig {
+        settings: vec![RenoDxConfigSetting {
+            key: RenoDxConfigKey::ForcePipelineCloning,
+            value: 1,
+        }],
+    });
+    let sample_guidance = RenoDxGuidance {
+        id: "renodx.blk.setup".to_owned(),
+        kind: RenoDxGuidanceKind::Compatibility,
+        message_id: "renodx.blk.setup".to_owned(),
+        fallback_text: "Setup step.".to_owned(),
+        code: None,
+        settings: Vec::new(),
+        engine_ini: None,
+        url: None,
+        condition: None,
+    };
+    let mut m = manifest(vec![blocked]);
+    m.page_guidance.push(sample_guidance.clone());
+    m.title_guidance
+        .insert("blk".to_owned(), vec![sample_guidance]);
+
+    assert_matches!(
+        resolve(&m, &facts()),
+        RenoDxResolution::Blacklisted { message } if message.id == "renodx.reason.broken"
+    );
+    assert!(resolve_external_install(&m, &facts()).is_none());
+}
+
+#[test]
 fn native_hdr_category_yields_native_hdr() {
     let m = manifest(vec![categorized("nh", RenoDxCategory::NativeHdr)]);
     assert_matches!(resolve(&m, &facts()), RenoDxResolution::NativeHdr);

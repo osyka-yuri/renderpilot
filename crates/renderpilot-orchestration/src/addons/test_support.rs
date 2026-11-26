@@ -360,3 +360,199 @@ pub(crate) fn zip_with_entries(entries: &[(&str, &[u8])]) -> Vec<u8> {
     }
     zip.finish().expect("finish zip").into_inner()
 }
+
+/// Reads one sibling `renderpilot-libraries` producer contract file from `env_var`
+/// or the local `../../../renderpilot-libraries` checkout. Fails closed when the
+/// env var is explicitly set or the sibling directory exists without the expected
+/// file; returns `None` only when unconfigured and no sibling checkout is present.
+#[must_use]
+pub(crate) fn read_producer_manifest(env_var: &str, relative_path: &str) -> Option<Vec<u8>> {
+    read_producer_manifest_from(
+        std::env::var_os(env_var),
+        env_var,
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        relative_path,
+    )
+}
+
+fn read_producer_manifest_from(
+    explicit: Option<std::ffi::OsString>,
+    env_var: &str,
+    manifest_dir: &Path,
+    relative_path: &str,
+) -> Option<Vec<u8>> {
+    if let Some(explicit_path) = explicit {
+        assert!(
+            !explicit_path.is_empty(),
+            "{env_var} is set to an empty path; point it to `{relative_path}` or unset it"
+        );
+        let path = std::path::PathBuf::from(&explicit_path);
+        return Some(fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read explicit {env_var} at `{}`: {error}",
+                path.display()
+            )
+        }));
+    }
+    let sibling_root = manifest_dir.join("../../../renderpilot-libraries");
+    match fs::metadata(&sibling_root) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => panic!(
+            "sibling renderpilot-libraries path `{}` exists, but is not a directory",
+            sibling_root.display()
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if let Ok(sym) = fs::symlink_metadata(&sibling_root) {
+                panic!(
+                    "sibling renderpilot-libraries path `{}` is a dangling link ({:?})",
+                    sibling_root.display(),
+                    sym.file_type()
+                );
+            }
+            return None;
+        }
+        Err(error) => panic!(
+            "failed to inspect sibling renderpilot-libraries at `{}`: {error}",
+            sibling_root.display()
+        ),
+    }
+    let path = sibling_root.join(relative_path);
+    Some(fs::read(&path).unwrap_or_else(|error| {
+        panic!(
+            "sibling renderpilot-libraries exists at `{}`, but failed to read `{}`: {error}",
+            sibling_root.display(),
+            path.display()
+        )
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_producer_manifest_from;
+    use std::ffi::OsString;
+    use std::fs;
+
+    #[test]
+    fn skips_only_when_unconfigured_and_sibling_checkout_is_absent() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest_dir = temp
+            .path()
+            .join("renderpilot/crates/renderpilot-orchestration");
+        fs::create_dir_all(&manifest_dir).expect("create manifest dir");
+
+        assert!(
+            read_producer_manifest_from(None, "TEST_MANIFEST_PATH", &manifest_dir, "addons/x.json")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn reads_explicit_manifest_successfully() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let explicit = temp.path().join("explicit.json");
+        fs::write(&explicit, br#"{"schema_version":1}"#).expect("write explicit manifest");
+
+        let bytes = read_producer_manifest_from(
+            Some(explicit.into_os_string()),
+            "TEST_MANIFEST_PATH",
+            temp.path(),
+            "addons/x.json",
+        );
+        assert_eq!(bytes.as_deref(), Some(&br#"{"schema_version":1}"#[..]));
+    }
+
+    #[test]
+    fn reads_sibling_manifest_when_unconfigured() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest_dir = temp
+            .path()
+            .join("renderpilot/crates/renderpilot-orchestration");
+        fs::create_dir_all(&manifest_dir).expect("create manifest dir");
+        let sibling_file = temp.path().join("renderpilot-libraries/addons/x.json");
+        fs::create_dir_all(sibling_file.parent().expect("parent")).expect("create addons dir");
+        fs::write(&sibling_file, br#"{"schema_version":2}"#).expect("write sibling manifest");
+
+        let bytes =
+            read_producer_manifest_from(None, "TEST_MANIFEST_PATH", &manifest_dir, "addons/x.json");
+        assert_eq!(bytes.as_deref(), Some(&br#"{"schema_version":2}"#[..]));
+    }
+
+    #[test]
+    fn explicit_path_takes_precedence_over_sibling_checkout() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest_dir = temp
+            .path()
+            .join("renderpilot/crates/renderpilot-orchestration");
+        fs::create_dir_all(&manifest_dir).expect("create manifest dir");
+        let sibling_file = temp.path().join("renderpilot-libraries/addons/x.json");
+        fs::create_dir_all(sibling_file.parent().expect("parent")).expect("create addons dir");
+        fs::write(&sibling_file, b"sibling").expect("write sibling manifest");
+        let explicit = temp.path().join("explicit.json");
+        fs::write(&explicit, b"explicit").expect("write explicit manifest");
+
+        let bytes = read_producer_manifest_from(
+            Some(explicit.into_os_string()),
+            "TEST_MANIFEST_PATH",
+            &manifest_dir,
+            "addons/x.json",
+        );
+        assert_eq!(bytes.as_deref(), Some(&b"explicit"[..]));
+    }
+
+    #[test]
+    #[should_panic(expected = "exists, but is not a directory")]
+    fn fails_closed_when_sibling_checkout_path_is_a_file() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest_dir = temp
+            .path()
+            .join("renderpilot/crates/renderpilot-orchestration");
+        fs::create_dir_all(&manifest_dir).expect("create manifest dir");
+        fs::write(
+            temp.path().join("renderpilot-libraries"),
+            b"not a directory",
+        )
+        .expect("write sibling file");
+
+        let _ =
+            read_producer_manifest_from(None, "TEST_MANIFEST_PATH", &manifest_dir, "addons/x.json");
+    }
+
+    #[test]
+    #[should_panic(expected = "failed to read explicit TEST_MANIFEST_PATH")]
+    fn fails_closed_when_explicit_env_var_points_to_missing_file() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let missing = OsString::from(temp.path().join("missing.json"));
+        let _ = read_producer_manifest_from(
+            Some(missing),
+            "TEST_MANIFEST_PATH",
+            temp.path(),
+            "addons/x.json",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "TEST_MANIFEST_PATH is set to an empty path")]
+    fn fails_closed_when_explicit_env_var_is_empty() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let _ = read_producer_manifest_from(
+            Some(OsString::new()),
+            "TEST_MANIFEST_PATH",
+            temp.path(),
+            "addons/x.json",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "sibling renderpilot-libraries exists")]
+    fn fails_closed_when_sibling_checkout_exists_without_expected_manifest() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest_dir = temp
+            .path()
+            .join("renderpilot/crates/renderpilot-orchestration");
+        fs::create_dir_all(&manifest_dir).expect("create manifest dir");
+        fs::create_dir_all(temp.path().join("renderpilot-libraries")).expect("create sibling dir");
+
+        let _ =
+            read_producer_manifest_from(None, "TEST_MANIFEST_PATH", &manifest_dir, "addons/x.json");
+    }
+}

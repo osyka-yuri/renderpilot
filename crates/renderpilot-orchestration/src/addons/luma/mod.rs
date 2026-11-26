@@ -312,4 +312,17 @@ mod tests {
         );
         assert!(parse_manifest(sample.as_bytes()).is_err());
     }
+
+    #[test]
+    fn parses_the_current_renderpilot_libraries_luma_manifest() {
+        let Some(bytes) = crate::addons::test_support::read_producer_manifest(
+            "LUMA_V2_MANIFEST_PATH",
+            "addons/v2/luma.json",
+        ) else {
+            return;
+        };
+        let manifest = parse_manifest(&bytes).expect("current Luma producer manifest parses");
+        assert_eq!(manifest.schema_version, 2);
+        assert!(!manifest.titles.is_empty());
+    }
 }

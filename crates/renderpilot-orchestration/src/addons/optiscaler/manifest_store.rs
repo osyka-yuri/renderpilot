@@ -366,4 +366,17 @@ mod tests {
         module["artifact"]["source"]["tag"] = serde_json::Value::String("rolling".to_owned());
         assert!(parse_manifest(&serde_json::to_vec(&value).expect("serialize")).is_err());
     }
+
+    #[test]
+    fn parses_the_current_renderpilot_libraries_optiscaler_manifest() {
+        let Some(bytes) = crate::addons::test_support::read_producer_manifest(
+            "OPTISCALER_MANIFEST_PATH",
+            "addons/v1/optiscaler.json",
+        ) else {
+            return;
+        };
+        let manifest = parse_manifest(&bytes).expect("current OptiScaler producer manifest parses");
+        assert_eq!(manifest.schema_version, 1);
+        assert!(manifest.current_release().is_some());
+    }
 }

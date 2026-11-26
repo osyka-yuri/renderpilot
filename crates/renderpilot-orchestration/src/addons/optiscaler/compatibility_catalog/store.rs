@@ -562,4 +562,16 @@ mod tests {
         .expect("second fetch");
         assert_eq!(result2.revision, r2_revision);
     }
+
+    #[test]
+    fn parses_the_current_renderpilot_libraries_optiscaler_compatibility_catalog() {
+        let Some(bytes) = crate::addons::test_support::read_producer_manifest(
+            "OPTISCALER_COMPATIBILITY_PATH",
+            "addons/v1/optiscaler-compatibility.json",
+        ) else {
+            return;
+        };
+        let catalog = parse_catalog(&bytes).expect("current compatibility catalog parses");
+        assert!(!catalog.entries().is_empty());
+    }
 }

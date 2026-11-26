@@ -549,17 +549,109 @@ mod tests {
     }
 
     #[test]
+    fn v2_blocked_title_parses_as_blacklist_without_guidance_or_config() {
+        let mut value: serde_json::Value = serde_json::from_str(SAMPLE_V2).expect("sample JSON");
+        let game = value["games"][0]
+            .as_object_mut()
+            .expect("sample game object");
+        game.insert("id".to_owned(), serde_json::json!("blocked-unity-game"));
+        game.insert("name".to_owned(), serde_json::json!("Blocked Unity Game"));
+        game.insert(
+            "availability".to_owned(),
+            serde_json::json!({
+                "kind": "blocked",
+                "message": {
+                    "id": "renodx.blocked.broken_mod",
+                    "fallback_text": "The RenoDX mod does not work with this game."
+                }
+            }),
+        );
+        game.remove("guidance");
+        game.remove("renodx_config");
+
+        let manifest =
+            parse_manifest_v2(&serde_json::to_vec(&value).expect("serialize blocked v2 manifest"))
+                .expect("blocked v2 manifest parses");
+        let blocked = manifest
+            .titles
+            .iter()
+            .find(|title| title.id == "blocked-unity-game")
+            .expect("blocked title present");
+        assert!(matches!(
+            blocked.category,
+            types::RenoDxCategory::Blacklist { .. }
+        ));
+        assert!(blocked.renodx_config.is_none());
+        assert!(
+            manifest
+                .title_guidance
+                .get(&blocked.id)
+                .is_none_or(Vec::is_empty)
+        );
+    }
+
+    #[test]
+    fn v2_blocked_title_with_guidance_and_config_resolves_only_to_blacklisted() {
+        let mut value: serde_json::Value = serde_json::from_str(SAMPLE_V2).expect("sample JSON");
+        value["page_guidance"] = serde_json::json!([{
+            "id": "renodx.page.hdr.disable_double_tonemapping",
+            "kind": "compatibility",
+            "message_id": "renodx.page.hdr.disable_double_tonemapping",
+            "fallback_text": "Disable double tonemapping."
+        }]);
+        let game = value["games"][0]
+            .as_object_mut()
+            .expect("sample game object");
+        game.insert("inherit_page_guidance".to_owned(), serde_json::json!(true));
+        game.insert(
+            "availability".to_owned(),
+            serde_json::json!({
+                "kind": "blocked",
+                "message": {
+                    "id": "renodx.blocked.broken_mod",
+                    "fallback_text": "The RenoDX mod does not work with this game."
+                }
+            }),
+        );
+        game.insert(
+            "renodx_config".to_owned(),
+            serde_json::json!({
+                "settings": [{ "key": "Force_Pipeline_Cloning", "value": 1 }]
+            }),
+        );
+
+        let manifest =
+            parse_manifest_v2(&serde_json::to_vec(&value).expect("serialize blocked v2 manifest"))
+                .expect("blocked v2 manifest still parses under the wire contract");
+        let facts = crate::addons::matching::MatchFacts {
+            launcher: renderpilot_domain::Launcher::Steam,
+            external_id: Some("2358720".to_owned()),
+            exe_file_name: None,
+            engine: None,
+            unreal_version: None,
+            graphics: renderpilot_domain::ExeGraphicsInfo::new(
+                vec![renderpilot_domain::GraphicsApi::D3D12],
+                Some(Architecture::X64),
+            ),
+            unreal_detection: None,
+            target_platform: None,
+        };
+        assert!(matches!(
+            matcher::resolve(&manifest, &facts),
+            matcher::RenoDxResolution::Blacklisted { message }
+                if message.id == "renodx.blocked.broken_mod"
+        ));
+        assert!(matcher::resolve_external_install(&manifest, &facts).is_none());
+    }
+
+    #[test]
     fn parses_the_current_renderpilot_libraries_renodx_manifest() {
-        let path = std::env::var_os("RENODX_V2_MANIFEST_PATH")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| {
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../renderpilot-libraries/addons/v2/renodx.json")
-            });
-        if !path.is_file() {
+        let Some(bytes) = crate::addons::test_support::read_producer_manifest(
+            "RENODX_V2_MANIFEST_PATH",
+            "addons/v2/renodx.json",
+        ) else {
             return;
-        }
-        let bytes = std::fs::read(&path).expect("read current RenoDX producer manifest");
+        };
         let manifest = parse_manifest_v2(&bytes).expect("current producer manifest parses");
         let title = manifest
             .titles
@@ -573,6 +665,40 @@ mod tests {
                 setting.key.as_str() == "Force_Pipeline_Cloning" && setting.value == 1
             })
         }));
+
+        for blocked in manifest
+            .titles
+            .iter()
+            .filter(|title| matches!(title.category, types::RenoDxCategory::Blacklist { .. }))
+        {
+            assert!(
+                blocked.renodx_config.is_none(),
+                "blocked title {} must not emit renodx_config",
+                blocked.id
+            );
+            assert!(
+                manifest
+                    .title_guidance
+                    .get(&blocked.id)
+                    .is_none_or(Vec::is_empty),
+                "blocked title {} must not emit playable setup guidance",
+                blocked.id
+            );
+        }
+    }
+
+    #[test]
+    fn parses_the_current_renderpilot_libraries_renodx_v1_manifest() {
+        let Some(bytes) = crate::addons::test_support::read_producer_manifest(
+            "RENODX_V1_MANIFEST_PATH",
+            "addons/v1/renodx.json",
+        ) else {
+            return;
+        };
+        let manifest = parse_manifest(&bytes).expect("current v1 producer manifest parses");
+        assert_eq!(manifest.schema_version, 1);
+        assert!(!manifest.titles.is_empty());
+        assert!(!manifest.generics.is_empty());
     }
 
     #[test]

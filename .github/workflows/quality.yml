@@ -268,3 +268,17 @@ jobs:
             libraries::tests::producer_xiph_catalog_matches_consumer_contract \
             --locked -- --ignored --exact 2>&1 | tee xiph-contract-test.log
           grep -Eq 'test result: ok\. 1 passed; 0 failed; 0 ignored' xiph-contract-test.log
+      - name: Verify producer add-on manifest contracts
+        shell: bash
+        env:
+          RENODX_V1_MANIFEST_PATH: ${{ github.workspace }}/.contracts/renderpilot-libraries/addons/v1/renodx.json
+          RENODX_V2_MANIFEST_PATH: ${{ github.workspace }}/.contracts/renderpilot-libraries/addons/v2/renodx.json
+          LUMA_V2_MANIFEST_PATH: ${{ github.workspace }}/.contracts/renderpilot-libraries/addons/v2/luma.json
+          OPTISCALER_MANIFEST_PATH: ${{ github.workspace }}/.contracts/renderpilot-libraries/addons/v1/optiscaler.json
+          OPTISCALER_COMPATIBILITY_PATH: ${{ github.workspace }}/.contracts/renderpilot-libraries/addons/v1/optiscaler-compatibility.json
+        run: |
+          set -o pipefail
+          cargo test -p renderpilot-orchestration \
+            parses_the_current_renderpilot_libraries \
+            --locked -- --nocapture 2>&1 | tee addon-contract-test.log
+          grep -Eq 'test result: ok\. 5 passed; 0 failed; 0 ignored' addon-contract-test.log
