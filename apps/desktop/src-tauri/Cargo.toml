@@ -15,7 +15,7 @@ workspace = true
 json-patch = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tauri-build = { version = "2.7.4", features = [] }
+tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
 renderpilot-api = { workspace = true }
@@ -33,7 +33,7 @@ sha2 = { workspace = true }
 rusqlite = { workspace = true, features = ["backup", "bundled"], optional = true }
 reqwest = { workspace = true, features = ["blocking", "rustls"], optional = true }
 zip = { workspace = true, features = ["deflate"], optional = true }
-tauri = { version = "2.12.5", features = [] }
+tauri = { version = "2.12.7", features = [] }
 tauri-plugin-dialog = "2.8.4"
 tauri-plugin-shell = "2.6.0"
 tauri-plugin-process = "2.4.0"
