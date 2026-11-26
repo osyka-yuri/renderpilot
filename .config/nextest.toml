@@ -1,4 +1,4 @@
-nextest-version = "0.9.146"
+nextest-version = "0.9.152"
 
 [profile.ci]
 # Complete every test so one failure does not hide independent regressions.
